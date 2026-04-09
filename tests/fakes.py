@@ -9,7 +9,8 @@ from __future__ import annotations
 import subprocess
 from dataclasses import dataclass, field
 
-from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies
+from pokepoke.types import BeadsWorkItem, IssueWithDependencies
+from pokepoke.types_stats import BeadsStats
 
 # ---------------------------------------------------------------------------
 # Helpers

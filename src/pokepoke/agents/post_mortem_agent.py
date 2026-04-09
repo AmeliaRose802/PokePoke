@@ -10,7 +10,7 @@ from pokepoke.agents.post_mortem_issue_creator import BeadsIssueCreator
 from pokepoke.beads.beads import get_ready_work_items
 from pokepoke.config import ProjectConfig, load_config
 from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.types import SessionStats
+from pokepoke.types_stats import SessionStats
 from pokepoke.utils.logging_utils import RunLogger
 
 logger = logging.getLogger(__name__)

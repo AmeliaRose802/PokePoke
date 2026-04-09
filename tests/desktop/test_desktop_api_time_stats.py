@@ -12,7 +12,7 @@ import time
 import pytest
 
 from pokepoke.desktop.desktop_api import DesktopAPI
-from pokepoke.types import AgentStats, SessionStats
+from pokepoke.types_stats import AgentStats, SessionStats
 
 
 @pytest.fixture(autouse=True)
