@@ -6,7 +6,7 @@ import concurrent.futures
 import logging
 import threading
 import time
-from typing import Any
+from pathlib import Path
 
 from pokepoke.agents.parallel_worker_pool import (
     _check_high_conflict_active,
@@ -25,6 +25,14 @@ from pokepoke.agents.parallel_worker_pool import (
 )
 from pokepoke.beads.beads_hierarchy import is_high_conflict_risk
 from pokepoke.desktop import terminal_ui
+from pokepoke.protocols import (
+    BuildWorkerNameFn,
+    CheckAndCommitMainRepoFn,
+    CollectFn,
+    FinalizeFn,
+    GetReadyWorkItemsFn,
+    ProcessItemFn,
+)
 from pokepoke.types import BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.utils.preflight_log_utils import handle_preflight_checks
@@ -126,7 +134,7 @@ def drain_circuit_breaker(
     session_stats: SessionStats,
     run_logger: RunLogger,
     record_fn: RecordFn,
-    collect_fn: Any,
+    collect_fn: CollectFn,
     mode_name: str,
     lock: threading.Lock | None = None,
 ) -> int:
@@ -205,8 +213,8 @@ def dispatch_items(
     executor: concurrent.futures.ThreadPoolExecutor,
     run_logger: RunLogger,
     worker_counter: int,
-    build_worker_name_fn: Any,
-    process_item_fn: Any,
+    build_worker_name_fn: BuildWorkerNameFn,
+    process_item_fn: ProcessItemFn,
     lock: threading.Lock | None = None,
 ) -> int:
     """Select, claim, and submit work items. Returns updated worker_counter.
@@ -292,15 +300,23 @@ def dispatch_items(
     return worker_counter
 
 def run_preflight_and_repo_checks(
-    main_repo_path: Any, run_logger: RunLogger, consecutive_preflight_failures: int,
-    max_preflight_failures: int, check_and_commit_main_repo_fn: Any = None,
-    get_ready_work_items_fn: Any = None,
+    main_repo_path: Path, run_logger: RunLogger, consecutive_preflight_failures: int,
+    max_preflight_failures: int, check_and_commit_main_repo_fn: CheckAndCommitMainRepoFn | None = None,
+    get_ready_work_items_fn: GetReadyWorkItemsFn | None = None,
 ) -> tuple[bool, int, list[BeadsWorkItem]]:
     """Run pre-flight health checks, repo status check, and fetch ready items."""
-    if check_and_commit_main_repo_fn is None:
-        from pokepoke.git.repo_check import check_and_commit_main_repo as check_and_commit_main_repo_fn
-    if get_ready_work_items_fn is None:
-        from pokepoke.beads.beads import get_ready_work_items as get_ready_work_items_fn
+    _commit_fn: CheckAndCommitMainRepoFn
+    if check_and_commit_main_repo_fn is not None:
+        _commit_fn = check_and_commit_main_repo_fn
+    else:
+        from pokepoke.git.repo_check import check_and_commit_main_repo
+        _commit_fn = check_and_commit_main_repo
+    _get_ready_fn: GetReadyWorkItemsFn
+    if get_ready_work_items_fn is not None:
+        _get_ready_fn = get_ready_work_items_fn
+    else:
+        from pokepoke.beads.beads import get_ready_work_items
+        _get_ready_fn = get_ready_work_items
     run_logger.log_polling("Running pre-flight health checks")
     should_continue, is_critical = handle_preflight_checks(main_repo_path, run_logger)
     if not should_continue:
@@ -312,12 +328,12 @@ def run_preflight_and_repo_checks(
         return False, consecutive_preflight_failures, []
     consecutive_preflight_failures = 0
     run_logger.log_polling("Checking main repository status")
-    if not check_and_commit_main_repo_fn(main_repo_path, run_logger):
+    if not _commit_fn(main_repo_path, run_logger):
         run_logger.log_orchestrator("Main repo check failed", level="ERROR")
         return False, consecutive_preflight_failures, []
     run_logger.log_polling("Fetching ready work from beads")
     try:
-        ready_items = get_ready_work_items_fn()
+        ready_items = _get_ready_fn()
     except Exception as e:
         run_logger.log_orchestrator(f"Failed to fetch ready items: {e}", level="ERROR")
         ready_items = None
@@ -350,8 +366,8 @@ def check_loop_exit(
     idle_sleep: float,
     mode_name: str,
     run_logger: RunLogger,
-    finalize_fn: Any,
-    get_ready_work_items_fn: Any = None,
+    finalize_fn: FinalizeFn,
+    get_ready_work_items_fn: GetReadyWorkItemsFn | None = None,
     lock: threading.Lock | None = None,
 ) -> str | None:
     """Decide whether the main loop should exit, continue idling, or keep running.
@@ -363,8 +379,12 @@ def check_loop_exit(
         during reads to ensure thread-safety.
     """
     from pokepoke.agents.parallel import cancel_stop_after_current, should_stop_after_current
-    if get_ready_work_items_fn is None:
-        from pokepoke.agents.parallel import get_ready_work_items as get_ready_work_items_fn
+    _get_ready_fn: GetReadyWorkItemsFn
+    if get_ready_work_items_fn is not None:
+        _get_ready_fn = get_ready_work_items_fn
+    else:
+        from pokepoke.agents.parallel import get_ready_work_items
+        _get_ready_fn = get_ready_work_items
     has_futures = _locked_has_futures(lock, futures)
     if should_stop_after_current() and not has_futures:
         cancel_stop_after_current()
@@ -380,7 +400,7 @@ def check_loop_exit(
     if not has_futures and not ready_items:
         run_logger.log_polling("No ready items - double-checking beads")
         try:
-            final_check = get_ready_work_items_fn()
+            final_check = _get_ready_fn()
             if final_check:
                 run_logger.log_orchestrator(f"Found {len(final_check)} items on re-check")
                 return "recheck"
