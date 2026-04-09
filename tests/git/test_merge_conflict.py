@@ -245,3 +245,122 @@ class TestAbortMergeGenericException:
 
         assert success is False
         assert "system error" in error
+
+
+class TestScanFilesForConflictMarkers:
+    """Tests for scan_files_for_conflict_markers function."""
+
+    def test_detects_conflict_markers(self, tmp_path: Path) -> None:
+        """Files with <<<<<<< / ======= / >>>>>>> are flagged."""
+        from pokepoke.git.merge_conflict import scan_files_for_conflict_markers
+
+        conflicted = tmp_path / "conflict.py"
+        conflicted.write_text(
+            "before\n<<<<<<< HEAD\nours\n=======\ntheirs\n>>>>>>> branch\nafter\n"
+        )
+        clean = tmp_path / "clean.py"
+        clean.write_text("no markers here\n")
+
+        result = scan_files_for_conflict_markers(
+            ["conflict.py", "clean.py"], repo_path=tmp_path
+        )
+
+        assert result == ["conflict.py"]
+
+    def test_no_conflict_markers(self, tmp_path: Path) -> None:
+        """Files without markers return empty list."""
+        from pokepoke.git.merge_conflict import scan_files_for_conflict_markers
+
+        clean = tmp_path / "clean.py"
+        clean.write_text("all good\n")
+
+        result = scan_files_for_conflict_markers(["clean.py"], repo_path=tmp_path)
+
+        assert result == []
+
+    def test_nonexistent_file_skipped(self, tmp_path: Path) -> None:
+        """Missing files are silently skipped."""
+        from pokepoke.git.merge_conflict import scan_files_for_conflict_markers
+
+        result = scan_files_for_conflict_markers(
+            ["missing.py"], repo_path=tmp_path
+        )
+
+        assert result == []
+
+    def test_unreadable_file_skipped(self, tmp_path: Path) -> None:
+        """Files that raise OSError on read are skipped."""
+        from pokepoke.git.merge_conflict import scan_files_for_conflict_markers
+
+        bad = tmp_path / "bad.py"
+        bad.write_text("dummy")
+
+        with patch.object(Path, 'read_text', side_effect=OSError("perm")):
+            result = scan_files_for_conflict_markers(
+                ["bad.py"], repo_path=tmp_path
+            )
+
+        assert result == []
+
+    def test_equals_only_marker(self, tmp_path: Path) -> None:
+        """A file with only ======= markers is still detected."""
+        from pokepoke.git.merge_conflict import scan_files_for_conflict_markers
+
+        f = tmp_path / "partial.py"
+        f.write_text("line\n=======\nother\n")
+
+        result = scan_files_for_conflict_markers(["partial.py"], repo_path=tmp_path)
+
+        assert result == ["partial.py"]
+
+    def test_uses_cwd_when_no_repo_path(self, tmp_path: Path, monkeypatch) -> None:
+        """Defaults to cwd when repo_path is None."""
+        from pokepoke.git.merge_conflict import scan_files_for_conflict_markers
+
+        monkeypatch.chdir(tmp_path)
+        f = tmp_path / "file.py"
+        f.write_text("<<<<<<< HEAD\nstuff\n")
+
+        result = scan_files_for_conflict_markers(["file.py"])
+
+        assert result == ["file.py"]
+
+
+class TestDetectDirtyConflictFiles:
+    """Tests for detect_dirty_conflict_files function."""
+
+    def test_returns_empty_on_timeout(self) -> None:
+        """Returns empty list when git status times out."""
+        from pokepoke.git.merge_conflict import detect_dirty_conflict_files
+
+        with patch('pokepoke.git.merge_conflict.get_status_porcelain_and_changes') as mock_status:
+            mock_status.side_effect = subprocess.TimeoutExpired("git", 30)
+            result = detect_dirty_conflict_files(Path("/fake/repo"))
+
+        assert result == []
+
+    def test_returns_empty_when_all_deleted(self) -> None:
+        """Returns empty when all dirty entries are deletions."""
+        from pokepoke.git.merge_conflict import detect_dirty_conflict_files
+
+        with patch('pokepoke.git.merge_conflict.get_status_porcelain_and_changes') as mock_status:
+            mock_status.return_value = (
+                " D gone.py",
+                {'other': [' D gone.py'], 'beads': [], 'worktree': [], 'untracked': []},
+            )
+            result = detect_dirty_conflict_files(Path("/fake/repo"))
+
+        assert result == []
+
+    def test_returns_empty_for_empty_entries(self) -> None:
+        """Returns empty when entries are blank strings."""
+        from pokepoke.git.merge_conflict import detect_dirty_conflict_files
+
+        with patch('pokepoke.git.merge_conflict.get_status_porcelain_and_changes') as mock_status:
+            mock_status.return_value = (
+                "",
+                {'other': ['', '  '], 'beads': [], 'worktree': [], 'untracked': []},
+            )
+            result = detect_dirty_conflict_files(Path("/fake/repo"))
+
+        assert result == []

@@ -5,6 +5,7 @@ import subprocess
 from pathlib import Path
 
 from .git_helpers import run_git
+from .git_operations import get_status_porcelain_and_changes
 
 logger = logging.getLogger(__name__)
 
@@ -103,6 +104,77 @@ def abort_rebase(repo_path: Path | None = None) -> tuple[bool, str]:
         return False, "Rebase abort timed out"
     except Exception as e:
         return False, str(e)
+
+
+def scan_files_for_conflict_markers(
+    file_paths: list[str],
+    repo_path: Path | None = None,
+) -> list[str]:
+    """Scan working-tree files for residual merge conflict markers.
+
+    Detects ``<<<<<<<``, ``=======``, and ``>>>>>>>`` lines that indicate
+    unresolved merge conflicts — even when ``MERGE_HEAD`` is absent (e.g.
+    the merge was completed with conflict markers baked in).
+
+    Args:
+        file_paths: Relative file paths (as returned by ``git status``).
+        repo_path: Repository root; defaults to cwd.
+
+    Returns:
+        Subset of *file_paths* that contain at least one conflict marker.
+    """
+    import re
+
+    marker_re = re.compile(r'^(<{7}|={7}|>{7})', re.MULTILINE)
+    base = Path(repo_path) if repo_path else Path.cwd()
+    conflicted: list[str] = []
+
+    for rel in file_paths:
+        full = base / rel
+        if not full.is_file():
+            continue
+        try:
+            text = full.read_text(encoding='utf-8', errors='replace')
+        except OSError:
+            logger.debug("Could not read %s for conflict scan", rel)
+            continue
+        if marker_re.search(text):
+            conflicted.append(rel)
+
+    return conflicted
+
+
+def detect_dirty_conflict_files(repo_path: Path) -> list[str]:
+    """Return dirty file paths under *repo_path* that contain conflict markers.
+
+    Combines ``git status --porcelain`` with :func:`scan_files_for_conflict_markers`
+    to identify tracked files whose working-tree content has ``<<<<<<<``,
+    ``=======``, or ``>>>>>>>`` lines.  Deleted entries are skipped.
+    """
+    try:
+        _uncommitted, changes = get_status_porcelain_and_changes(str(repo_path), timeout=30)
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return []
+
+    dirty = changes.get('other', [])
+    if not dirty:
+        return []
+
+    file_paths = []
+    for entry in dirty:
+        entry = entry.strip()
+        if not entry:
+            continue
+        if 'D' in entry[:2]:
+            continue
+        parts = entry.split(None, 1)
+        if len(parts) >= 2:
+            file_paths.append(parts[1])
+
+    if not file_paths:
+        return []
+
+    return scan_files_for_conflict_markers(file_paths, repo_path=repo_path)
 
 
 def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, object]:
