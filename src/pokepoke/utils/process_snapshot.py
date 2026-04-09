@@ -34,7 +34,7 @@ def log_process_tree_snapshot(
         )
         lines = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
         if len(lines) <= 1:
-            logger.info("TOOL_TIMEOUT_DIAG: No copilot.exe processes found")
+            logger.debug("TOOL_TIMEOUT_DIAG: No copilot.exe processes found")
             return
 
         # Parse CSV: Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize
@@ -69,12 +69,12 @@ def log_process_tree_snapshot(
                 child_count = len([line for line in children.split('\n')
                                  if line.strip() and 'ProcessId=' in line])
                 total_children += child_count
-                logger.info(
+                logger.debug(
                     "TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs children=%d:\n%s",
                     cpid, tool_name, elapsed, child_count, children,
                 )
             else:
-                logger.info(
+                logger.debug(
                     "TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs — no child processes",
                     cpid, tool_name, elapsed,
                 )
@@ -99,7 +99,7 @@ def log_process_tree_snapshot(
             f"total_memory_mb={total_memory_mb:.1f} "
             f"cpu_percent={cpu_percent:.1f}"
         )
-        logger.info(metrics_line)
+        logger.debug(metrics_line)
 
         # Also write to dedicated diagnostics log if available
         if handler and hasattr(handler, '_item_logger') and handler._item_logger:
