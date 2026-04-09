@@ -264,14 +264,14 @@ class TestSessionStatsFlow:
         run_logger = MagicMock()
 
         with (
-            patch("pokepoke.orchestration.orchestrator.record_item_attempt", return_value={}),
-            patch("pokepoke.orchestration.orchestrator.record_completion"),
-            patch("pokepoke.orchestration.orchestrator.append_model_history_entry"),
-            patch("pokepoke.orchestration.orchestrator.record_item_completed", return_value={}),
-            patch("pokepoke.orchestration.orchestrator.increment_items_completed", return_value=1),
-            patch("pokepoke.orchestration.orchestrator.run_periodic_maintenance"),
+            patch("pokepoke.orchestration.session_lifecycle.record_item_attempt", return_value={}),
+            patch("pokepoke.orchestration.session_lifecycle.record_completion"),
+            patch("pokepoke.orchestration.session_lifecycle.append_model_history_entry"),
+            patch("pokepoke.orchestration.session_lifecycle.record_item_completed", return_value={}),
+            patch("pokepoke.orchestration.session_lifecycle.increment_items_completed", return_value=1),
+            patch("pokepoke.orchestration.session_lifecycle.run_periodic_maintenance"),
             patch("pokepoke.orchestration.orchestrator.load_config") as mock_cfg,
-            patch("pokepoke.orchestration.orchestrator.commit_state_branch", return_value=False),
+            patch("pokepoke.orchestration.session_lifecycle.commit_state_branch", return_value=False),
         ):
             mock_cfg.return_value = MagicMock(
                 needs_human_attention_threshold=5,
@@ -293,7 +293,7 @@ class TestSessionStatsFlow:
         run_logger = MagicMock()
 
         with (
-            patch("pokepoke.orchestration.orchestrator.record_item_attempt", return_value={}),
+            patch("pokepoke.orchestration.session_lifecycle.record_item_attempt", return_value={}),
             patch("pokepoke.orchestration.orchestrator.load_config") as mock_cfg,
         ):
             mock_cfg.return_value = MagicMock(needs_human_attention_threshold=5)

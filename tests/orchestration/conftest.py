@@ -46,16 +46,18 @@ def _mock_gate_rejection_count():
 
 # -- orchestrator module targets --
 _ORCH = "pokepoke.orchestration.orchestrator"
+_SL = "pokepoke.orchestration.session_lifecycle"
 PATCH_GET_READY_ITEMS = f"{_ORCH}.get_ready_work_items"
 PATCH_SELECT_WORK_ITEM = f"{_ORCH}.select_work_item"
 PATCH_PROCESS_WORK_ITEM = f"{_ORCH}.process_work_item"
 PATCH_RUN_BETA_TESTER_ORCH = f"{_ORCH}.run_beta_tester"
-PATCH_RUN_PERIODIC_MAINTENANCE = f"{_ORCH}.run_periodic_maintenance"
+PATCH_RUN_PERIODIC_MAINTENANCE = f"{_SL}.run_periodic_maintenance"
 PATCH_CHECK_AND_COMMIT = f"{_ORCH}.check_and_commit_main_repo"
 PATCH_GET_BEADS_STATS = f"{_ORCH}.get_beads_stats"
-PATCH_RECORD_COMPLETION = f"{_ORCH}.record_completion"
-PATCH_CLEAR_BANNER = f"{_ORCH}.clear_terminal_banner"
-PATCH_PRINT_STATS = f"{_ORCH}.print_stats"
+PATCH_SL_GET_BEADS_STATS = f"{_SL}.get_beads_stats"
+PATCH_RECORD_COMPLETION = f"{_SL}.record_completion"
+PATCH_CLEAR_BANNER = f"{_SL}.clear_terminal_banner"
+PATCH_PRINT_STATS = f"{_SL}.print_stats"
 PATCH_INIT_AGENT_NAME = f"{_ORCH}.initialize_agent_name"
 PATCH_RUN_WORKTREE_CLEANUP = "pokepoke.agents.agent_runner.run_worktree_cleanup"
 PATCH_ORCH_IS_SHUTTING_DOWN = f"{_ORCH}.is_shutting_down"
@@ -160,6 +162,10 @@ def make_orchestrator_mocks(
         if include_stats:
             mocks['beads_stats'] = stack.enter_context(patch(PATCH_GET_BEADS_STATS))
             mocks['beads_stats'].return_value = {}
+            # Also patch in session_lifecycle so _finalize_session uses the mock
+            stack.enter_context(patch(PATCH_SL_GET_BEADS_STATS, return_value={}))
+            stack.enter_context(patch(f"{_SL}.is_shutting_down", return_value=False))
+            stack.enter_context(patch(f"{_SL}.get_merge_queue"))
         if include_sleep:
             mocks['sleep'] = stack.enter_context(patch('time.sleep'))
         if include_input:
