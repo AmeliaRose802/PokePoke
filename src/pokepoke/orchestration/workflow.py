@@ -14,6 +14,7 @@ from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.models.copilot_sdk import build_prompt_from_work_item
 from pokepoke.models.model_selection import get_assignment_for_item, select_model_for_item
 from pokepoke.models.sdk_helpers import build_resume_prompt
+from pokepoke.orchestration.finalization import ResultContext, _finalize_item_result
 from pokepoke.orchestration.work_item_selection import select_work_item  # noqa: F401  # re-exported
 from pokepoke.orchestration.work_item_session import WorkItemSession
 from pokepoke.orchestration.worker_context import (
@@ -25,7 +26,6 @@ from pokepoke.orchestration.workflow_helpers import (
     _apply_gate_feedback,
     _extract_agent_stats,
     _fail_result,
-    _finalize_item_result,
     _log_commit_status,
     _log_failure,
     _maybe_decompose,
@@ -413,10 +413,14 @@ def process_work_item(  # noqa: C901
                 add_comment_fn=_comment,
             )
 
-        final_result, finalized = _finalize_item_result(
-            result, item, worktree_path, selected_model, start_time, request_count,
-            accumulated_stats, cleanup_agent_runs, gate_agent_runs, gate_success,
-            run_logger, item_logger, base_agent_id, run_beta_test, repo_path=repo_path)
+        final_result, finalized = _finalize_item_result(ResultContext(
+            result=result, item=item, worktree_path=worktree_path,
+            selected_model=selected_model, start_time=start_time,
+            request_count=request_count, accumulated_stats=accumulated_stats,
+            cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
+            gate_success=gate_success, run_logger=run_logger, item_logger=item_logger,
+            base_agent_id=base_agent_id, run_beta_test=run_beta_test, repo_path=repo_path,
+        ))
         if finalized:
             _session = None  # Finalization succeeded — skip cleanup
         return final_result

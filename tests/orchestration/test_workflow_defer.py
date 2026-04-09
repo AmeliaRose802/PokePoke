@@ -114,7 +114,7 @@ class TestInLoopGateRejectionDefer:
     @patch("pokepoke.orchestration.workflow.register_agent")
     @patch.object(WorkItemSession, "cleanup_on_failure")
     @patch("pokepoke.orchestration.workflow.cleanup_worktree")
-    @patch("pokepoke.orchestration.workflow_helpers.finalize_work_item", return_value=False)
+    @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=False)
     @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
     @patch("pokepoke.orchestration.workflow.run_cleanup_with_timeout", return_value=(True, 0))
