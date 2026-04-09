@@ -136,7 +136,8 @@ class SubprocessMonitor:
             for pid, command in children:
                 if pid not in self._monitored_pids:
                     self._monitored_pids.add(pid)
-                    logger.info(
+                    # Use DEBUG to avoid stdout contamination (PokePoke-urg3h fix)
+                    logger.debug(
                         "[ProcessMonitor] Detected child process: PID %d (%s)",
                         pid,
                         command,
@@ -278,12 +279,12 @@ class SubprocessMonitor:
             cmd_name = command.split()[0] if command else "unknown"
             if os.path.sep in cmd_name:
                 cmd_name = os.path.basename(cmd_name)
-            self._emit_output("stdout", f"[ProcessMonitor] Started monitoring PID {pid} ({cmd_name})\n")
+            self._emit_output("monitor", f"[ProcessMonitor] Started monitoring PID {pid} ({cmd_name})\n")
 
             while self._monitoring:
                 try:
                     if not process.is_running():
-                        self._emit_output("stdout", f"[ProcessMonitor] PID {pid} ({cmd_name}) completed\n")
+                        self._emit_output("monitor", f"[ProcessMonitor] PID {pid} ({cmd_name}) completed\n")
                         break
 
                     now = time.monotonic()
@@ -302,7 +303,7 @@ class SubprocessMonitor:
                             bytes_written = current_io_bytes - last_io_bytes
                             if now - last_io_time >= 1.0:
                                 self._emit_output(
-                                    "stdout",
+                                    "monitor",
                                     f"[ProcessMonitor] PID {pid} ({cmd_name}) active - wrote {bytes_written} bytes\n"
                                 )
                                 last_io_time = now
@@ -316,7 +317,7 @@ class SubprocessMonitor:
                         status_msg = self._format_process_status(
                             pid, command, status, cpu_percent, status_count
                         )
-                        self._emit_output("stdout", status_msg)
+                        self._emit_output("monitor", status_msg)
                         last_status_time = now
 
                     time.sleep(self._poll_interval)
@@ -359,22 +360,30 @@ class SubprocessMonitor:
     def _emit_output(self, source: str, text: str) -> None:
         """Emit captured output to all configured destinations.
 
+        CRITICAL (PokePoke-urg3h): ProcessMonitor output MUST NOT contaminate
+        the copilot CLI stdout stream that gate agents parse for JSON verdicts.
+        All monitor messages go to stderr or the callback, never to stdout.
+
         Args:
-            source: 'stdout' or 'stderr'
+            source: 'monitor' for ProcessMonitor status, 'stderr' for error output
             text: Output text to emit
         """
         if not text:
             return
 
-        # Log to Python logger
-        prefix = "[stderr] " if source == "stderr" else ""
-        logger.info(f"[ProcessOutput] {prefix}{text}")
+        # Write to stderr to avoid corrupting copilot stdout (PokePoke-urg3h fix)
+        import sys
+        sys.stderr.write(f"[ProcessMonitor] {text}")
+        sys.stderr.flush()
+
+        # Also log via Python logger at DEBUG level (not INFO) to avoid stdout
+        logger.debug(f"[ProcessOutput] {text.rstrip()}")
 
         # Log to item logger if available
         if self._item_logger:
             self._item_logger.log_copilot_output(text)
 
-        # Call custom callback if provided
+        # Call custom callback if provided (does NOT write to output_lines)
         if self._on_output:
             try:
                 self._on_output(source, text)
