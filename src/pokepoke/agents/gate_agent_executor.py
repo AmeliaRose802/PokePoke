@@ -15,6 +15,7 @@ from pokepoke.stats.gate_rejection_tracker import record_gate_check
 from pokepoke.stats.metrics_context import agent_type_context
 from pokepoke.stats.stats import parse_agent_stats
 from pokepoke.types import BeadsWorkItem, GateAgentResult
+from pokepoke.utils.output_sanitizer import contains_process_monitor_noise, strip_process_monitor_lines
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
@@ -22,6 +23,99 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __all__ = ['run_gate_agent']
+
+
+def _parse_verdict(output: str) -> tuple[bool, str, bool]:
+    """Parse the gate agent verdict from *output*.
+
+    Returns ``(success, reason, crashed)``.
+
+    The function tries three extraction strategies in order:
+    1. Fenced JSON blocks (``\u0060\u0060\u0060json ... \u0060\u0060\u0060``)
+    2. Unfenced raw JSON objects containing a ``"status"`` key
+    3. Text-match keywords (``VERIFICATION SUCCESSFUL`` / ``NEW_WORK_VERIFIED``)
+
+    When none succeed and ``[ProcessMonitor]`` noise is detected in the
+    output, the verdict is classified as a crash (infrastructure failure)
+    rather than a genuine code rejection, preventing false rejection
+    cascades.
+    """
+    # ── Strategy 1: fenced JSON blocks ──
+    json_blocks = list(re.finditer(
+        r'```[jJ][sS][oO][nN]\s*(\{.*?\})\s*```', output, re.DOTALL,
+    ))
+    had_json_blocks = bool(json_blocks)
+    for json_match in reversed(json_blocks):
+        result = _try_parse_verdict_json(json_match.group(1))
+        if result is not None:
+            return result
+
+    # ── Strategy 2: unfenced JSON objects ──
+    # ProcessMonitor corruption can break the code-fence markers while
+    # leaving the JSON payload intact.  Look for raw JSON objects that
+    # contain a "status" field.
+    unfenced_blocks = list(re.finditer(
+        r'\{[^{}]*"status"\s*:[^{}]*\}', output, re.DOTALL,
+    ))
+    for json_match in reversed(unfenced_blocks):
+        result = _try_parse_verdict_json(json_match.group(0))
+        if result is not None:
+            return result
+
+    # ── Strategy 3: text-match keywords ──
+    if "VERIFICATION SUCCESSFUL" in output.upper() or "NEW_WORK_VERIFIED" in output:
+        return True, "Verification successful (text match)", False
+
+    # ── No verdict found — classify the failure ──
+    # If JSON blocks were present but ALL failed to parse, this is an
+    # infrastructure issue (e.g. output corruption), not a genuine code
+    # rejection.  Mark as crashed so the orchestrator retries instead of
+    # counting it against the gate rejection cap.
+    if had_json_blocks:
+        logger.warning("Gate Agent output contained JSON blocks but none parsed successfully — treating as crash")
+        return False, "Gate Agent verdict could not be parsed (output corrupted). Check logs.", True
+
+    # If ProcessMonitor noise is present in the output, corruption likely
+    # broke the code-fence markers entirely.  Treat as crash to avoid
+    # false rejection cascades (the work agent would be restarted with
+    # bogus "gate feedback" otherwise).
+    if contains_process_monitor_noise(output):
+        logger.warning(
+            "Gate Agent output contained ProcessMonitor noise but no parseable verdict — treating as crash"
+        )
+        return False, "Gate Agent verdict could not be parsed (ProcessMonitor corruption). Check logs.", True
+
+    return False, "Gate Agent did not explicitly approve the fix. Check logs.", False
+
+
+def _try_parse_verdict_json(raw: str) -> tuple[bool, str, bool] | None:
+    """Try to parse a single JSON fragment as a gate verdict.
+
+    Returns ``(success, reason, crashed)`` on success, or ``None`` if
+    the fragment is not a valid gate verdict.
+    """
+    cleaned = strip_process_monitor_lines(raw)
+    try:
+        data = json.loads(cleaned)
+    except json.JSONDecodeError:
+        return None
+
+    status = data.get("status")
+    if status == "success":
+        message = data.get("message", "Verification successful")
+        reason = data.get("reason", "")
+        recommendation = data.get("recommendation", "")
+        full_message = message
+        if reason:
+            full_message = f"[{reason}] {message}"
+        if recommendation:
+            full_message += f"\nRecommendation: {recommendation}"
+        return True, full_message, False
+    elif status is not None:
+        reason = data.get("reason", "Verification failed")
+        details = data.get("details", "")
+        return False, f"{reason}\nDetails: {details}", False
+    return None
 
 
 def run_gate_agent(
@@ -106,34 +200,5 @@ def run_gate_agent(
             crashed=not is_timeout, is_timeout=is_timeout,
         )
     output = result.output or ""
-    # Find ALL ```json blocks (case-insensitive) and try each, last-first,
-    # since the verdict is expected at the end of the response.
-    json_blocks = list(re.finditer(
-        r'```[jJ][sS][oO][nN]\s*(\{.*?\})\s*```', output, re.DOTALL,
-    ))
-    for json_match in reversed(json_blocks):
-        try:
-            data = json.loads(json_match.group(1))
-            status = data.get("status")
-            if status == "success":
-                message = data.get("message", "Verification successful")
-                reason = data.get("reason", "")
-                recommendation = data.get("recommendation", "")
-                # Build success message with context
-                full_message = message
-                if reason:
-                    full_message = f"[{reason}] {message}"
-                if recommendation:
-                    full_message += f"\nRecommendation: {recommendation}"
-                return _finish(True, full_message, crashed=False)
-            elif status is not None:
-                reason = data.get("reason", "Verification failed")
-                details = data.get("details", "")
-                full_reason = f"{reason}\nDetails: {details}"
-                return _finish(False, full_reason, crashed=False)
-            # No "status" key — skip this block, try the next one
-        except json.JSONDecodeError:
-            continue
-    if "VERIFICATION SUCCESSFUL" in output.upper() or "NEW_WORK_VERIFIED" in output:
-        return _finish(True, "Verification successful (text match)", crashed=False)
-    return _finish(False, "Gate Agent did not explicitly approve the fix. Check logs.", crashed=False)
+    success, reason, crashed = _parse_verdict(output)
+    return _finish(success, reason, crashed=crashed)

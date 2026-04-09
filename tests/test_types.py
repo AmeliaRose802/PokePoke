@@ -521,3 +521,22 @@ Some work...
         result = parse_work_agent_outcome(output)
         assert result is not None
         assert result.status == "completed"
+
+    def test_process_monitor_lines_stripped_from_json(self):
+        """ProcessMonitor lines interleaved in JSON block should be stripped."""
+        from pokepoke.types import parse_work_agent_outcome
+        output = (
+            '```json\n'
+            '{\n'
+            '  "status": "completed",\n'
+            '[ProcessMonitor] PID 12345 (pytest.exe) active - wrote 2048 bytes\n'
+            '  "reason": "All tests pass",\n'
+            '  "files_modified": ["src/foo.py"]\n'
+            '}\n'
+            '```'
+        )
+        result = parse_work_agent_outcome(output)
+        assert result is not None
+        assert result.status == "completed"
+        assert result.reason == "All tests pass"
+        assert result.files_modified == ["src/foo.py"]
