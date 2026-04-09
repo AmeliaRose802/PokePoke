@@ -333,3 +333,59 @@ class TestGateAgentAddParentDir:
 
         _, kwargs = mock_invoke.call_args
         assert kwargs.get("add_parent_dir") is True
+
+
+class TestGateAgentProcessMonitorCorruption:
+    """Regression tests for PokePoke-urg3h: ProcessMonitor output corrupting JSON verdicts."""
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_corrupted_json_block_falls_through_to_text_match(
+        self, mock_ui, mock_branch, mock_model, mock_invoke
+    ):
+        """JSON corrupted by ProcessMonitor lines should be skipped; text fallback should work."""
+        # Simulate the exact corruption pattern from the bug report
+        corrupted_output = (
+            'Looks good.\n'
+            '```json\n'
+            '{\n'
+            '  "status": "success",\n'
+            '  "reason[ProcessMonitor] PID 167828 ...\n'
+            '": "new_work_verified"\n'
+            '}\n'
+            '```\n'
+            'VERIFICATION SUCCESSFUL'
+        )
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=corrupted_output)
+
+        result = run_gate_agent(_make_item())
+
+        # The corrupted JSON should fail to parse, but text fallback should succeed
+        assert result.success is True
+        assert "text match" in result.reason
+
+    @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
+    @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
+    @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
+    @patch("pokepoke.agents.gate_agent_executor.terminal_ui")
+    def test_corrupted_json_without_text_fallback_rejects(
+        self, mock_ui, mock_branch, mock_model, mock_invoke
+    ):
+        """Corrupted JSON with no text fallback keywords should reject."""
+        corrupted_output = (
+            '```json\n'
+            '{\n'
+            '  "status": "success",\n'
+            '  "reason[ProcessMonitor] PID 167828 (copilot.exe) active - wrote 13121 bytes\n'
+            '": "new_work_verified"\n'
+            '}\n'
+            '```'
+        )
+        mock_invoke.return_value = _mock_invoke_result(success=True, output=corrupted_output)
+
+        result = run_gate_agent(_make_item())
+
+        assert result.success is False
+        assert "did not explicitly approve" in result.reason
