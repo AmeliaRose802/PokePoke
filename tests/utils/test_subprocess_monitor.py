@@ -65,11 +65,11 @@ def test_subprocess_monitor_output_callback():
     )
 
     # Emit some output directly (testing the callback mechanism)
-    monitor._emit_output("stdout", "test output")
+    monitor._emit_output("monitor", "test output")
     monitor._emit_output("stderr", "error message")
 
     assert len(output_captured) == 2
-    assert output_captured[0] == ("stdout", "test output")
+    assert output_captured[0] == ("monitor", "test output")
     assert output_captured[1] == ("stderr", "error message")
 
 
@@ -81,7 +81,7 @@ def test_subprocess_monitor_logs_output_to_item_logger():
         item_logger=mock_logger,
     )
 
-    monitor._emit_output("stdout", "test output")
+    monitor._emit_output("monitor", "test output")
 
     mock_logger.log_copilot_output.assert_called_once_with("test output")
 
@@ -190,9 +190,9 @@ def test_create_monitor_for_client_with_callbacks():
     assert monitor._on_output is output_callback
 
     # Test that callbacks work
-    monitor._emit_output("stdout", "test")
+    monitor._emit_output("monitor", "test")
     mock_logger.log_copilot_output.assert_called_once_with("test")
-    output_callback.assert_called_once_with("stdout", "test")
+    output_callback.assert_called_once_with("monitor", "test")
 
     # Cleanup
     monitor.stop()
@@ -401,16 +401,51 @@ def test_subprocess_monitor_process_output_monitoring():
     assert len(output_captured) >= 3, f"Expected at least 3 outputs, got {len(output_captured)}"
 
     # Check for start message
-    start_messages = [msg for src, msg in output_captured if "Started monitoring" in msg]
+    start_messages = [(src, msg) for src, msg in output_captured if "Started monitoring" in msg]
     assert len(start_messages) >= 1, "Should emit start monitoring message"
+    assert start_messages[0][0] == "monitor", "Monitor messages should use 'monitor' source"
 
     # Check for I/O activity messages
-    io_messages = [msg for src, msg in output_captured if "active - wrote" in msg]
+    io_messages = [(src, msg) for src, msg in output_captured if "active - wrote" in msg]
     assert len(io_messages) >= 1, "Should emit I/O activity messages"
+    assert io_messages[0][0] == "monitor", "I/O messages should use 'monitor' source"
 
     # Check for completion message
-    completion_messages = [msg for src, msg in output_captured if "completed" in msg]
+    completion_messages = [(src, msg) for src, msg in output_captured if "completed" in msg]
     assert len(completion_messages) >= 1, "Should emit completion message"
+    assert completion_messages[0][0] == "monitor", "Completion messages should use 'monitor' source"
+
+    # ALL messages from _monitor_process_output should use 'monitor' source
+    for src, msg in output_captured:
+        assert src == "monitor", f"Expected 'monitor' source but got '{src}' for: {msg}"
+
+
+def test_subprocess_monitor_never_uses_stdout_source():
+    """Regression: monitor output must never use 'stdout' source.
+
+    Using 'stdout' caused ProcessMonitor lines to be treated as copilot output
+    and interleave into gate agent JSON verdict blocks (PokePoke-urg3h).
+    """
+    output_captured = []
+
+    def capture_output(source: str, text: str) -> None:
+        output_captured.append((source, text))
+
+    monitor = SubprocessMonitor(
+        copilot_pid=12345,
+        on_output=capture_output,
+    )
+
+    # Simulate all the message types the monitor produces
+    monitor._emit_output("monitor", "[ProcessMonitor] Started monitoring PID 123 (test)\n")
+    monitor._emit_output("monitor", "[ProcessMonitor] PID 123 (test) active - wrote 500 bytes\n")
+    monitor._emit_output("monitor", "[ProcessMonitor] PID 123 (test) completed\n")
+
+    # None should use 'stdout' as source
+    for source, text in output_captured:
+        assert source != "stdout", (
+            f"Monitor output must not use 'stdout' source (corrupts copilot output): {text}"
+        )
 
 
 if __name__ == "__main__":

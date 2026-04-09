@@ -289,9 +289,8 @@ async def invoke_copilot_sdk(  # noqa: C901
             from pokepoke.utils.subprocess_monitor import create_monitor_for_client
 
             def on_subprocess_output(source: str, text: str) -> None:
-                """Callback for subprocess output - route to logs, UI, and desktop API."""
+                """Route monitor output to logs/UI only, NOT to output_lines (PokePoke-urg3h)."""
                 logger.info(f"[ToolOutput] {'[stderr] ' if source == 'stderr' else ''}{text}")
-                output_lines.append(text)
                 if item_logger:
                     item_logger.log_copilot_output(text)
                 # Push to desktop UI
