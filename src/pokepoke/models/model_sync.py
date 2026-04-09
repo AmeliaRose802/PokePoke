@@ -26,7 +26,21 @@ from pokepoke.types import AgentStats
 
 logger = logging.getLogger(__name__)
 
-REGISTRY_PATH = Path(".pokepoke") / "model_registry.json"
+
+def _get_registry_path() -> Path | None:
+    """Get the path to the model registry in the main repo root.
+
+    Returns the registry path in the main repository (not a worktree).
+    This ensures model discovery works correctly even when code is
+    executed from a worktree.
+
+    Returns:
+        Path to the registry file, or None if not in a git repository.
+    """
+    repo_root = _get_main_repo_root()
+    if repo_root is None:
+        return None
+    return repo_root / ".pokepoke" / "model_registry.json"
 
 
 def _log(item_logger: Any | None, message: str) -> None:
@@ -79,11 +93,26 @@ def _run_copilot_models(cli_path: str, timeout: int = 30) -> list[dict[str, Any]
 
 
 def load_registry(path: Path | None = None) -> dict[str, Any]:
-    registry_path = path or REGISTRY_PATH
-    if not registry_path.exists():
+    """Load the model registry from disk.
+
+    Args:
+        path: Optional explicit path to registry file. If None, uses main repo registry.
+
+    Returns:
+        Registry dictionary with 'last_sync' and 'models' keys.
+        Returns empty registry if file doesn't exist or can't be loaded.
+    """
+    if path is None:
+        path = _get_registry_path()
+        if path is None:
+            # Not in a git repo - return empty registry
+            logger.debug("Not in a git repository; returning empty model registry")
+            return {"last_sync": None, "models": {}}
+
+    if not path.exists():
         return {"last_sync": None, "models": {}}
     try:
-        data = json.loads(registry_path.read_text(encoding="utf-8"))
+        data = json.loads(path.read_text(encoding="utf-8"))
         if isinstance(data, dict) and "models" in data:
             return data
     except json.JSONDecodeError:
@@ -92,12 +121,25 @@ def load_registry(path: Path | None = None) -> dict[str, Any]:
 
 
 def save_registry(data: dict[str, Any], path: Path | None = None) -> None:
-    registry_path = path or REGISTRY_PATH
-    registry_path.parent.mkdir(parents=True, exist_ok=True)
+    """Save the model registry to disk.
+
+    Args:
+        data: Registry dictionary to save.
+        path: Optional explicit path to registry file. If None, uses main repo registry.
+
+    Raises:
+        RuntimeError: If not in a git repository and no explicit path provided.
+    """
+    if path is None:
+        path = _get_registry_path()
+        if path is None:
+            raise RuntimeError("Cannot save registry: not in a git repository")
+
+    path.parent.mkdir(parents=True, exist_ok=True)
     # Atomic write via temp file + rename to prevent corruption from concurrent access
-    tmp_path = registry_path.with_suffix(".tmp")
+    tmp_path = path.with_suffix(".tmp")
     tmp_path.write_text(json.dumps(data, indent=2), encoding="utf-8")
-    tmp_path.replace(registry_path)
+    tmp_path.replace(path)
 
 
 def get_available_model_names(registry_path: Path | None = None) -> list[str]:

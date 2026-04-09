@@ -284,7 +284,7 @@ def test_sync_creates_and_updates_beads(tmp_path):
             ]), \
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.models.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
+            patch("pokepoke.models.model_sync._get_registry_path", return_value=tmp_path / "model_registry.json"), \
             patch("pokepoke.models.model_sync.run_bd_sync_with_retry") as mock_sync, \
             patch("pokepoke.beads.sdk_beads_tracker.record_items_created"):
         result = sync_copilot_models()
@@ -314,7 +314,7 @@ def test_sync_records_created_items_in_stats(tmp_path):
             ]), \
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd), \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.models.model_sync.REGISTRY_PATH", tmp_path / "model_registry.json"), \
+            patch("pokepoke.models.model_sync._get_registry_path", return_value=tmp_path / "model_registry.json"), \
             patch("pokepoke.models.model_sync.run_bd_sync_with_retry"), \
             patch("pokepoke.beads.sdk_beads_tracker.record_items_created") as mock_record:
         sync_copilot_models()
@@ -349,7 +349,7 @@ def test_sync_prunes_unavailable(tmp_path):
             ]), \
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
-            patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+            patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
             patch("pokepoke.beads.sdk_beads_tracker.record_items_created"):
         result = sync_copilot_models()
         assert result is not None
@@ -416,7 +416,7 @@ def test_prune_unavailable_from_config(tmp_path):
     }
     config_path.write_text(yaml.safe_dump(config_data))
 
-    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+    with patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
             patch("pokepoke.config._find_repo_root", return_value=tmp_path):
         removed = prune_unavailable_from_config(registry_path=registry_path)
 
@@ -451,7 +451,7 @@ def test_prune_unavailable_from_config_no_stale(tmp_path):
     }
     config_path.write_text(yaml.safe_dump(config_data))
 
-    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+    with patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
             patch("pokepoke.config._find_repo_root", return_value=tmp_path):
         removed = prune_unavailable_from_config(registry_path=registry_path)
 
@@ -473,7 +473,7 @@ def test_prune_unavailable_from_config_no_candidates(tmp_path):
     config_data = {"models": {"default": "claude-opus-4.6"}}
     config_path.write_text(yaml.safe_dump(config_data))
 
-    with patch("pokepoke.models.model_sync.REGISTRY_PATH", registry_path), \
+    with patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
             patch("pokepoke.config._find_repo_root", return_value=tmp_path):
         removed = prune_unavailable_from_config(registry_path=registry_path)
 
