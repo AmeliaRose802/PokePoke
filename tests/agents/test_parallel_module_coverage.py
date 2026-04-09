@@ -532,11 +532,17 @@ class TestRunParallelLoop:
         monkeypatch.setattr("pokepoke.agents.parallel.set_executor", mock_set_executor)
         monkeypatch.setattr("pokepoke.agents.parallel.set_runtime_parallel_limits", mock_set_runtime)
         monkeypatch.setattr("pokepoke.agents.parallel.clear_runtime_parallel_limits", mock_clear_runtime)
+        # Also patch in parallel_cleanup where _safe_cleanup calls them
+        monkeypatch.setattr("pokepoke.agents.parallel_cleanup.set_executor", mock_set_executor)
+        monkeypatch.setattr("pokepoke.agents.parallel_cleanup.clear_runtime_parallel_limits", mock_clear_runtime)
 
         # terminal_ui
         mock_ui = MagicMock()
         mock_ui._is_running = False
-        monkeypatch.setattr("pokepoke.agents.parallel.terminal_ui", MagicMock(ui=mock_ui))
+        mock_terminal = MagicMock(ui=mock_ui)
+        monkeypatch.setattr("pokepoke.agents.parallel.terminal_ui", mock_terminal)
+        # Also patch in parallel_cleanup where _safe_cleanup calls it
+        monkeypatch.setattr("pokepoke.agents.parallel_cleanup.terminal_ui", mock_terminal)
 
         # Preflight – returns ok, 0 failures, empty ready items
         monkeypatch.setattr(
@@ -575,9 +581,15 @@ class TestRunParallelLoop:
         )
 
         # Finalize workers – return immediately
+        mock_finalize = MagicMock(return_value=(0, False))
         monkeypatch.setattr(
             "pokepoke.agents.parallel._finalize_workers",
-            MagicMock(return_value=(0, False)),
+            mock_finalize,
+        )
+        # Also patch in parallel_cleanup where _safe_cleanup calls it
+        monkeypatch.setattr(
+            "pokepoke.agents.parallel_cleanup._finalize_workers",
+            mock_finalize,
         )
 
         return {
