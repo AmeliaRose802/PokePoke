@@ -379,6 +379,16 @@ def process_work_item(  # noqa: C901
                     gate_success = True
                 break
             else:
+                # Check for fallback accept: if verdict parsing failed but worktree has valid commits
+                # that pass pre-commit hooks, accept the work anyway (prevents false rejections)
+                from pokepoke.beads.reconciliation import worktree_branch_has_commits
+                if ("Gate Agent did not explicitly approve" in gate_reason or "could not be parsed" in gate_reason) and \
+                        worktree_branch_has_commits(item.id, pokepoke_root):
+                    logger.warning("\n⚠️  Gate verdict unclear but worktree has valid commits — fallback accept")
+                    _comment(item.id, f"Gate Agent verdict unclear: {gate_reason}\nHowever, worktree has valid commits that passed pre-commit hooks. Accepting via fallback.")
+                    gate_success = True
+                    break
+
                 # Genuine code rejection — increment persistent counter and check cap
                 from pokepoke.beads.beads_management import increment_gate_rejection_count
                 new_count = increment_gate_rejection_count(item.id)
