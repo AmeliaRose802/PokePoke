@@ -4,7 +4,10 @@ from unittest.mock import Mock, patch
 
 from pokepoke.orchestration.orchestrator import run_orchestrator
 from pokepoke.orchestration.workflow import process_work_item, select_work_item
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, GateAgentResult, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats
 from tests.orchestration.conftest import (
     make_orchestrator_mocks,
     make_selection_mocks,
@@ -440,7 +443,7 @@ class TestFinalizeSession:
         import tempfile
 
         from pokepoke.orchestration.orchestrator import _finalize_session
-        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.types_stats import AgentStats, SessionStats
         from pokepoke.utils.logging_utils import RunLogger
 
         mock_time.time.return_value = 100.0
@@ -470,7 +473,7 @@ class TestFinalizeSession:
         import tempfile
 
         from pokepoke.orchestration.orchestrator import _finalize_session
-        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.types_stats import AgentStats, SessionStats
         from pokepoke.utils.logging_utils import RunLogger
 
         mock_time.time.return_value = 100.0
@@ -502,7 +505,7 @@ class TestFinalizeSession:
         import tempfile
 
         from pokepoke.orchestration.orchestrator import _finalize_session
-        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.types_stats import AgentStats, SessionStats
         from pokepoke.utils.logging_utils import RunLogger
 
         mock_time.time.return_value = 100.0
@@ -669,7 +672,7 @@ class TestRunOrchestratorWorktreeCoverage:
     def test_model_completion_recorded(self) -> None:
         """Test model completion is recorded when present."""
         from pokepoke.orchestration.orchestrator import run_orchestrator as run_orch
-        from pokepoke.types import ModelCompletionRecord
+        from pokepoke.types_stats import ModelCompletionRecord
 
         item = make_work_item()
         completion = ModelCompletionRecord(

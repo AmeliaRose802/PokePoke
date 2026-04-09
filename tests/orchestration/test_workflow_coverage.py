@@ -21,13 +21,9 @@ from pokepoke.orchestration.workflow_helpers import (
     run_cleanup_with_timeout,
     setup_worktree,
 )
-from pokepoke.types import (
-    AgentStats,
-    BeadsWorkItem,
-    CopilotResult,
-    GateAgentResult,
-    ModelCompletionRecord,
-)
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, ModelCompletionRecord
 
 
 def _item(id: str = "wf-1", desc: str | None = "desc") -> BeadsWorkItem:

@@ -30,7 +30,9 @@ from pokepoke.desktop import terminal_ui
 from pokepoke.git.repo_check import check_and_commit_main_repo
 from pokepoke.orchestration.work_item_selection import select_multiple_items
 from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.types import BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem, RecordFn
+from pokepoke.types_stats import SessionStats
 from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.utils.shutdown import (
     cancel_stop_after_current,

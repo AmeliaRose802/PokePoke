@@ -20,14 +20,9 @@ from pokepoke.orchestration.orchestrator import (
     run_orchestrator,
 )
 from pokepoke.otel_config import OtelConfig
-from pokepoke.types import (
-    AgentStats,
-    BeadsStats,
-    BeadsWorkItem,
-    ModelCompletionRecord,
-    SessionStats,
-    WorkItemResult,
-)
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, BeadsStats, ModelCompletionRecord, SessionStats
 
 
 def _item(id: str = "orch-1") -> BeadsWorkItem:

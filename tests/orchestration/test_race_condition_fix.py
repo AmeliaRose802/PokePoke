@@ -9,7 +9,7 @@ import time
 from unittest.mock import MagicMock, patch
 
 from pokepoke.orchestration.orchestrator import _OrchestratorContext
-from pokepoke.types import AgentStats, SessionStats
+from pokepoke.types_stats import AgentStats, SessionStats
 
 
 def test_failed_claim_ids_lock_exists():

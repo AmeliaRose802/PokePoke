@@ -8,12 +8,9 @@ from unittest.mock import MagicMock, patch
 
 from pokepoke.orchestration.work_item_session import WorkItemSession
 from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.types import (
-    AgentStats,
-    BeadsWorkItem,
-    CopilotResult,
-    GateAgentResult,
-)
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats
 
 
 def _item(**kwargs) -> BeadsWorkItem:

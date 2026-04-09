@@ -17,12 +17,9 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
-from pokepoke.types import (
-    AgentStats,
-    BeadsWorkItem,
-    SessionStats,
-    WorkItemResult,
-)
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, SessionStats
 
 # ---------------------------------------------------------------------------
 # Helpers
@@ -281,15 +278,18 @@ class TestWorktreeMetricsShape:
     """coordination.py persists worktree metrics as a JSON dict with a fixed schema."""
 
     def test_default_metrics_has_required_keys(self):
-        """The default metrics dict must have all required keys with zero values."""
+        """The default metrics dataclass must have all required fields with zero values."""
         from pokepoke.worktrees.coordination import _DEFAULT_WORKTREE_METRICS
 
         required = {"total_attempts", "total_successes", "total_failures",
                      "total_wait_time", "max_wait_time"}
-        assert set(_DEFAULT_WORKTREE_METRICS.keys()) == required
+        import dataclasses
+        fields = {f.name for f in dataclasses.fields(_DEFAULT_WORKTREE_METRICS)}
+        assert fields == required
         for key in required:
-            assert isinstance(_DEFAULT_WORKTREE_METRICS[key], (int, float))
-            assert _DEFAULT_WORKTREE_METRICS[key] == 0 or _DEFAULT_WORKTREE_METRICS[key] == 0.0
+            val = getattr(_DEFAULT_WORKTREE_METRICS, key)
+            assert isinstance(val, (int, float))
+            assert val == 0
 
     def test_load_worktree_metrics_returns_default_when_missing(self, tmp_path, monkeypatch):
         """_load_worktree_metrics returns default dict when the file doesn't exist."""
@@ -301,8 +301,8 @@ class TestWorktreeMetricsShape:
         )
 
         metrics = _load_worktree_metrics()
-        assert metrics == {"total_attempts": 0, "total_successes": 0, "total_failures": 0,
-                           "total_wait_time": 0.0, "max_wait_time": 0.0}
+        from pokepoke.worktrees.coordination import WorktreeMetrics
+        assert metrics == WorktreeMetrics()
 
     def test_save_and_load_worktree_metrics_roundtrip(self, tmp_path, monkeypatch):
         """Saved metrics can be loaded back with the same shape and values."""
@@ -316,13 +316,15 @@ class TestWorktreeMetricsShape:
         monkeypatch.setattr("pokepoke.worktrees.coordination._WORKTREE_METRICS_PATH", metrics_path)
         monkeypatch.setattr("pokepoke.worktrees.coordination._WORKTREE_METRICS_DIR", metrics_dir)
 
-        original = {
-            "total_attempts": 10,
-            "total_successes": 8,
-            "total_failures": 2,
-            "total_wait_time": 15.5,
-            "max_wait_time": 4.2,
-        }
+        from pokepoke.worktrees.coordination import WorktreeMetrics
+
+        original = WorktreeMetrics(
+            total_attempts=10,
+            total_successes=8,
+            total_failures=2,
+            total_wait_time=15.5,
+            max_wait_time=4.2,
+        )
         _save_worktree_metrics(original)
         loaded = _load_worktree_metrics()
         assert loaded == original
@@ -392,7 +394,7 @@ class TestWorktreeMetricsShape:
         monkeypatch.setattr("pokepoke.worktrees.coordination._WORKTREE_METRICS_PATH", metrics_path)
 
         metrics = _load_worktree_metrics()
-        assert metrics["total_attempts"] == 0
+        assert metrics.total_attempts == 0
 
 
 # ===========================================================================

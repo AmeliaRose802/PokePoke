@@ -12,7 +12,9 @@ import threading
 from typing import Any
 
 from pokepoke.beads.beads_hierarchy import is_high_conflict_risk
-from pokepoke.types import BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem, RecordFn
+from pokepoke.types_stats import SessionStats
 from pokepoke.utils.logging_utils import RunLogger
 
 logger = logging.getLogger(__name__)

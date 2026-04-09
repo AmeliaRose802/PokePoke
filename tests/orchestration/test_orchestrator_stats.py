@@ -3,7 +3,9 @@
 from unittest.mock import Mock, patch
 
 from pokepoke.orchestration.orchestrator import run_orchestrator
-from pokepoke.types import AgentStats, BeadsWorkItem, ModelCompletionRecord, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, ModelCompletionRecord
 from tests.orchestration.conftest import make_orchestrator_mocks, make_work_item
 
 
@@ -13,7 +15,7 @@ class TestAggregateStats:
     def test_aggregate_stats(self) -> None:
         """Test aggregate_stats function."""
         from pokepoke.maintenance.maintenance import aggregate_stats
-        from pokepoke.types import AgentStats, SessionStats
+        from pokepoke.types_stats import AgentStats, SessionStats
 
         session_stats = SessionStats(agent_stats=AgentStats(
             wall_duration=10.0,
@@ -111,7 +113,7 @@ class TestRecordItemResult:
     @patch('pokepoke.orchestration.orchestrator.record_completion')
     def test_records_success(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestration.orchestrator import _record_item_result
-        from pokepoke.types import SessionStats
+        from pokepoke.types_stats import SessionStats
 
         stats = SessionStats(agent_stats=AgentStats())
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
@@ -137,7 +139,7 @@ class TestRecordItemResult:
     @patch('pokepoke.orchestration.orchestrator.record_completion')
     def test_records_failure(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestration.orchestrator import _record_item_result
-        from pokepoke.types import SessionStats
+        from pokepoke.types_stats import SessionStats
 
         stats = SessionStats(agent_stats=AgentStats())
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")
@@ -157,7 +159,7 @@ class TestRecordItemResult:
     @patch('pokepoke.orchestration.orchestrator.record_completion')
     def test_records_retries(self, mock_record, mock_hist, mock_inc, mock_maint):
         from pokepoke.orchestration.orchestrator import _record_item_result
-        from pokepoke.types import SessionStats
+        from pokepoke.types_stats import SessionStats
 
         stats = SessionStats(agent_stats=AgentStats())
         item = BeadsWorkItem(id="t1", title="T1", status="open", priority=1, issue_type="task")

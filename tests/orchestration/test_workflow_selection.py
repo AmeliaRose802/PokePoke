@@ -10,7 +10,7 @@ from unittest.mock import Mock, patch
 
 from pokepoke.orchestration.work_item_selection import autonomous_selection, interactive_selection
 from pokepoke.orchestration.workflow import select_work_item
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 from tests.orchestration.conftest import (
     make_selection_mocks,
     make_work_item,

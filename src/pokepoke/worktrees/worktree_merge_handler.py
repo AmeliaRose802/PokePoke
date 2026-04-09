@@ -11,7 +11,8 @@ from filelock import Timeout
 
 from pokepoke.agents.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent
 from pokepoke.git.repo_state_guard import cleanup_lock
-from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats
 from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.worktrees.coordination import merge_lock
 from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree

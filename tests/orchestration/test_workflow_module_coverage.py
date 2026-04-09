@@ -12,13 +12,10 @@ import pytest
 
 from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.orchestration.workflow_helpers import setup_worktree
-from pokepoke.types import (
-    AgentStats,
-    BeadsWorkItem,
-    CopilotResult,
-    GateAgentResult,
-    WorkItemResult,
-)
+from pokepoke.types import WorkItemResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats
 
 
 @pytest.fixture(autouse=True)

@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 from pokepoke.git.repo_check import check_and_commit_main_repo
 from pokepoke.orchestration.orchestrator import run_orchestrator
-from pokepoke.types import AgentStats, BeadsStats
+from pokepoke.types_stats import AgentStats, BeadsStats
 from tests.orchestration.conftest import make_orchestrator_mocks
 
 
@@ -97,6 +97,7 @@ class TestCheckAndCommitMainRepo:
             Mock(stdout=" M src/file.py\n M tests/test.py\n", returncode=0),  # git status
             Mock(returncode=0),  # git add --all (auto-commit)
             Mock(returncode=1, stdout="", stderr="pre-commit hook failed"),  # git commit fails
+            Mock(stdout="", returncode=0),  # git status --porcelain (conflict detection)
         ]
         # Mock cleanup agent to return success
         mock_cleanup.return_value = (True, AgentStats(

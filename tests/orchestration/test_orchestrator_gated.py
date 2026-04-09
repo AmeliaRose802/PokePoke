@@ -6,7 +6,9 @@ import pytest
 
 from pokepoke.desktop import terminal_ui
 from pokepoke.orchestration.orchestrator import run_orchestrator
-from pokepoke.types import AgentStats, BeadsWorkItem, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats
 from tests.orchestration.conftest import PATCH_ORCH_IS_SHUTTING_DOWN, make_orchestrator_mocks, make_work_item
 
 

@@ -13,12 +13,9 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.types import (
-    BeadsWorkItem,
-    CopilotResult,
-    GateAgentResult,
-    WorkItemResult,
-)
+from pokepoke.types import WorkItemResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.work_agent_outcome import WorkAgentOutcome
 from tests.fakes import FakeBeadsClient
 
