@@ -478,3 +478,50 @@ def test_prune_unavailable_from_config_no_candidates(tmp_path):
         removed = prune_unavailable_from_config(registry_path=registry_path)
 
     assert removed == []
+
+
+def test_parse_markdown_table_rejects_invalid_entries():
+    """Markdown table parser should reject table separators and formatting."""
+    output = """Here are the available models:
+| Model | ID | Tier |
+|---|---|---|
+| Claude Opus 4.6 | `claude-opus-4.6` | Premium |
+| GPT-5.2 | `gpt-5.2` | Standard |
+
+**Current session:** Claude Opus 4.6
+Use `copilot -m <model>` to switch models.
+"""
+    models = parse_copilot_models_output(output)
+
+    # Should only get the 2 valid models, not table separators or text
+    assert len(models) == 2
+    names = [m["name"] for m in models]
+    assert "claude-opus-4.6" in names
+    assert "gpt-5.2" in names
+
+    # These should NOT appear in the results
+    invalid_names = ["|", "|---|---|---|", "**Current", "Use", "Model"]
+    for invalid in invalid_names:
+        assert invalid not in names, f"Invalid entry '{invalid}' should not be in parsed models"
+
+
+def test_is_valid_model_name():
+    """Test model name validation helper."""
+    from pokepoke.models.model_sync_parsing import _is_valid_model_name
+
+    # Valid names
+    assert _is_valid_model_name("claude-opus-4.6")
+    assert _is_valid_model_name("gpt-5.2-codex")
+    assert _is_valid_model_name("gpt-5.4-mini")
+    assert _is_valid_model_name("goldeneye")
+
+    # Invalid names (table separators, markdown, etc.)
+    assert not _is_valid_model_name("|")
+    assert not _is_valid_model_name("|---|---|")
+    assert not _is_valid_model_name("**Current")
+    assert not _is_valid_model_name("Use")
+    assert not _is_valid_model_name("Model")
+    assert not _is_valid_model_name("")
+    assert not _is_valid_model_name("   ")
+    assert not _is_valid_model_name("---")
+

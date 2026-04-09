@@ -666,3 +666,119 @@ class TestEconomyModeConfig:
         from pokepoke.config import EconomyModeConfig
         with pytest.raises(ValueError, match="simple_model cannot be empty"):
             EconomyModeConfig(enabled=True, simple_model="   ")
+
+
+class TestFilterAvailableModels:
+    """Test _filter_available_models function for registry-based filtering."""
+
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    def test_filters_unavailable_models(self, mock_get_available: Mock) -> None:
+        """Test that unavailable models are filtered out."""
+        from pokepoke.models.model_selection import _filter_available_models
+
+        # Registry says only these models are available
+        mock_get_available.return_value = ["claude-opus-4.6", "gpt-5.2"]
+
+        # Candidates include some unavailable models
+        candidates = ["claude-opus-4.6", "gpt-5.2", "old-model", "removed-model"]
+
+        filtered = _filter_available_models(candidates)
+
+        # Should only return available models
+        assert set(filtered) == {"claude-opus-4.6", "gpt-5.2"}
+        assert "old-model" not in filtered
+        assert "removed-model" not in filtered
+
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    def test_returns_original_when_no_registry(self, mock_get_available: Mock) -> None:
+        """Test fallback when registry has no data."""
+        from pokepoke.models.model_selection import _filter_available_models
+
+        # No registry data
+        mock_get_available.return_value = []
+
+        candidates = ["claude-opus-4.6", "gpt-5.2"]
+        filtered = _filter_available_models(candidates)
+
+        # Should return original candidates
+        assert filtered == candidates
+
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    def test_returns_original_when_no_match(self, mock_get_available: Mock) -> None:
+        """Test fallback when no candidates are available."""
+        from pokepoke.models.model_selection import _filter_available_models
+
+        # Registry has models, but none match candidates
+        mock_get_available.return_value = ["other-model-1", "other-model-2"]
+
+        candidates = ["claude-opus-4.6", "gpt-5.2"]
+        filtered = _filter_available_models(candidates)
+
+        # Should return original candidates to avoid breaking selection
+        assert filtered == candidates
+
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    def test_all_available(self, mock_get_available: Mock) -> None:
+        """Test when all candidates are available."""
+        from pokepoke.models.model_selection import _filter_available_models
+
+        candidates = ["claude-opus-4.6", "gpt-5.2"]
+        mock_get_available.return_value = [*candidates, "extra-model"]
+
+        filtered = _filter_available_models(candidates)
+
+        # Should return all candidates
+        assert filtered == candidates
+
+
+class TestModelSelectionWithRegistry:
+    """Test model selection integrates with registry filtering."""
+
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_selects_only_available_models(
+        self, mock_config: Mock, mock_available: Mock, mock_weights: Mock
+    ) -> None:
+        """Test that select_model_for_item filters to available models."""
+        # Config has 3 candidates
+        cfg = ProjectConfig()
+        cfg.models = ModelConfig(
+            candidate_models=["claude-opus-4.6", "gpt-5.2", "old-removed-model"]
+        )
+        cfg.assignment = AssignmentConfig(fallback="weighted")
+        mock_config.return_value = cfg
+
+        # But registry says only 2 are available
+        mock_available.return_value = ["claude-opus-4.6", "gpt-5.2"]
+        mock_weights.return_value = {}
+
+        model = select_model_for_item(_make_item("x"))
+
+        # Should pick from available models only
+        assert model in ["claude-opus-4.6", "gpt-5.2"]
+        assert model != "old-removed-model"
+
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_gate_model_filters_available(
+        self, mock_config: Mock, mock_available: Mock, mock_weights: Mock
+    ) -> None:
+        """Test that select_gate_model filters to available models."""
+        cfg = ProjectConfig()
+        cfg.models = ModelConfig(
+            candidate_models=["claude-opus-4.6", "gpt-5.2", "old-model"],
+            fallback="claude-sonnet-4.5"
+        )
+        mock_config.return_value = cfg
+
+        # Only 2 available
+        mock_available.return_value = ["claude-opus-4.6", "gpt-5.2"]
+        mock_weights.return_value = {}
+
+        gate_model = select_gate_model("claude-opus-4.6", "test-123")
+
+        # Should pick gpt-5.2 (the only other available model)
+        assert gate_model == "gpt-5.2"
+
