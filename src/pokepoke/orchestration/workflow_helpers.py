@@ -5,15 +5,13 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.agents.agent_runner import run_beta_tester, run_gate_agent
+from pokepoke.agents.agent_runner import run_gate_agent
 from pokepoke.agents.cleanup_agents import run_cleanup_loop
 from pokepoke.beads.beads import assign_and_sync_item
-from pokepoke.beads.reconciliation import reconcile_completed_item
 from pokepoke.desktop import terminal_ui
 from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner
 from pokepoke.git.git_operations import has_uncommitted_changes
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, ModelCompletionRecord, WorkItemResult
-from pokepoke.worktrees.worktree_finalization import finalize_work_item
 from pokepoke.worktrees.worktrees import create_worktree
 
 if TYPE_CHECKING:
@@ -21,7 +19,6 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
-# ── Small utility helpers (moved from workflow.py) ──────────────────────────
 
 def _log_failure(
     run_logger: "RunLogger | None",
@@ -51,26 +48,6 @@ def _fail_result(
         model_completion=model_completion, failure_reason=failure_reason,
     )
 
-
-def _build_completion_record(
-    item_id: str, model: str, duration: float, success: bool,
-    gate_passed: bool | None, stats: AgentStats | None, request_count: int,
-) -> ModelCompletionRecord:
-    """Build a ModelCompletionRecord from item processing results."""
-    input_tokens = stats.input_tokens if stats else 0
-    output_tokens = stats.output_tokens if stats else 0
-    return ModelCompletionRecord(
-        item_id=item_id, model=model, duration_seconds=duration,
-        gate_passed=gate_passed, input_tokens=input_tokens, output_tokens=output_tokens,
-        agent_turns=request_count,
-        retry_attempts=max(0, request_count - 1),
-        api_duration=stats.api_duration if stats else None,
-        lines_added=stats.lines_added if stats else None,
-        lines_removed=stats.lines_removed if stats else None,
-    )
-
-
-# ── Worktree + pre-loop setup helpers ────────────────────────────────────────
 
 def setup_worktree(
     item: BeadsWorkItem, lock_timeout: float = 300.0,
@@ -135,9 +112,6 @@ def _pre_loop_validate(
     return None, True, worktree_path, pokepoke_root_cwd, worktree_cwd
 
 
-# ── Gate agent helper ─────────────────────────────────────────────────────────
-
-
 def _run_gate_check(
     item: BeadsWorkItem,
     worktree_cwd: str,
@@ -181,9 +155,6 @@ def _run_gate_check(
     return gate_success, gate_reason, gate_agent_runs, gate_crashed
 
 
-# ── Small loop-body helpers ──────────────────────────────────────────────────
-
-
 def _extract_agent_stats(result: CopilotResult) -> AgentStats | None:
     """Parse stats from a CopilotResult (from structured stats or raw output)."""
     from pokepoke.stats.stats import parse_agent_stats
@@ -225,9 +196,6 @@ def _log_commit_status(worktree_cwd: str) -> None:
         logger.info("\n✅ No changes made — work item may already be complete")
 
 
-# ── Retry helper ─────────────────────────────────────────────────────────────
-
-
 def _maybe_retry_copilot(
     result: CopilotResult,
     failure_count: int,
@@ -248,8 +216,6 @@ def _maybe_retry_copilot(
         )
     return True, f"[Copilot failure] {feedback}"
 
-# ── Decomposition helper ─────────────────────────────────────────────────────
-
 
 def _maybe_decompose(
     item: BeadsWorkItem, copilot_failure_count: int,
@@ -265,9 +231,6 @@ def _maybe_decompose(
         if decomp_result.success:
             logger.info("\n🔀 Item %s decomposed into %d sub-tasks",
                         item.id, len(decomp_result.child_ids))
-
-
-# ── Cleanup helper (moved from workflow.py) ───────────────────────────────────
 
 
 def run_cleanup_with_timeout(
@@ -296,123 +259,3 @@ def run_cleanup_with_timeout(
             break
 
     return result.success, cleanup_agent_runs
-
-
-# ── Post-loop finalisation helper ─────────────────────────────────────────────
-
-
-def _finalize_item_result(
-    result: CopilotResult,
-    item: BeadsWorkItem,
-    worktree_path: Path | None,
-    selected_model: str,
-    start_time: float,
-    request_count: int,
-    accumulated_stats: AgentStats,
-    cleanup_agent_runs: int,
-    gate_agent_runs: int,
-    gate_success: bool,
-    run_logger: "RunLogger | None",
-    item_logger: "ItemLogger | None",
-    base_agent_id: str,
-    run_beta_test: bool,
-    repo_path: str | None = None,
-) -> tuple[WorkItemResult, bool]:
-    """Handle post-loop outcome. Returns (WorkItemResult, finalized_successfully)."""
-    if result.success:
-        set_terminal_banner(format_work_item_banner(item.id, item.title, "Finalizing"))
-        assert worktree_path is not None, "worktree_path must be set when result is successful"
-        success = finalize_work_item(item, worktree_path, parent_agent_id=base_agent_id, repo_path=repo_path)
-
-        # Store discoveries in memory after successful work completion
-        if success:
-            from pokepoke.config import get_config
-            config = get_config()
-            if config.mcp_server.memory_enabled:
-                try:
-                    from pokepoke.models.memory_helpers import auto_discover_from_prompt, store_agent_discoveries
-                    from pokepoke.models.sdk_helpers import build_prompt_from_work_item
-                    # Auto-discover facts from work item context
-                    work_prompt = build_prompt_from_work_item(item)
-                    discoveries = auto_discover_from_prompt(work_prompt, item)
-                    if discoveries:
-                        store_agent_discoveries(item, discoveries, repo_root=worktree_path.parent if worktree_path else None)
-                        logger.debug(f"Stored {len(discoveries)} discoveries in memory for item {item.id}")
-                except Exception as e:
-                    logger.warning(f"Failed to store memories after completion: {e}")
-
-        item_stats = accumulated_stats
-        set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed" if success else "Failed"))
-        if success and run_beta_test:
-            set_terminal_banner(format_work_item_banner(item.id, item.title, "Beta Testing"))
-            beta_stats = run_beta_tester()
-            if beta_stats and item_stats:
-                item_stats.accumulate(beta_stats)
-            set_terminal_banner(format_work_item_banner(item.id, item.title, "Completed"))
-        if run_logger and item_logger:
-            item_logger.log_summary(success, request_count)
-            run_logger.log_orchestrator(
-                f"Completed work item with {request_count} agent requests - Status: {'SUCCESS' if success else 'FAILURE'}"
-            )
-        terminal_ui.ui.set_current_agent(None)
-        gate_passed: bool | None = gate_success if gate_agent_runs > 0 else None
-        dur = time.time() - start_time
-        model_completion = _build_completion_record(
-            item.id, selected_model, dur, success, gate_passed, item_stats, request_count,
-        ) if success else None
-        return WorkItemResult(
-            success=success, request_count=request_count, stats=item_stats,
-            cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
-            model_completion=model_completion,
-        ), success
-
-    # Failure path — check if work is actually completed despite session failure
-    try:
-        reconciled, evidence = reconcile_completed_item(item, worktree_path, run_logger)
-    except Exception as exc:  # pragma: no cover - best-effort
-        logger.debug("Reconciliation check failed (non-fatal): %s", exc)
-        reconciled, evidence = False, {}
-    if reconciled:
-        ev = evidence
-        logger.error(
-            f"\n⚠️  Copilot session reported FAILURE but state shows work already completed."
-            f"\n   Evidence: beads_closed={ev.get('beads_closed')}, "
-            f"commits_on_default={ev.get('commits_on_default')}, "
-            f"commits_on_worktree_branch={ev.get('commits_on_worktree_branch')}, "
-            f"worktree_cleaned={ev.get('worktree_cleaned')}"
-        )
-        if run_logger and item_logger:
-            item_logger.log_summary(True, request_count)
-            run_logger.log_orchestrator(
-                "Outcome reconciled after session failure: treating as SUCCESS", level="WARNING",
-            )
-        terminal_ui.ui.set_current_agent(None)
-        dur = time.time() - start_time
-        return WorkItemResult(
-            success=True, request_count=request_count, stats=accumulated_stats,
-            cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
-            model_completion=_build_completion_record(
-                item.id, selected_model, dur, True,
-                gate_success if gate_agent_runs > 0 else None, accumulated_stats, request_count,
-            ),
-        ), True
-
-    set_terminal_banner(format_work_item_banner(item.id, item.title, "Failed"))
-    failure_reason = result.error or "Unknown failure"
-    logger.error(f"\n❌ Failed to complete work item: {failure_reason}")
-
-    from pokepoke.beads.beads_management import fail_task
-    fail_task(item.id, failure_reason)
-
-    logger.warning(f"\n⚠️  Preserving worktree for {item.id} (work may be recoverable)")
-    _log_failure(run_logger, item_logger, request_count)
-    terminal_ui.ui.set_current_agent(None)
-    dur = time.time() - start_time
-    model_completion = _build_completion_record(
-        item.id, selected_model, dur, False, False, accumulated_stats, request_count,
-    )
-    return _fail_result(
-        request_count=request_count, cleanup_agent_runs=cleanup_agent_runs,
-        gate_agent_runs=gate_agent_runs, model_completion=model_completion,
-        stats=accumulated_stats, failure_reason=failure_reason,
-    ), False

@@ -19,11 +19,11 @@ from unittest.mock import patch
 import pytest
 
 from pokepoke.agents.decomposition_agent import DecompositionResult
+from pokepoke.orchestration.finalization import ResultContext, _finalize_item_result
 from pokepoke.orchestration.work_item_session import WorkItemSession
 from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.orchestration.workflow_helpers import (
     _fail_result,
-    _finalize_item_result,
     _maybe_decompose,
     _maybe_retry_copilot,
     run_cleanup_with_timeout,
@@ -707,12 +707,12 @@ class TestFinalizeReconciliation:
 
         with (
             patch(
-                "pokepoke.orchestration.workflow_helpers.reconcile_completed_item",
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
                 return_value=(True, {"beads_closed": True, "commits_on_default": 2}),
             ),
-            patch("pokepoke.orchestration.workflow_helpers.terminal_ui"),
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
         ):
-            wi_result, finalized = _finalize_item_result(
+            wi_result, finalized = _finalize_item_result(ResultContext(
                 result=result,
                 item=item,
                 worktree_path=Path("/fake/wt"),
@@ -727,7 +727,7 @@ class TestFinalizeReconciliation:
                 item_logger=None,
                 base_agent_id="test-agent",
                 run_beta_test=False,
-            )
+            ))
 
         assert wi_result.success is True
         assert finalized is True
@@ -742,12 +742,12 @@ class TestFinalizeReconciliation:
 
         with (
             patch(
-                "pokepoke.orchestration.workflow_helpers.reconcile_completed_item",
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
                 return_value=(False, {}),
             ),
-            patch("pokepoke.orchestration.workflow_helpers.terminal_ui"),
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
         ):
-            wi_result, finalized = _finalize_item_result(
+            wi_result, finalized = _finalize_item_result(ResultContext(
                 result=result,
                 item=item,
                 worktree_path=Path("/fake/wt"),
@@ -762,7 +762,7 @@ class TestFinalizeReconciliation:
                 item_logger=None,
                 base_agent_id="test-agent",
                 run_beta_test=False,
-            )
+            ))
 
         assert wi_result.success is False
         assert finalized is False
@@ -777,12 +777,12 @@ class TestFinalizeReconciliation:
 
         with (
             patch(
-                "pokepoke.orchestration.workflow_helpers.reconcile_completed_item",
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
                 side_effect=RuntimeError("db error"),
             ),
-            patch("pokepoke.orchestration.workflow_helpers.terminal_ui"),
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
         ):
-            wi_result, finalized = _finalize_item_result(
+            wi_result, finalized = _finalize_item_result(ResultContext(
                 result=result,
                 item=item,
                 worktree_path=Path("/fake/wt"),
@@ -797,7 +797,7 @@ class TestFinalizeReconciliation:
                 item_logger=None,
                 base_agent_id="test-agent",
                 run_beta_test=False,
-            )
+            ))
 
         assert wi_result.success is False
         assert finalized is False
