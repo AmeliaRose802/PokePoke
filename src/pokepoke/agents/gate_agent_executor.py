@@ -15,6 +15,7 @@ from pokepoke.stats.gate_rejection_tracker import record_gate_check
 from pokepoke.stats.metrics_context import agent_type_context
 from pokepoke.stats.stats import parse_agent_stats
 from pokepoke.types import BeadsWorkItem, GateAgentResult
+from pokepoke.utils.output_sanitizer import strip_process_monitor_lines
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
@@ -22,6 +23,50 @@ if TYPE_CHECKING:
 logger = logging.getLogger(__name__)
 
 __all__ = ['run_gate_agent']
+
+
+def _parse_verdict(output: str) -> tuple[bool, str, bool]:
+    """Parse the gate agent verdict from *output*.
+
+    Returns ``(success, reason, crashed)``.
+    """
+    json_blocks = list(re.finditer(
+        r'```[jJ][sS][oO][nN]\s*(\{.*?\})\s*```', output, re.DOTALL,
+    ))
+    had_json_blocks = bool(json_blocks)
+    for json_match in reversed(json_blocks):
+        # Strip ProcessMonitor lines that may have been interleaved into
+        # the JSON block by the subprocess monitoring background thread.
+        raw_json = strip_process_monitor_lines(json_match.group(1))
+        try:
+            data = json.loads(raw_json)
+            status = data.get("status")
+            if status == "success":
+                message = data.get("message", "Verification successful")
+                reason = data.get("reason", "")
+                recommendation = data.get("recommendation", "")
+                full_message = message
+                if reason:
+                    full_message = f"[{reason}] {message}"
+                if recommendation:
+                    full_message += f"\nRecommendation: {recommendation}"
+                return True, full_message, False
+            elif status is not None:
+                reason = data.get("reason", "Verification failed")
+                details = data.get("details", "")
+                return False, f"{reason}\nDetails: {details}", False
+        except json.JSONDecodeError:
+            continue
+    if "VERIFICATION SUCCESSFUL" in output.upper() or "NEW_WORK_VERIFIED" in output:
+        return True, "Verification successful (text match)", False
+    # If JSON blocks were present but ALL failed to parse, this is an
+    # infrastructure issue (e.g. output corruption), not a genuine code
+    # rejection.  Mark as crashed so the orchestrator retries instead of
+    # counting it against the gate rejection cap.
+    if had_json_blocks:
+        logger.warning("Gate Agent output contained JSON blocks but none parsed successfully — treating as crash")
+        return False, "Gate Agent verdict could not be parsed (output corrupted). Check logs.", True
+    return False, "Gate Agent did not explicitly approve the fix. Check logs.", False
 
 
 def run_gate_agent(
@@ -106,34 +151,5 @@ def run_gate_agent(
             crashed=not is_timeout, is_timeout=is_timeout,
         )
     output = result.output or ""
-    # Find ALL ```json blocks (case-insensitive) and try each, last-first,
-    # since the verdict is expected at the end of the response.
-    json_blocks = list(re.finditer(
-        r'```[jJ][sS][oO][nN]\s*(\{.*?\})\s*```', output, re.DOTALL,
-    ))
-    for json_match in reversed(json_blocks):
-        try:
-            data = json.loads(json_match.group(1))
-            status = data.get("status")
-            if status == "success":
-                message = data.get("message", "Verification successful")
-                reason = data.get("reason", "")
-                recommendation = data.get("recommendation", "")
-                # Build success message with context
-                full_message = message
-                if reason:
-                    full_message = f"[{reason}] {message}"
-                if recommendation:
-                    full_message += f"\nRecommendation: {recommendation}"
-                return _finish(True, full_message, crashed=False)
-            elif status is not None:
-                reason = data.get("reason", "Verification failed")
-                details = data.get("details", "")
-                full_reason = f"{reason}\nDetails: {details}"
-                return _finish(False, full_reason, crashed=False)
-            # No "status" key — skip this block, try the next one
-        except json.JSONDecodeError:
-            continue
-    if "VERIFICATION SUCCESSFUL" in output.upper() or "NEW_WORK_VERIFIED" in output:
-        return _finish(True, "Verification successful (text match)", crashed=False)
-    return _finish(False, "Gate Agent did not explicitly approve the fix. Check logs.", crashed=False)
+    success, reason, crashed = _parse_verdict(output)
+    return _finish(success, reason, crashed=crashed)
