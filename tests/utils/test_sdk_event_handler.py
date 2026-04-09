@@ -3,6 +3,7 @@
 import asyncio
 import json
 from types import SimpleNamespace
+from unittest.mock import patch
 
 from pokepoke.beads.sdk_beads_tracker import extract_command as _extract_command
 from pokepoke.beads.sdk_beads_tracker import parse_created_items as _parse_created_items
@@ -282,6 +283,56 @@ def test_turn_end_with_no_pending_tools_does_not_set_done() -> None:
     finally:
         asyncio.set_event_loop(None)
         loop.close()
+
+
+def test_turn_lifecycle_messages_logged_at_debug_level() -> None:
+    """Turn started/ended messages should be logged at DEBUG level, not INFO.
+
+    These are internal lifecycle messages that should only appear in debug
+    logs, not clutter the user-visible terminal output. Fixes PokePoke-mevla.
+    """
+    done = asyncio.Event()
+    output_lines: list[str] = []
+    errors: list[str] = []
+
+    # Patch the logger to capture log calls
+    with patch('pokepoke.models.sdk_event_handler.logger') as mock_logger:
+        handler, stats = create_event_handler(done, output_lines, errors)
+
+        # Trigger turn start
+        handler(_make_event("assistant.turn_start"))
+
+        # Verify debug() was called with turn started message
+        mock_logger.debug.assert_called_with(
+            "Turn %d started (pending=%d)",
+            stats['turn_count'] + 1,
+            0
+        )
+
+        # Verify info() was NOT called for turn start
+        for call in mock_logger.info.call_args_list:
+            if call[0]:  # If there are positional args
+                assert "Turn" not in str(call[0][0]), \
+                    "Turn messages should not be logged at INFO level"
+
+        # Reset mock
+        mock_logger.reset_mock()
+
+        # Trigger turn end
+        handler(_make_event("assistant.turn_end"))
+
+        # Verify debug() was called with turn ended message
+        mock_logger.debug.assert_called_with(
+            "Turn %d ended (pending=%d)",
+            stats['turn_count'],
+            0
+        )
+
+        # Verify info() was NOT called for turn end
+        for call in mock_logger.info.call_args_list:
+            if call[0]:  # If there are positional args
+                assert "Turn" not in str(call[0][0]), \
+                    "Turn messages should not be logged at INFO level"
 
 
 def test_session_error_sets_done_and_records_error() -> None:
