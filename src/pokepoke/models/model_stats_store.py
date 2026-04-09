@@ -26,12 +26,13 @@ File layout (.pokepoke/model_stats.json):
 import logging
 import statistics
 import threading
+from collections.abc import Callable
 from datetime import UTC, datetime
 from pathlib import Path
 from typing import Any, TypedDict, cast
 
 from pokepoke.stats.perf_timing import timed_block
-from pokepoke.stats.persistent_json_store import PersistentJsonStore
+from pokepoke.stats.persistent_json_store import JsonDict, PersistentJsonStore
 from pokepoke.types import ModelCompletionRecord
 
 # ── TypedDict shapes ─────────────────────────────────────────────────
@@ -102,23 +103,23 @@ _STATS_FILE_LOCK = "model-stats-file"
 
 # ── Data helpers ─────────────────────────────────────────────────────
 
-def _empty_store() -> dict[str, Any]:
+def _empty_store() -> ModelStatsData:
     """Return an empty store structure."""
     return {"log": [], "summary": {}}
 
 
-def _normalize_store(data: Any) -> dict[str, Any]:
+def _normalize_store(data: Any) -> ModelStatsData:
     if not isinstance(data, dict) or "log" not in data:
         return _empty_store()
-    return data
+    return cast(ModelStatsData, data)
 
 
 _STORE = PersistentJsonStore(
     default_path=STATS_FILE,
-    empty=_empty_store,
+    empty=cast("Callable[[], JsonDict]", _empty_store),
     thread_lock=_thread_lock,
     lock_name=_STATS_FILE_LOCK,
-    normalize=_normalize_store,
+    normalize=cast("Callable[[Any], JsonDict]", _normalize_store),
 )
 
 
@@ -267,7 +268,7 @@ def save_model_stats(data: ModelStatsData, path: Path | None = None) -> None:
     on crashes.
     """
     with timed_block("model_stats.save"):
-        _STORE.save(cast(dict[str, Any], data), path)
+        _STORE.save(cast("JsonDict", data), path)
 
 
 def record_completion(record: ModelCompletionRecord, path: Path | None = None) -> None:
