@@ -88,6 +88,23 @@ def _create_sdk_client(cwd: str | None, add_parent_dir: bool = False) -> Any:
     return CopilotClient(client_opts)  # type: ignore[arg-type]
 
 @dataclass
+class CopilotInvocationConfig:
+    """Configuration bundle for invoke_copilot_sdk / invoke_copilot_sdk_sync."""
+
+    retry_config: RetryConfig | None = None
+    timeout: float | None = None
+    deny_write: bool = False
+    idle_timeout: float | None = None
+    model: str | None = None
+    cwd: str | None = None
+    template_name: str | None = None
+    session_id: str | None = None
+    is_resume: bool = False
+    use_warm_session: bool = True
+    add_parent_dir: bool = False
+
+
+@dataclass
 class _AttemptResult:
     """Result of a single SDK session attempt."""
     abort_reason: str | None = None
@@ -227,21 +244,16 @@ def _try_get_warm_session_id(
 async def invoke_copilot_sdk(  # noqa: C901
     work_item: BeadsWorkItem,
     prompt: str | None = None,
-    retry_config: RetryConfig | None = None,
-    timeout: float | None = None,
-    deny_write: bool = False,
+    config: CopilotInvocationConfig | None = None,
     item_logger: 'ItemLogger | None' = None,
-    idle_timeout: float | None = None,
-    model: str | None = None,
-    cwd: str | None = None,
-    template_name: str | None = None,
-    session_id: str | None = None,
-    is_resume: bool = False,
-    use_warm_session: bool = True,
-    add_parent_dir: bool = False,
 ) -> CopilotResult:
     """Invoke GitHub Copilot using the SDK. Falls back to Sonnet on rate limit."""
-    # Check for a warm session match if enabled and not resuming
+    config = config or CopilotInvocationConfig()
+    timeout, deny_write, idle_timeout = config.timeout, config.deny_write, config.idle_timeout
+    model, cwd, template_name = config.model, config.cwd, config.template_name
+    session_id, is_resume = config.session_id, config.is_resume
+    use_warm_session, add_parent_dir = config.use_warm_session, config.add_parent_dir
+
     session_id = await _try_get_warm_session_id_async(work_item, session_id, is_resume, use_warm_session, cwd)
 
     final_prompt = _resolve_prompt(work_item, prompt, template_name, is_resume, session_id)
@@ -430,19 +442,13 @@ async def invoke_copilot_sdk(  # noqa: C901
 
 
 def invoke_copilot_sdk_sync(
-    work_item: BeadsWorkItem, prompt: str | None = None,
-    retry_config: RetryConfig | None = None, timeout: float | None = None,
-    deny_write: bool = False, item_logger: 'ItemLogger | None' = None,
-    model: str | None = None, cwd: str | None = None,
-    template_name: str | None = None, session_id: str | None = None,
-    is_resume: bool = False, use_warm_session: bool = True,
-    add_parent_dir: bool = False,
+    work_item: BeadsWorkItem,
+    prompt: str | None = None,
+    config: CopilotInvocationConfig | None = None,
+    item_logger: 'ItemLogger | None' = None,
 ) -> CopilotResult:
     """Synchronous wrapper around invoke_copilot_sdk."""
     return asyncio.run(invoke_copilot_sdk(
-        work_item=work_item, prompt=prompt, retry_config=retry_config,
-        timeout=timeout, deny_write=deny_write, item_logger=item_logger,
-        model=model, cwd=cwd, template_name=template_name,
-        session_id=session_id, is_resume=is_resume,
-        use_warm_session=use_warm_session, add_parent_dir=add_parent_dir,
+        work_item=work_item, prompt=prompt, config=config,
+        item_logger=item_logger,
     ))

@@ -5,6 +5,7 @@ from unittest.mock import AsyncMock, MagicMock, patch
 import pytest
 
 from pokepoke.models.copilot_sdk import (
+    CopilotInvocationConfig,
     _summarize_output,
     build_resume_prompt,
     invoke_copilot_sdk_sync,
@@ -258,8 +259,10 @@ class TestSessionIdGeneration:
         result = invoke_copilot_sdk_sync(
             sample_work_item,
             prompt="test",
-            session_id="custom-session-id",
-            is_resume=True,
+            config=CopilotInvocationConfig(
+                session_id="custom-session-id",
+                is_resume=True,
+            ),
         )
 
         assert result.session_id == "test-sid"
@@ -273,7 +276,7 @@ class TestSessionIdGeneration:
         invoke_copilot_sdk_sync(
             sample_work_item,
             prompt="test",
-            is_resume=True,
+            config=CopilotInvocationConfig(is_resume=True),
         )
 
         # Verify asyncio.run was called (async invoke was called)
@@ -437,7 +440,7 @@ class TestInvokeSdkTimeoutSessionState:
         result = await invoke_copilot_sdk(
             sample_work_item,
             prompt="test prompt",
-            timeout=0.01,  # Nearly instant timeout
+            config=CopilotInvocationConfig(timeout=0.01),
         )
 
         assert result.success is False
@@ -466,7 +469,7 @@ class TestInvokeSdkTimeoutSessionState:
         result = await invoke_copilot_sdk(
             sample_work_item,
             prompt="test prompt",
-            timeout=0.01,
+            config=CopilotInvocationConfig(timeout=0.01),
         )
 
         assert result.success is False
@@ -490,9 +493,11 @@ class TestInvokeSdkTimeoutSessionState:
         await invoke_copilot_sdk(
             sample_work_item,
             prompt="resume prompt",
-            timeout=0.01,
-            session_id="custom-session-id",
-            is_resume=True,
+            config=CopilotInvocationConfig(
+                timeout=0.01,
+                session_id="custom-session-id",
+                is_resume=True,
+            ),
         )
 
         # Verify session config included the session_id
@@ -518,7 +523,7 @@ class TestInvokeSdkTimeoutSessionState:
         actual = await invoke_copilot_sdk(
             sample_work_item,
             prompt="test",
-            timeout=0.01,
+            config=CopilotInvocationConfig(timeout=0.01),
         )
 
         # The generated session_id should be based on the item ID
@@ -547,9 +552,11 @@ class TestInvokeSdkTimeoutSessionState:
 
         await invoke_copilot_sdk(
             sample_work_item,
-            timeout=0.01,
-            session_id="resume-sid",
-            is_resume=True,
+            config=CopilotInvocationConfig(
+                timeout=0.01,
+                session_id="resume-sid",
+                is_resume=True,
+            ),
         )
 
         assert len(sent_prompts) == 1
@@ -581,8 +588,9 @@ class TestAIBackendSessionThreading:
 
             mock_sync.assert_called_once()
             call_kwargs = mock_sync.call_args[1]
-            assert call_kwargs["session_id"] == "my-session"
-            assert call_kwargs["is_resume"] is True
+            config = call_kwargs["config"]
+            assert config.session_id == "my-session"
+            assert config.is_resume is True
 
     def test_invoke_copilot_passes_session_params(self, sample_work_item):
         from pokepoke.models.ai_backends import invoke_copilot
