@@ -9,7 +9,7 @@ from pokepoke.desktop import terminal_ui
 from pokepoke.utils.process_utils import log_process_tree_snapshot as _log_process_tree_snapshot
 from pokepoke.utils.shutdown import is_shutting_down
 
-from .sdk_event_handler import SessionStats
+from .sdk_event_handler import SdkSessionStats
 from .sdk_watchdog_diagnostics import periodic_diagnostics_loop, resolve_diagnostics_log_path
 
 logger = logging.getLogger(__name__)
@@ -22,7 +22,7 @@ class SDKWatchdog:
 
     @staticmethod
     async def check_tool_watchdog(
-        session: Any, stats: SessionStats | None, tool_call_timeout: float,
+        session: Any, stats: SdkSessionStats | None, tool_call_timeout: float,
         handler: Any = None,
     ) -> str | None:
         """Check if any tool call exceeds the watchdog timeout. Returns 'tool_timeout' or None."""
@@ -78,7 +78,7 @@ class SDKWatchdog:
             logger.debug("Failed to check client state during heartbeat", exc_info=True)
 
     @staticmethod
-    def _log_event_gap(stats: SessionStats, last_event_gap_log: float, handler: Any = None) -> float:
+    def _log_event_gap(stats: SdkSessionStats, last_event_gap_log: float, handler: Any = None) -> float:
         """Log significant event gaps for diagnostics. Returns updated last_event_gap_log."""
         now = time.monotonic()
         if (now - last_event_gap_log) >= 30.0:
@@ -99,7 +99,7 @@ class SDKWatchdog:
 
     @staticmethod
     async def _check_process_liveness(
-        client: Any, stats: SessionStats, consecutive_ping_failures: int,
+        client: Any, stats: SdkSessionStats, consecutive_ping_failures: int,
         max_ping_failures: int, process_output_timeout: float,
         gap: float, ping_ok: bool, session: Any, done: asyncio.Event,
         handler: Any = None,
@@ -160,7 +160,7 @@ class SDKWatchdog:
         return should_abort, reason, consecutive_ping_failures
 
     @staticmethod
-    def _get_effective_activity_time(stats: SessionStats) -> tuple[float, bool, float | None]:
+    def _get_effective_activity_time(stats: SdkSessionStats) -> tuple[float, bool, float | None]:
         """Get effective last activity time considering child agents.
 
         Returns (effective_last_activity, has_active_children, child_activity_time).
@@ -189,7 +189,7 @@ class SDKWatchdog:
 
     @staticmethod
     async def _check_inactivity(
-        stats: SessionStats, inactivity_timeout: float, session: Any,
+        stats: SdkSessionStats, inactivity_timeout: float, session: Any,
         handler: Any = None,
     ) -> bool:
         """Check for session inactivity and abort if detected.
@@ -225,7 +225,7 @@ class SDKWatchdog:
     async def await_completion(
         session: Any, client: Any, done: asyncio.Event,
         max_timeout: float,
-        stats: SessionStats | None = None,
+        stats: SdkSessionStats | None = None,
         inactivity_timeout: float = 600.0,
         tool_call_timeout: float = 600.0,
         handler: Any = None,
@@ -274,7 +274,7 @@ class SDKWatchdog:
     async def _poll_loop(  # noqa: C901
         session: Any, client: Any, done: asyncio.Event,
         deadline: float, max_timeout: float,
-        stats: SessionStats | None,
+        stats: SdkSessionStats | None,
         inactivity_timeout: float,
         tool_call_timeout: float,
         handler: Any,

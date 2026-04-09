@@ -24,7 +24,8 @@ class RateLimitError(Exception):
 
 DEFAULT_MAX_READ_RETRIES = 3
 
-class SessionStats(TypedDict):
+class SdkSessionStats(TypedDict):
+    """Session statistics for SDK client tracking (distinct from SessionStats dataclass)."""
     pending_tool_calls: int
     idle_task: asyncio.Task[None] | None
     total_input_tokens: int
@@ -50,7 +51,7 @@ class _EventHandler:
         done: asyncio.Event,
         output_lines: list[str],
         errors: list[str],
-        stats: SessionStats,
+        stats: SdkSessionStats,
         item_logger: Any | None,
         idle_timeout: float,
         hung_command_detector: HungCommandDetector,
@@ -373,7 +374,7 @@ def create_event_handler(
     idle_timeout: float = 90.0,
     hung_command_detector: HungCommandDetector | None = None,
     on_token_usage: Callable[[int, int], None] | None = None,
-) -> tuple['_EventHandler', SessionStats]:
+) -> tuple['_EventHandler', SdkSessionStats]:
     """Create an event handler and stats dict for SDK session events."""
     if hung_command_detector is None:
         config = get_config()
@@ -382,7 +383,7 @@ def create_event_handler(
             cumulative_timeout=float(config.command_timeout),
         )
 
-    stats: SessionStats = {
+    stats: SdkSessionStats = {
         'pending_tool_calls': 0,
         'idle_task': None,
         'total_input_tokens': 0,
