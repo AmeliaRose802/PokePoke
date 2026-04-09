@@ -12,7 +12,8 @@ from typing import Any
 logger = logging.getLogger(__name__)
 
 from pokepoke.agents.agent_types import iter_agent_types
-from pokepoke.types import AgentStats, MergeQueueStats, ModelCompletionRecord, SessionStats
+from pokepoke.git.merge_queue_stats import MergeQueueStats
+from pokepoke.types_stats import AgentStats, ModelCompletionRecord, SessionStats
 from pokepoke.utils.file_utils import replace_with_retry
 
 

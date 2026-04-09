@@ -6,7 +6,7 @@ from pokepoke.stats.session_stats_registry import (
     get_current_session_stats,
     set_current_session_stats,
 )
-from pokepoke.types import AgentStats, SessionStats
+from pokepoke.types_stats import AgentStats, SessionStats
 
 
 class TestSessionStatsRegistry:

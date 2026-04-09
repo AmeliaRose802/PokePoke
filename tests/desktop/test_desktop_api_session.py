@@ -10,7 +10,7 @@ from pokepoke.desktop.desktop_api_session import (
     set_session_end_time,
     set_session_start_time,
 )
-from pokepoke.types import AgentStats, SessionStats
+from pokepoke.types_stats import AgentStats, SessionStats
 
 
 @pytest.fixture(autouse=True)

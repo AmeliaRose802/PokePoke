@@ -8,7 +8,8 @@ import pytest
 
 from pokepoke.desktop.desktop_api import DesktopAPI
 from pokepoke.desktop.desktop_api_ext import _discover_log_roots as _real_discover_log_roots
-from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats
+from pokepoke.types import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, SessionStats
 
 
 @pytest.fixture(autouse=True)
@@ -361,7 +362,7 @@ def test_get_state_includes_model_leaderboard() -> None:
 
 def test_push_stats_with_model_completions() -> None:
     """push_stats should serialize model completions via snapshot."""
-    from pokepoke.types import ModelCompletionRecord
+    from pokepoke.types_stats import ModelCompletionRecord
     api = DesktopAPI()
     stats_obj = SessionStats(agent_stats=AgentStats())
     stats_obj.record_model_completion(ModelCompletionRecord(

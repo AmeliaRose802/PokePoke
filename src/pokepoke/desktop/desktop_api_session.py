@@ -8,7 +8,7 @@ from typing import TYPE_CHECKING
 
 if TYPE_CHECKING:
     from pokepoke.desktop.desktop_api import DesktopAPI
-    from pokepoke.types import SessionStats
+    from pokepoke.types_stats import SessionStats
 
 
 def set_session_start_time(self: DesktopAPI, start_time: float) -> None:
