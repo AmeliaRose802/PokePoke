@@ -27,7 +27,7 @@ from pokepoke.utils.process_utils import (
 from pokepoke.utils.shutdown import is_shutting_down
 
 from .sdk_event_handler import RateLimitError, create_event_handler
-from .sdk_event_handler import SessionStats as _SDKSessionStats
+from .sdk_event_handler import SdkSessionStats as _SDKSessionStats
 from .sdk_helpers import (
     _await_completion,
     _build_copilot_result,

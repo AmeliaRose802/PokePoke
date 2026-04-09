@@ -8,7 +8,7 @@ from typing import Any
 
 from pokepoke.utils.process_utils import log_process_tree_snapshot as _log_process_tree_snapshot
 
-from .sdk_event_handler import SessionStats
+from .sdk_event_handler import SdkSessionStats
 
 logger = logging.getLogger(__name__)
 
@@ -27,7 +27,7 @@ def resolve_diagnostics_log_path(handler: Any) -> Path | None:
 
 
 async def periodic_diagnostics_loop(
-    stats: SessionStats,
+    stats: SdkSessionStats,
     handler: Any,
     diag_log_path: Path | None,
     stop_event: asyncio.Event,
