@@ -1,7 +1,9 @@
 """Unit tests for agent_runner module."""
 
+from pathlib import Path
 from unittest.mock import Mock, patch
 
+from pokepoke.agents.agent_runner import AgentRunnerConfig
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
 
 
@@ -28,6 +30,16 @@ class TestRunMainRepoAgent:
             labels=["maintenance"]
         )
 
+        config = AgentRunnerConfig(
+            agent_name="Worktree Cleanup",
+            agent_id="worktree-cleanup",
+            agent_item=agent_item,
+            repo_root=Path.cwd(),
+            worktree_path=Path.cwd(),
+            model=None,
+            item_logger=None,
+        )
+
         mock_invoke.return_value = CopilotResult(
             work_item_id="worktree-cleanup",
             success=True,
@@ -44,7 +56,7 @@ class TestRunMainRepoAgent:
             premium_requests=1
         )
 
-        stats = _run_main_repo_agent("Worktree Cleanup", agent_item, "cleanup prompt")
+        stats = _run_main_repo_agent(config, "cleanup prompt")
 
         assert stats is not None
         assert stats.wall_duration == 15.0
@@ -68,6 +80,16 @@ class TestRunMainRepoAgent:
             labels=["maintenance"]
         )
 
+        config = AgentRunnerConfig(
+            agent_name="Worktree Cleanup",
+            agent_id="worktree-cleanup",
+            agent_item=agent_item,
+            repo_root=Path.cwd(),
+            worktree_path=Path.cwd(),
+            model=None,
+            item_logger=None,
+        )
+
         mock_invoke.return_value = CopilotResult(
             work_item_id="worktree-cleanup",
             success=False,
@@ -76,7 +98,7 @@ class TestRunMainRepoAgent:
             attempt_count=1
         )
 
-        stats = _run_main_repo_agent("Worktree Cleanup", agent_item, "cleanup prompt")
+        stats = _run_main_repo_agent(config, "cleanup prompt")
         assert stats is None
 
     @patch('pokepoke.agents.agent_runner.parse_agent_stats')
@@ -99,6 +121,16 @@ class TestRunMainRepoAgent:
             labels=[]
         )
 
+        config = AgentRunnerConfig(
+            agent_name="Test",
+            agent_id="test-agent",
+            agent_item=agent_item,
+            repo_root=Path.cwd(),
+            worktree_path=Path.cwd(),
+            model=None,
+            item_logger=None,
+        )
+
         mock_invoke.return_value = CopilotResult(
             work_item_id="test-agent",
             success=True,
@@ -107,7 +139,7 @@ class TestRunMainRepoAgent:
         )
         mock_parse.return_value = None
 
-        _run_main_repo_agent("Test", agent_item, "prompt")
+        _run_main_repo_agent(config, "prompt")
 
         _, kwargs = mock_invoke.call_args
         assert kwargs['deny_write'] is False
@@ -132,6 +164,16 @@ class TestRunMainRepoAgent:
             labels=[]
         )
 
+        config = AgentRunnerConfig(
+            agent_name="Test",
+            agent_id="test",
+            agent_item=agent_item,
+            repo_root=Path.cwd(),
+            worktree_path=Path.cwd(),
+            model="gpt-5.1-codex",
+            item_logger=None,
+        )
+
         mock_invoke.return_value = CopilotResult(
             work_item_id="test",
             success=True,
@@ -140,7 +182,7 @@ class TestRunMainRepoAgent:
         )
         mock_parse.return_value = None
 
-        _run_main_repo_agent("Test", agent_item, "prompt", model="gpt-5.1-codex")
+        _run_main_repo_agent(config, "prompt")
 
         _, kwargs = mock_invoke.call_args
         assert kwargs['model'] == "gpt-5.1-codex"

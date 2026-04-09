@@ -19,7 +19,7 @@ if TYPE_CHECKING:
 
 def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:
     """Run beta tester agent to test all MCP tools. Restarts MCP server first."""
-    from pokepoke.agents.agent_runner import _generate_unique_agent_id, _run_worktree_agent
+    from pokepoke.agents.agent_runner import AgentRunnerConfig, _generate_unique_agent_id, _run_worktree_agent
 
     config = get_config()
     terminal_ui.ui.set_current_agent("Beta Tester")
@@ -102,8 +102,19 @@ def run_beta_tester(repo_root: Path | None = None, item_logger: 'ItemLogger | No
         if repo_root is None:
             repo_root = Path.cwd()
 
+        # Create config object for beta tester
+        agent_config = AgentRunnerConfig(
+            agent_name="Beta Tester",
+            agent_id=worktree_agent_id,
+            agent_item=beta_item,
+            repo_root=repo_root,
+            worktree_path=repo_root,  # Will be updated by _run_worktree_agent
+            model=None,
+            item_logger=item_logger,
+        )
+
         # Pass parent_agent_id so any sub-agents nest under the maintenance scheduler's UI card
-        agent_result = _run_worktree_agent("Beta Tester", worktree_agent_id, beta_item, beta_prompt, repo_root, merge_changes=False, item_logger=item_logger, parent_agent_id=parent_agent_id)
+        agent_result = _run_worktree_agent(agent_config, beta_prompt, merge_changes=False, parent_agent_id=parent_agent_id)
 
         # Update agent status based on result
         status = "success" if agent_result is not None else "failed"

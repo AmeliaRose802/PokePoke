@@ -5,10 +5,13 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from pokepoke.agents.agent_runner import (
+    AgentRunnerConfig,
     _reconcile_worktree_branch,
-    _run_worktree_agent,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+
+# Import compat wrapper and alias it to _run_worktree_agent for backwards compatibility
+from .conftest_agent_runner import run_worktree_agent_compat as _run_worktree_agent
 
 
 class TestRunWorktreeAgent:
@@ -655,10 +658,14 @@ class TestReconcileWorktreeBranch:
         """No commits on branch → returns None without attempting merge."""
         mock_has_commits.return_value = False
 
-        result = _reconcile_worktree_branch(
-            "agent-1", self._make_item(), "Janitor",
-            Path("/wt"), Path("/repo"), self._make_result(), "parent",
+        config = AgentRunnerConfig(
+            agent_name="Janitor",
+            agent_id="agent-1",
+            agent_item=self._make_item(),
+            repo_root=Path("/repo"),
+            worktree_path=Path("/wt"),
         )
+        result = _reconcile_worktree_branch(config, self._make_result(), "parent")
 
         assert result is None
         mock_merge.assert_not_called()
@@ -672,10 +679,14 @@ class TestReconcileWorktreeBranch:
         mock_has_commits.return_value = True
         mock_merge.return_value = (True, True)
 
-        result = _reconcile_worktree_branch(
-            "agent-1", self._make_item(), "Janitor",
-            Path("/wt"), Path("/repo"), self._make_result(), "parent",
+        config = AgentRunnerConfig(
+            agent_name="Janitor",
+            agent_id="agent-1",
+            agent_item=self._make_item(),
+            repo_root=Path("/repo"),
+            worktree_path=Path("/wt"),
         )
+        result = _reconcile_worktree_branch(config, self._make_result(), "parent")
 
         assert result is not None
         assert isinstance(result, AgentStats)
@@ -690,10 +701,14 @@ class TestReconcileWorktreeBranch:
         mock_has_commits.return_value = True
         mock_merge.return_value = (False, False)
 
-        result = _reconcile_worktree_branch(
-            "agent-1", self._make_item(), "Janitor",
-            Path("/wt"), Path("/repo"), self._make_result(), "parent",
+        config = AgentRunnerConfig(
+            agent_name="Janitor",
+            agent_id="agent-1",
+            agent_item=self._make_item(),
+            repo_root=Path("/repo"),
+            worktree_path=Path("/wt"),
         )
+        result = _reconcile_worktree_branch(config, self._make_result(), "parent")
 
         assert result is None
         mock_merge.assert_called_once()
@@ -711,10 +726,14 @@ class TestReconcileWorktreeBranch:
             output='{"wall_duration": 42.0, "input_tokens": 500}'
         )
 
-        result = _reconcile_worktree_branch(
-            "agent-1", self._make_item(), "Janitor",
-            Path("/wt"), Path("/repo"), result_with_output, "parent",
+        config = AgentRunnerConfig(
+            agent_name="Janitor",
+            agent_id="agent-1",
+            agent_item=self._make_item(),
+            repo_root=Path("/repo"),
+            worktree_path=Path("/wt"),
         )
+        result = _reconcile_worktree_branch(config, result_with_output, "parent")
 
         assert result is not None
 
@@ -726,10 +745,14 @@ class TestReconcileWorktreeBranch:
         """Exception in worktree_branch_has_commits → returns None safely."""
         mock_has_commits.side_effect = subprocess.CalledProcessError(1, "git")
 
-        result = _reconcile_worktree_branch(
-            "agent-1", self._make_item(), "Janitor",
-            Path("/wt"), Path("/repo"), self._make_result(), "parent",
+        config = AgentRunnerConfig(
+            agent_name="Janitor",
+            agent_id="agent-1",
+            agent_item=self._make_item(),
+            repo_root=Path("/repo"),
+            worktree_path=Path("/wt"),
         )
+        result = _reconcile_worktree_branch(config, self._make_result(), "parent")
 
         assert result is None
         mock_merge.assert_not_called()
