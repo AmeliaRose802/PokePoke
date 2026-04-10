@@ -12,7 +12,7 @@ from pathlib import Path
 from typing import Any
 
 # Re-export every public type so callers keep using ``from pokepoke.config import …``
-from pokepoke.config_types import (  # noqa: F401
+from pokepoke.config_types import (
     DEFAULT_MODEL,
     FALLBACK_MODEL,
     GIT_OPERATION_TIMEOUT,
@@ -39,9 +39,48 @@ from pokepoke.config_types import (  # noqa: F401
     StateBranchConfig,
     WarmSessionConfig,
 )
-from pokepoke.config_validation import ConfigError  # noqa: F401
-from pokepoke.models.model_sync_config import ModelSyncConfig  # noqa: F401
-from pokepoke.otel_config import OtelConfig  # noqa: F401
+from pokepoke.config_validation import ConfigError
+from pokepoke.models.model_sync_config import ModelSyncConfig
+from pokepoke.otel_config import OtelConfig
+
+__all__ = [
+    # Constants
+    "DEFAULT_MODEL",
+    "FALLBACK_MODEL",
+    "GIT_OPERATION_TIMEOUT",
+    "LOCK_TIMEOUT_SECONDS",
+    "MAX_ORPHAN_WORKTREES",
+    "MIN_WORKTREE_TIMEOUT",
+    "WORKTREE_TEST_TIMEOUT",
+    # Config types
+    "AIBackendConfig",
+    "AssignmentConfig",
+    "AssignmentRule",
+    "AssignmentRuleMatch",
+    "ConfigError",
+    "EconomyModeConfig",
+    "GitConfig",
+    "MaintenanceAgentConfig",
+    "MaintenanceConfig",
+    "MCPServerConfig",
+    "ModelConfig",
+    "ModelSyncConfig",
+    "OtelConfig",
+    "PerformanceThresholdsConfig",
+    "PostMortemConfig",
+    "PreflightHealthConfig",
+    "ProjectConfig",
+    "QualityGateOverrides",
+    "RepoConfig",
+    "StateBranchConfig",
+    "WarmSessionConfig",
+    # Functions
+    "_find_repo_root",
+    "_load_config_file",
+    "get_config",
+    "load_config",
+    "reset_config",
+]
 
 logger = logging.getLogger(__name__)
 
