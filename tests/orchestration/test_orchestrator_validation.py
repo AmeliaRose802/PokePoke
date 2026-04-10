@@ -92,11 +92,14 @@ class TestCheckAndCommitMainRepo:
             yield
         mock_cleanup_lock.return_value = _noop_lock()
 
-        # git status returns changes, auto-commit (add succeeds, commit fails), then cleanup agent
+        # git status returns changes, auto-commit (add succeeds, commit fails),
+        # reset attempt (checkout succeeds but files still dirty), then cleanup agent
         mock_subprocess.side_effect = [
             Mock(stdout=" M src/file.py\n M tests/test.py\n", returncode=0),  # git status
             Mock(returncode=0),  # git add --all (auto-commit)
             Mock(returncode=1, stdout="", stderr="pre-commit hook failed"),  # git commit fails
+            Mock(returncode=0),  # git checkout -- . (reset working tree)
+            Mock(stdout=" M src/file.py\n", returncode=0),  # git status after reset (still dirty)
             Mock(stdout="", returncode=0),  # git status --porcelain (conflict detection)
         ]
         # Mock cleanup agent to return success
