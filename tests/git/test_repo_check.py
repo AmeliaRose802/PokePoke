@@ -194,6 +194,7 @@ class TestCheckAndCommitMainRepo:
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
              patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
              patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=False), \
+             patch('pokepoke.git.repo_check._try_reset_working_tree', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit (add + commit fail), then stash commands
             mock_run.side_effect = [
@@ -225,6 +226,7 @@ class TestCheckAndCommitMainRepo:
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
              patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
              patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=False), \
+             patch('pokepoke.git.repo_check._try_reset_working_tree', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
             # git status, auto-commit fails, then stash also fails
             mock_run.side_effect = [
@@ -361,6 +363,7 @@ class TestCheckAndCommitMainRepo:
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
              patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
              patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=False), \
+             patch('pokepoke.git.repo_check._try_reset_working_tree', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'), \
              patch('pokepoke.git.repo_check.time.monotonic') as mock_mono:
             # monotonic: start=0, first check exceeds threshold
@@ -993,6 +996,7 @@ class TestCleanupRetriesWithConflictMarkers:
              patch('pokepoke.git.repo_check._detect_conflict_marker_files', return_value=[]), \
              patch('pokepoke.git.repo_check._restore_conflicted_files') as mock_restore, \
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
+             patch('pokepoke.git.repo_check._try_reset_working_tree', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/file.py", stderr=""),
