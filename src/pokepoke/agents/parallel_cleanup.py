@@ -20,7 +20,9 @@ from pokepoke.agents.parallel_worker_pool import (
     collect_done_futures,
 )
 from pokepoke.desktop import terminal_ui
-from pokepoke.types import BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem, RecordFn
+from pokepoke.types_stats import SessionStats
 from pokepoke.utils.logging_utils import RunLogger
 from pokepoke.utils.shutdown import set_executor
 

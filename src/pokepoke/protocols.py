@@ -12,7 +12,9 @@ import threading
 from pathlib import Path
 from typing import TYPE_CHECKING, Any, Protocol
 
-from pokepoke.types import BeadsStats, BeadsWorkItem, IssueWithDependencies, RecordFn, SessionStats, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem, IssueWithDependencies, RecordFn
+from pokepoke.types_stats import BeadsStats, SessionStats
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import RunLogger
