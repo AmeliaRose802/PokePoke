@@ -1,6 +1,5 @@
 """Beads item management - close, assign, and select work items."""
 
-import atexit
 import concurrent.futures
 import json
 import logging
@@ -44,8 +43,14 @@ __all__ = [
 # Module-level thread pool for _resolve_with_timeout to avoid creating (and
 # leaking) a new ThreadPoolExecutor on every call.  A single worker suffices
 # because resolutions are dispatched sequentially from select_next_hierarchical_item.
+#
+# NOTE: We intentionally do NOT register an atexit handler here.  The previous
+# ``atexit.register(_resolve_pool.shutdown, wait=False)`` caused a race with the
+# parallel orchestrator's ThreadPoolExecutor — the atexit handler fires during
+# interpreter teardown while the main loop may still be calling executor.submit(),
+# producing "cannot schedule new futures after interpreter shutdown".  Letting
+# Python's own executor finalizer handle cleanup is sufficient.
 _resolve_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-atexit.register(_resolve_pool.shutdown, wait=False)
 
 
 def run_bd_sync_with_retry(
@@ -345,7 +350,12 @@ def _resolve_with_timeout(
     each require a bd show subprocess call.  Uses the module-level
     ``_resolve_pool`` to avoid per-call thread creation/leak.
     """
-    fut = _resolve_pool.submit(resolve_to_leaf_task, item)
+    try:
+        fut = _resolve_pool.submit(resolve_to_leaf_task, item)
+    except RuntimeError:
+        # Pool may have been shut down during interpreter teardown
+        logger.debug("Resolve pool shut down — skipping hierarchical resolve for %s", item.id)
+        return None
     try:
         return fut.result(timeout=timeout)
     except concurrent.futures.TimeoutError:

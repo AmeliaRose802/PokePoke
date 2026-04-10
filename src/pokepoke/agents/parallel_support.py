@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import concurrent.futures
+import contextlib
 import logging
 import threading
 import time
@@ -349,6 +350,13 @@ def run_preflight_and_repo_checks(
             ready_ids = {item.id for item in ready_items}
             resumed = [it for it in in_progress if it.id not in ready_ids]
             if resumed:
+                # Unassign stale items from dead agents so dispatch can reclaim them.
+                from pokepoke.beads.beads_manifest_utils import unassign_with_retry
+                for it in resumed:
+                    assignee = getattr(it, 'assignee', None) or ''
+                    if assignee.lower().startswith('pokepoke_'):
+                        with contextlib.suppress(Exception):
+                            unassign_with_retry(it.id)
                 run_logger.log_polling(f"Resuming {len(resumed)} in-progress item(s)")
                 ready_items = resumed + ready_items
     except Exception as e:
