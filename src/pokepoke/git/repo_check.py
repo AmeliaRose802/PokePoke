@@ -288,10 +288,35 @@ def _restore_conflicted_files(repo_path: Path, run_logger: 'RunLogger') -> bool:
     return restored_any
 
 
+def _try_reset_working_tree(repo_path: Path, run_logger: 'RunLogger') -> bool:
+    """Reset working tree to HEAD, discarding all unstaged modifications.
+
+    Fast path for dirty merge residue: ``git checkout -- .`` reverts all
+    tracked files to their last-committed state in seconds, avoiding the
+    multi-minute cleanup-agent loop.
+    """
+    with main_repo_git_lock():
+        try:
+            subprocess.run(
+                ["git", "checkout", "--", "."], check=True, capture_output=True,
+                encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30,
+            )
+            # Verify the reset actually cleaned up
+            uncommitted, _ = get_status_porcelain_and_changes(str(repo_path), timeout=10)
+            if not uncommitted:
+                run_logger.log_orchestrator("Working tree reset to HEAD")
+                return True
+            run_logger.log_orchestrator(
+                f"Reset left {len(uncommitted.splitlines())} file(s) dirty", level="WARNING")
+        except Exception as e:
+            run_logger.log_orchestrator(f"Working tree reset failed: {e}", level="WARNING")
+    return False
+
+
 def _handle_other_changes(repo_path: Path, changes: dict[str, list[str]], run_logger: 'RunLogger') -> bool:
     """Handle non-beads, non-worktree uncommitted changes.
 
-    Tries auto-commit → cleanup agent → restore conflicted files → stash.
+    Tries auto-commit → fast reset → cleanup agent → restore → stash.
     Always returns True (workers use isolated worktrees, so we continue).
     """
     run_logger.log_orchestrator("Main repository has uncommitted changes", level="WARNING")
@@ -302,7 +327,12 @@ def _handle_other_changes(repo_path: Path, changes: dict[str, list[str]], run_lo
     if _try_auto_commit(repo_path, run_logger):
         return True
 
-    run_logger.log_orchestrator("Auto-commit failed, launching cleanup agent")
+    # Fast path: reset working tree to HEAD.  Handles dirty merge residue
+    # in seconds instead of the multi-minute cleanup agent loop.
+    if _try_reset_working_tree(repo_path, run_logger):
+        return True
+
+    run_logger.log_orchestrator("Auto-commit and reset failed, launching cleanup agent")
     if merge_lock_active():
         run_logger.log_orchestrator("Deferring cleanup due to active merge operation")
         return True

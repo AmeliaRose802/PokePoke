@@ -105,10 +105,10 @@ class TestReplaceWithRetry:
     def test_non_permission_error_not_retried(
         self, mock_replace: patch, mock_sleep: patch
     ) -> None:
-        """Non-PermissionError exceptions propagate immediately."""
-        mock_replace.side_effect = FileNotFoundError("missing")
+        """Non-retried exceptions (not PermissionError/FileNotFoundError) propagate immediately."""
+        mock_replace.side_effect = ValueError("unexpected")
 
-        with pytest.raises(FileNotFoundError, match="missing"):
+        with pytest.raises(ValueError, match="unexpected"):
             replace_with_retry(Path("src"), Path("dst"))
 
         assert mock_replace.call_count == 1
