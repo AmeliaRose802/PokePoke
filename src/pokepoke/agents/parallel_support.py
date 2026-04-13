@@ -44,11 +44,9 @@ from pokepoke.utils.shutdown import is_shutting_down
 logger = logging.getLogger(__name__)
 _Future = concurrent.futures.Future[WorkItemResult]
 
-
 def finalize_workers(
-    futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats,
-    start_time: float, total_requests: int, run_logger: RunLogger,
-    record_fn: RecordFn, lock: threading.Lock | None = None,
+    futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats, start_time: float,
+    total_requests: int, run_logger: RunLogger, record_fn: RecordFn, lock: threading.Lock | None = None,
 ) -> tuple[int, bool]:
     """Wait for remaining workers and collect results."""
     timeout_occurred = False
@@ -96,10 +94,9 @@ def finalize_workers(
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     return total_requests, timeout_occurred
 
-
 def _drain_orphaned_futures(
-    futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats,
-    start_time: float, run_logger: RunLogger, record_fn: RecordFn, lock: threading.Lock | None = None,
+    futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats, start_time: float,
+    run_logger: RunLogger, record_fn: RecordFn, lock: threading.Lock | None = None,
 ) -> None:
     """Drain futures remaining after a timeout."""
     if lock:
@@ -118,15 +115,11 @@ def _drain_orphaned_futures(
             try:
                 result = fut.result(timeout=0)
             except Exception as e:
-                run_logger.log_orchestrator(
-                    f"Failed to retrieve result for {item.id}: {e}", level="WARNING"
-                )
+                run_logger.log_orchestrator(f"Failed to retrieve result for {item.id}: {e}", level="WARNING")
         try:
             record_fn(item, result, session_stats, run_logger)
         except Exception as e:
-            run_logger.log_orchestrator(
-                f"Failed to record result for {item.id}: {e}", level="WARNING"
-            )
+            run_logger.log_orchestrator(f"Failed to record result for {item.id}: {e}", level="WARNING")
         _safe_unassign(item.id, run_logger, "orphan")
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
@@ -143,11 +136,7 @@ def drain_circuit_breaker(
 ) -> int:
     """Drain remaining futures after circuit breaker trips. Returns updated total_requests.
 
-    Parameters
-    ----------
-    lock:
-        Optional lock protecting *futures*. When provided, the lock is held
-        during reads/mutations to ensure thread-safety.
+    lock: Optional lock protecting *futures*.
     """
     from pokepoke.config import get_config
     total_requests, _any, _succ, _fail = collect_fn(
@@ -186,21 +175,15 @@ def drain_circuit_breaker(
     return total_requests
 
 def _should_skip_item(
-    item: BeadsWorkItem,
-    futures: dict[_Future, BeadsWorkItem],
-    dispatched: int,
-    failed_claim_ids: set[str],
-    run_logger: RunLogger,
-    lock: threading.Lock | None = None,
+    item: BeadsWorkItem, futures: dict[_Future, BeadsWorkItem], dispatched: int,
+    failed_claim_ids: set[str], run_logger: RunLogger, lock: threading.Lock | None = None,
 ) -> bool:
     """Return True if this item should be skipped during dispatch."""
     futures_len = _locked_futures_len(lock, futures)
     if is_high_conflict_risk(item) and (futures_len > 0 or dispatched > 0):
-        run_logger.log_orchestrator(
-            f"Deferring high-conflict {item.id} — other items active")
+        run_logger.log_orchestrator(f"Deferring high-conflict {item.id} — other items active")
         return True
     return False
-
 
 def dispatch_items(
     ready_items: list[BeadsWorkItem],
@@ -219,14 +202,12 @@ def dispatch_items(
     build_worker_name_fn: BuildWorkerNameFn,
     process_item_fn: ProcessItemFn,
     lock: threading.Lock | None = None,
+    future_start_times: dict[_Future, float] | None = None,
 ) -> int:
     """Select, claim, and submit work items. Returns updated worker_counter.
 
-    Parameters
-    ----------
-    lock:
-        Optional lock protecting *futures*, *failed_claim_ids*, and *current_active*.
-        When provided, the lock is held during mutations to ensure thread-safety.
+    lock: Optional lock protecting *futures*, *failed_claim_ids*, and *current_active*.
+    future_start_times: Optional dict tracking when futures were dispatched (for health monitoring).
     """
     from pokepoke.agents.agent_context import get_agent_name
     from pokepoke.agents.parallel import assign_and_sync_item, select_multiple_items, should_stop_after_current
@@ -240,43 +221,32 @@ def dispatch_items(
 
     attempted_this_cycle: set[str] = set()
     dispatched = logged_replenish = submit_failed = 0
-
     while dispatched < slots and not submit_failed:
         cycle_skip, active_snapshot = _locked_get_skip_and_active(
             lock, failed_claim_ids, attempted_this_cycle, current_active)
-
         selected_items = select_multiple_items(
-            ready_items, count=slots - dispatched,
-            skip_ids=cycle_skip, claimed_ids=active_snapshot,
+            ready_items, count=slots - dispatched, skip_ids=cycle_skip, claimed_ids=active_snapshot,
         )
-
         if not selected_items:
             break
-
         if not logged_replenish:
             run_logger.log_orchestrator(f"Replenishing up to {slots} open slot(s)")
             logged_replenish = True
-
         pre_attempt_size = len(attempted_this_cycle)
         made_progress, high_conflict_dispatched = False, False
-
         for item in selected_items:
             if high_conflict_dispatched:
                 break
             attempted_this_cycle.add(item.id)
-
             if _should_skip_item(item, futures, dispatched, failed_claim_ids, run_logger, lock):
                 continue
-
             worker_counter += 1
             base_name = get_agent_name(default="pokepoke")
             worker_name = build_worker_name_fn(base_name, item.id, worker_counter)
-
             if not assign_and_sync_item(item.id, agent_name=worker_name):
                 run_logger.log_orchestrator(f"Claim failed {item.id} (worker: {worker_name})", level="WARNING")
                 _locked_add_to_set(lock, failed_claim_ids, item.id)
                 continue
-
             run_logger.log_orchestrator(f"Submitting item: {item.id} - {item.title} (worker: {worker_name})")
             semaphore.acquire()
             try:
@@ -288,18 +258,15 @@ def dispatch_items(
                 _safe_unassign(item.id, run_logger, "submit-failed")
                 submit_failed = True
                 break
-
-            _locked_register_dispatch(lock, futures, current_active, fut, item)
+            _locked_register_dispatch(lock, futures, current_active, fut, item, future_start_times)
             dispatched += 1
             made_progress = True
             if is_high_conflict_risk(item):
                 high_conflict_dispatched = True
-
         if not made_progress and len(attempted_this_cycle) <= pre_attempt_size:
             break
         if high_conflict_dispatched:
             break
-
     return worker_counter
 
 def run_preflight_and_repo_checks(
@@ -350,7 +317,6 @@ def run_preflight_and_repo_checks(
             ready_ids = {item.id for item in ready_items}
             resumed = [it for it in in_progress if it.id not in ready_ids]
             if resumed:
-                # Unassign stale items from dead agents so dispatch can reclaim them.
                 from pokepoke.beads.beads_manifest_utils import unassign_with_retry
                 for it in resumed:
                     assignee = getattr(it, 'assignee', None) or ''
@@ -362,7 +328,6 @@ def run_preflight_and_repo_checks(
     except Exception as e:
         run_logger.log_orchestrator(f"Failed to fetch in-progress items: {e}", level="WARNING")
     return True, consecutive_preflight_failures, ready_items
-
 
 def check_loop_exit(
     futures: dict[_Future, BeadsWorkItem],
@@ -382,11 +347,7 @@ def check_loop_exit(
 ) -> str | None:
     """Decide whether the main loop should exit, continue idling, or keep running.
 
-    Parameters
-    ----------
-    lock:
-        Optional lock protecting *futures*. When provided, the lock is held
-        during reads to ensure thread-safety.
+    lock: Optional lock protecting *futures*.
     """
     from pokepoke.agents.parallel import cancel_stop_after_current, should_stop_after_current
     _get_ready_fn: GetReadyWorkItemsFn
