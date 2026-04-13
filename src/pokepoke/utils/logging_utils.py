@@ -431,6 +431,19 @@ class ItemLogger:
 
         self._py_logger.error("%s", error_msg)
 
+    def log_debug(self, debug_msg: str) -> None:
+        """Log a debug message to file only (not displayed to user).
+
+        Use this for internal diagnostics and verbose operational details
+        that should be available in logs but not shown in terminal output.
+        """
+        timestamp = datetime.now().strftime("%Y-%m-%d %H:%M:%S")
+        with open(self.log_path, 'a', encoding='utf-8') as f:
+            f.write(f"\n[{timestamp}] [DEBUG] {debug_msg}\n")
+
+        # Use debug level which typically doesn't display to console
+        self._py_logger.debug("%s", debug_msg)
+
     def log_summary(self, success: bool, request_count: int) -> None:
         """Log summary information for the work item."""
         status = "SUCCESS" if success else "FAILURE"

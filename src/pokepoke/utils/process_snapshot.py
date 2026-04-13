@@ -5,7 +5,11 @@ import subprocess
 import time
 from typing import Any
 
+# Use a dedicated logger that only writes to file, never to console
+# This prevents TOOL_TIMEOUT_DIAG messages from cluttering user-visible output
 logger = logging.getLogger(__name__)
+_diag_logger = logging.getLogger(f"{__name__}.diagnostics")
+_diag_logger.propagate = False  # Don't propagate to parent (prevents console output)
 
 
 def log_process_tree_snapshot(
@@ -34,7 +38,7 @@ def log_process_tree_snapshot(
         )
         lines = [line.strip() for line in result.stdout.strip().split('\n') if line.strip()]
         if len(lines) <= 1:
-            logger.info("TOOL_TIMEOUT_DIAG: No copilot.exe processes found")
+            _diag_logger.debug("TOOL_TIMEOUT_DIAG: No copilot.exe processes found")
             return
 
         # Parse CSV: Node,KernelModeTime,ProcessId,UserModeTime,WorkingSetSize
@@ -69,12 +73,12 @@ def log_process_tree_snapshot(
                 child_count = len([line for line in children.split('\n')
                                  if line.strip() and 'ProcessId=' in line])
                 total_children += child_count
-                logger.info(
+                _diag_logger.debug(
                     "TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs children=%d:\n%s",
                     cpid, tool_name, elapsed, child_count, children,
                 )
             else:
-                logger.info(
+                _diag_logger.debug(
                     "TOOL_TIMEOUT_DIAG: copilot_pid=%d tool=%s elapsed=%.0fs — no child processes",
                     cpid, tool_name, elapsed,
                 )
@@ -99,7 +103,7 @@ def log_process_tree_snapshot(
             f"total_memory_mb={total_memory_mb:.1f} "
             f"cpu_percent={cpu_percent:.1f}"
         )
-        logger.info(metrics_line)
+        _diag_logger.debug(metrics_line)
 
         # Also write to dedicated diagnostics log if available
         if handler and hasattr(handler, '_item_logger') and handler._item_logger:
@@ -112,10 +116,9 @@ def log_process_tree_snapshot(
             except Exception:
                 pass
 
-            handler._item_logger.log_error(
-                f"TOOL_TIMEOUT_DIAG: {len(copilot_pids)} copilot process(es), "
+            handler._item_logger.log_debug(f"TOOL_TIMEOUT_DIAG: {len(copilot_pids)} copilot process(es), "
                 f"{total_children} children, {total_memory_mb:.0f}MB, "
                 f"tool={tool_name}, elapsed={elapsed:.0f}s"
             )
     except Exception as e:
-        logger.debug("Failed to capture process tree snapshot: %s", e)
+        _diag_logger.debug("Failed to capture process tree snapshot: %s", e)
