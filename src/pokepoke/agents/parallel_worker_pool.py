@@ -1,5 +1,17 @@
 """ParallelWorkerPool: encapsulates ThreadPoolExecutor, semaphore, and futures tracking.
-Thread-safe: Shared mutable state protected by threading.Lock."""
+
+Thread-safe: Shared mutable state protected by threading.Lock.
+
+CRITICAL FIX (PokePoke-82v1j): The collect_done_futures() function previously used
+concurrent.futures.wait() to check for completed futures. This could cause indefinite
+hangs even with a timeout when futures were in a bad state (deadlocked threads, zombie
+subprocesses, or hung system calls). The orchestrator would appear frozen with agents
+showing 0% CPU but never completing.
+
+Solution: Removed all blocking wait() calls and rely solely on non-blocking .done()
+polling. This ensures the polling loop never hangs and can always detect and handle
+stalled agents through the health check mechanism.
+"""
 
 from __future__ import annotations
 
@@ -189,20 +201,11 @@ def collect_done_futures(
     for fut in snapshot:
         if fut.done():
             done_futs.add(fut)
-    if not done_futs and futures_len > 0:
-        snapshot, _ = _locked_snapshot(lock, futures)
-        if snapshot:
-            try:
-                done_batch, _ = concurrent.futures.wait(
-                    snapshot, timeout=2.0, return_when=concurrent.futures.FIRST_COMPLETED)
-                done_futs.update(done_batch)
-                snapshot2, _ = _locked_snapshot(lock, futures)
-                for fut in snapshot2:
-                    if fut.done():
-                        done_futs.add(fut)
-            except Exception as e:
-                logger.warning(f"Error during concurrent.futures.wait: {e}")
-                run_logger.log_orchestrator(f"⚠️  Future wait error: {e}", level="WARNING")
+    # CRITICAL FIX: Avoid concurrent.futures.wait() which can hang indefinitely
+    # even with timeout when futures are in hung state (deadlocked threads, zombie subprocesses).
+    # Instead, rely solely on non-blocking .done() polling which cannot hang.
+    # If no futures are done on first pass, we simply return empty batch - the polling
+    # loop will check again in the next iteration (every 0.5s).
     if done_futs:
         run_logger.log_orchestrator(
             f"Agent lifecycle: collected {len(done_futs)} agent(s); "
