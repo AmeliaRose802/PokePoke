@@ -248,7 +248,15 @@ def dispatch_items(
                 _locked_add_to_set(lock, failed_claim_ids, item.id)
                 continue
             run_logger.log_orchestrator(f"Submitting item: {item.id} - {item.title} (worker: {worker_name})")
-            semaphore.acquire()
+            # Use timeout on semaphore.acquire() to prevent infinite blocking
+            # If workers are hung and not releasing, this prevents main thread deadlock
+            if not semaphore.acquire(timeout=30.0):
+                logger.error(f"Semaphore acquire timeout for {item.id} — possible worker hang")
+                run_logger.log_orchestrator(f"⚠️  Semaphore timeout for {item.id} — workers may be hung", level="ERROR")
+                _safe_unassign(item.id, run_logger, "semaphore-timeout")
+                # Stop dispatching more items if semaphore is blocked
+                submit_failed = True
+                break
             try:
                 fut = executor.submit(process_item_fn, item, run_logger, semaphore, worker_name)
             except Exception as e:

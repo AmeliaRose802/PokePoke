@@ -87,7 +87,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # Simulate all 10 agents completing simultaneously.
@@ -145,7 +145,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # 9 failures + 1 success; all slots freed.
@@ -201,7 +201,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 1:
                 # First iteration: no completions yet.
@@ -329,7 +329,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # 5 failures in one round → counts as 1 failure-round
