@@ -95,7 +95,12 @@ def configure_logging(
 
     # Set up OpenTelemetry logging handler if configured
     if otel_config is not None:
-        from pokepoke.utils.otel_logging import setup_otel_logging
+        from pokepoke.utils.otel_logging import get_current_otel_handler, setup_otel_logging
+
+        # Remove previous OTEL handler to prevent duplication on repeated calls.
+        prev_handler = get_current_otel_handler()
+        if prev_handler is not None and prev_handler in root.handlers:
+            root.removeHandler(prev_handler)
 
         otel_handler = setup_otel_logging(otel_config)
         if otel_handler is not None:
