@@ -17,6 +17,7 @@ from pokepoke.utils.logging_utils import configure_logging
 from pokepoke.utils.otel_logging import (
     _LOG_LEVEL_MAP,
     _check_otel_available,
+    get_current_otel_handler,
     setup_otel_logging,
     shutdown_otel_logging,
 )
@@ -27,6 +28,7 @@ def _reset_otel_state() -> Iterator[None]:
     """Reset module-level OTEL state after each test."""
     yield
     otel_mod._provider = None
+    otel_mod._handler = None
 
 
 # ---------------------------------------------------------------------------
@@ -251,6 +253,64 @@ class TestSetupOtelLogging:
         assert call_args["service.name"] == "test-svc"
         assert "service.version" in call_args
 
+    def test_repeated_call_shuts_down_previous_provider(self) -> None:
+        """Calling setup_otel_logging twice must shut down the first provider."""
+        config = OtelConfig(enabled=True, exporter="console")
+        with _mock_otel():
+            setup_otel_logging(config)
+
+        first_provider = otel_mod._provider
+        assert first_provider is not None
+
+        with _mock_otel():
+            setup_otel_logging(config)
+
+        first_provider.shutdown.assert_called_once()
+        assert otel_mod._provider is not first_provider
+
+    def test_handler_tracked_in_module(self) -> None:
+        """setup_otel_logging must store the handler in _handler."""
+        config = OtelConfig(enabled=True, exporter="console")
+        with _mock_otel():
+            handler = setup_otel_logging(config)
+
+        assert handler is not None
+        assert otel_mod._handler is handler
+        assert get_current_otel_handler() is handler
+
+    def test_handler_cleared_when_disabled(self) -> None:
+        """When config.enabled is False, the handler should remain None."""
+        config = OtelConfig(enabled=False)
+        result = setup_otel_logging(config)
+        assert result is None
+        assert otel_mod._handler is None
+
+
+# ---------------------------------------------------------------------------
+# get_current_otel_handler tests
+# ---------------------------------------------------------------------------
+
+class TestGetCurrentOtelHandler:
+    """Tests for get_current_otel_handler."""
+
+    def test_returns_none_initially(self) -> None:
+        assert get_current_otel_handler() is None
+
+    def test_returns_handler_after_setup(self) -> None:
+        config = OtelConfig(enabled=True, exporter="console")
+        with _mock_otel():
+            handler = setup_otel_logging(config)
+
+        assert get_current_otel_handler() is handler
+
+    def test_returns_none_after_shutdown(self) -> None:
+        config = OtelConfig(enabled=True, exporter="console")
+        with _mock_otel():
+            setup_otel_logging(config)
+
+        shutdown_otel_logging()
+        assert get_current_otel_handler() is None
+
 
 # ---------------------------------------------------------------------------
 # _create_otlp_processor tests
@@ -424,6 +484,52 @@ class TestConfigureLoggingOtelIntegration:
                 h for h in root.handlers if isinstance(h, MagicMock)
             ]
             assert len(otel_handlers) == 0
+        finally:
+            root.handlers = original_handlers
+            pokepoke_logger.handlers = original_pp_handlers
+
+    def test_repeated_configure_logging_no_duplicate_otel_handlers(self, tmp_path: Any) -> None:
+        """Calling configure_logging twice must not duplicate the OTEL handler."""
+        log_file = tmp_path / "debug.log"
+        config = OtelConfig(enabled=True)
+
+        root = logging.getLogger()
+        original_handlers = root.handlers[:]
+        root.handlers.clear()
+
+        pokepoke_logger = logging.getLogger("pokepoke")
+        original_pp_handlers = pokepoke_logger.handlers[:]
+        pokepoke_logger.handlers.clear()
+
+        mock_handler_1 = MagicMock(spec=logging.Handler)
+        mock_handler_1.filters = []
+        mock_handler_2 = MagicMock(spec=logging.Handler)
+        mock_handler_2.filters = []
+
+        try:
+            with patch(
+                "pokepoke.utils.otel_logging.setup_otel_logging",
+                return_value=mock_handler_1,
+            ), patch(
+                "pokepoke.utils.otel_logging.get_current_otel_handler",
+                return_value=None,
+            ):
+                configure_logging(log_file, otel_config=config)
+
+            assert mock_handler_1 in root.handlers
+
+            # Second call — previous handler should be removed
+            with patch(
+                "pokepoke.utils.otel_logging.setup_otel_logging",
+                return_value=mock_handler_2,
+            ), patch(
+                "pokepoke.utils.otel_logging.get_current_otel_handler",
+                return_value=mock_handler_1,
+            ):
+                configure_logging(log_file, otel_config=config)
+
+            assert mock_handler_1 not in root.handlers
+            assert mock_handler_2 in root.handlers
         finally:
             root.handlers = original_handlers
             pokepoke_logger.handlers = original_pp_handlers
