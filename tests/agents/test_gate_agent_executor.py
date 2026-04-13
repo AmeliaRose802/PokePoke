@@ -498,7 +498,7 @@ class TestGateAgentAddParentDir:
         assert kwargs.get("add_parent_dir") is True
 
 
-class TestGateAgentProcessMonitorCorruption:
+class TestGateAgentProcessMonitorCorruptionRegression:
     """Regression tests for PokePoke-urg3h: ProcessMonitor output corrupting JSON verdicts."""
 
     @patch("pokepoke.agents.gate_agent_executor.invoke_copilot")
@@ -551,4 +551,5 @@ class TestGateAgentProcessMonitorCorruption:
         result = run_gate_agent(_make_item())
 
         assert result.success is False
-        assert "did not explicitly approve" in result.reason
+        assert result.crashed is True
+        assert "could not be parsed" in result.reason.lower()
