@@ -206,6 +206,7 @@ def _run_loop_iteration(
     state.total_requests, any_success, batch_successes, batch_failures = _collect_done_futures(
         futures, failed_claim_ids, state.total_requests,
         session_stats, run_logger, record_fn, lock,
+        future_start_times,
     )
     state.items_completed = session_stats.items_completed
     state.has_success = state.has_success or any_success
