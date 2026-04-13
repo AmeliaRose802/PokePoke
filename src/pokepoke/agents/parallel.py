@@ -178,6 +178,7 @@ def _run_loop_iteration(
     continuous: bool,
     mode_name: str,
     lock: threading.Lock | None = None,
+    future_start_times: dict[_Future, float] | None = None,
 ) -> str | None:
     """Execute one iteration of the parallel loop.
 
@@ -186,6 +187,8 @@ def _run_loop_iteration(
     lock:
         Optional lock protecting *futures* and *failed_claim_ids*. When
         provided, the lock is passed to helper functions for thread-safe operation.
+    future_start_times:
+        Optional dict tracking when each future was dispatched for health monitoring.
 
     Returns:
         ``None`` to continue normally, ``"break"`` to exit the loop,
@@ -253,6 +256,7 @@ def _run_loop_iteration(
         failed_claim_ids, current_active,
         futures, semaphore, executor, run_logger, state.worker_counter,
         _build_worker_name, _parallel_process_item, lock,
+        future_start_times,
     )
 
     action = _check_loop_exit(
@@ -322,6 +326,7 @@ def run_parallel_loop(
                 state, pool.futures, failed_claim_ids, session_stats, run_logger,
                 record_fn, finalize_fn, pool.semaphore, pool.executor,
                 main_repo_path, start_time, continuous, mode_name, active_lock,
+                pool.future_start_times,
             )
             if result == "break":
                 break
