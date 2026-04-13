@@ -130,10 +130,9 @@ class TestWorkflowGateException:
 class TestWorkflowCleanupException:
     """Tests for session cleanup exception handling in finally."""
 
-    def test_cleanup_exception_in_finally_propagates(self) -> None:
-        """When cleanup_on_failure raises, the exception propagates
-        (cleanup_on_failure itself should never raise, but if it does
-        the finally block does not swallow it)."""
+    def test_cleanup_exception_in_finally_is_caught_and_logged(self) -> None:
+        """When cleanup_on_failure raises, the exception is caught and logged
+        so that the original error is not masked and unregister_agent still runs."""
         item = make_work_item(id="task-cleanup-ex", title="Cleanup Ex")
 
         with make_process_item_mocks(
@@ -142,8 +141,9 @@ class TestWorkflowCleanupException:
         ) as mocks:
             mocks['session_cleanup'].side_effect = RuntimeError("cleanup exploded")
 
-            with pytest.raises(RuntimeError, match="cleanup exploded"):
-                process_work_item(item, interactive=False)
+            # Should NOT raise — cleanup exception is caught
+            result = process_work_item(item, interactive=False)
+            assert result.success is False
 
     def test_cleanup_called_on_work_agent_failure(self) -> None:
         """Session cleanup runs when work agent fails."""
@@ -189,9 +189,9 @@ class TestWorkflowCleanupException:
             # Make cleanup raise an exception to simulate unassign failure
             mocks['session_cleanup'].side_effect = RuntimeError("unassign_with_retry exhausted")
 
-            # Should re-raise the exception
-            with pytest.raises(RuntimeError, match="unassign_with_retry exhausted"):
-                process_work_item(item, interactive=False)
+            # Should NOT raise — cleanup exception is caught and logged
+            result = process_work_item(item, interactive=False)
+            assert result.success is False
 
 
 class TestWorkflowCleanupSkippedOnShutdown:
