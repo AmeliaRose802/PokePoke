@@ -191,6 +191,27 @@ def _create_child_item(
         return None
 
 
+def _delete_child_item(child_id: str) -> bool:
+    """Delete a beads child item. Returns True if successful."""
+    cmd = ["delete", child_id, "--force", "--quiet"]
+    try:
+        result = _run_bd(cmd, check=False, timeout=30)
+        if result.returncode != 0:
+            logger.warning(
+                "Failed to delete child item '%s': %s",
+                child_id,
+                result.stderr.strip() if result.stderr else f"exit code {result.returncode}",
+            )
+            return False
+        return True
+    except subprocess.TimeoutExpired:
+        logger.warning("Timed out deleting child item: %s", child_id)
+        return False
+    except subprocess.CalledProcessError as e:
+        logger.warning("Failed to delete child item '%s': %s", child_id, e.stderr)
+        return False
+
+
 def _update_parent_metadata(parent_id: str, child_ids: list[str]) -> bool:
     """Mark parent with decomposition metadata and ``auto-decomposed`` label."""
     try:
@@ -305,6 +326,8 @@ def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionR
     child_ids: list[str] = []
     created_items: list[tuple[str, str]] = []
     prev_child_id: str | None = None
+    failed_subtasks: list[str] = []
+
     for subtask in subtasks:
         child_id = _create_child_item(
             subtask,
@@ -321,18 +344,38 @@ def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionR
             logger.info("   ✅ Created child: %s — %s", child_id, subtask.title)
         else:
             logger.warning("   ❌ Failed to create child: %s", subtask.title)
+            failed_subtasks.append(subtask.title)
 
-    # Record created items in session stats so the dashboard ADDED counter updates
-    if created_items:
-        from pokepoke.beads.sdk_beads_tracker import record_items_created
-        record_items_created(created_items)
+    # All-or-nothing: If ANY child creation failed, rollback all created children
+    if failed_subtasks:
+        reason = f"Partial failure creating {len(failed_subtasks)} of {len(subtasks)} children. Rolling back all created children."
+        logger.error("🔀 Decomposition failed for %s: %s", item.id, reason)
+        logger.error("   Failed subtasks: %s", ", ".join(failed_subtasks))
 
+        # Rollback: delete all successfully created children
+        if child_ids:
+            logger.warning("   🔄 Rolling back %d successfully created children...", len(child_ids))
+            for child_id in child_ids:
+                if _delete_child_item(child_id):
+                    logger.info("      ✅ Deleted child: %s", child_id)
+                else:
+                    logger.error("      ❌ Failed to delete child: %s (orphaned)", child_id)
+
+        return DecompositionResult(
+            success=False, parent_id=item.id, child_ids=[], reason=reason,
+        )
+
+    # Sanity check: we should have children if we got here
     if not child_ids:
         reason = "Failed to create any child items in beads"
         logger.error("🔀 Decomposition failed for %s: %s", item.id, reason)
         return DecompositionResult(
             success=False, parent_id=item.id, child_ids=[], reason=reason,
         )
+
+    # Record created items in session stats so the dashboard ADDED counter updates
+    from pokepoke.beads.sdk_beads_tracker import record_items_created
+    record_items_created(created_items)
 
     _update_parent_metadata(item.id, child_ids)
 

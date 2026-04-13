@@ -11,6 +11,7 @@ from pokepoke.agents.decomposition_agent import (
     _add_blocking_dependency,
     _block_parent_item,
     _create_child_item,
+    _delete_child_item,
     _get_existing_child_titles,
     _is_valid_title,
     _parse_subtasks_from_output,
@@ -265,6 +266,48 @@ class TestCreateChildItem:
 
 
 # ---------------------------------------------------------------------------
+# _delete_child_item
+# ---------------------------------------------------------------------------
+
+
+class TestDeleteChildItem:
+    """Tests for the _delete_child_item cleanup function."""
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_deletes_item_successfully(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["bd", "delete"], 0, stdout="", stderr=""
+        )
+        result = _delete_child_item("child-1")
+        assert result is True
+        args = mock_run.call_args[0][0]
+        assert "delete" in args
+        assert "child-1" in args
+        assert "--force" in args
+        assert "--quiet" in args
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_returns_false_on_failure(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["bd", "delete"], 1, stdout="", stderr="error"
+        )
+        result = _delete_child_item("child-1")
+        assert result is False
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_returns_false_on_timeout(self, mock_run: MagicMock) -> None:
+        mock_run.side_effect = subprocess.TimeoutExpired("bd", 30)
+        result = _delete_child_item("child-1")
+        assert result is False
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_handles_called_process_error(self, mock_run: MagicMock) -> None:
+        mock_run.side_effect = subprocess.CalledProcessError(1, "bd", stderr="failed")
+        result = _delete_child_item("child-1")
+        assert result is False
+
+
+# ---------------------------------------------------------------------------
 # _add_blocking_dependency
 # ---------------------------------------------------------------------------
 
@@ -515,6 +558,7 @@ class TestRunDecomposition:
         mock_block_dep.assert_any_call("child-1", "child-2")
         mock_block_dep.assert_any_call("child-2", "child-3")
 
+    @patch(f"{_DECOMP}._delete_child_item")
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
     @patch(f"{_DECOMP}._block_parent_item")
@@ -523,7 +567,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_partial_creation_still_succeeds(
+    def test_partial_creation_rolls_back_all_children(
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -533,22 +577,35 @@ class TestRunDecomposition:
         mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
+        mock_delete: MagicMock,
     ) -> None:
+        """All-or-nothing: partial failure should rollback all created children."""
         item = _make_item()
         mock_sdk.return_value = [
             SubTask(title="Subtask Alpha from analysis", description="d1", priority=2),
             SubTask(title="Subtask Bravo from analysis", description="d2", priority=2),
             SubTask(title="Subtask Charlie from analysis", description="d3", priority=2),
         ]
+        # Simulate partial failure: first and third succeed, second fails
         mock_create.side_effect = ["child-1", None, "child-3"]
-        mock_update.return_value = True
+        mock_delete.return_value = True
 
         result = run_decomposition(item, failure_count=3)
 
-        assert result.success is True
-        assert len(result.child_ids) == 2
-        assert "child-1" in result.child_ids
-        assert "child-3" in result.child_ids
+        # Should fail and return no children
+        assert result.success is False
+        assert len(result.child_ids) == 0
+        assert "Partial failure" in result.reason
+
+        # Should have deleted both successfully created children
+        assert mock_delete.call_count == 2
+        mock_delete.assert_any_call("child-1")
+        mock_delete.assert_any_call("child-3")
+
+        # Should NOT update parent metadata or block parent
+        mock_update.assert_not_called()
+        mock_block_parent.assert_not_called()
+        mock_comment.assert_not_called()
 
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
@@ -752,6 +809,7 @@ class TestRunDecomposition:
 
         mock_record.assert_not_called()
 
+    @patch(f"{_DECOMP}._delete_child_item")
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")
     @patch("pokepoke.beads.beads_management.add_comment")
     @patch(f"{_DECOMP}._block_parent_item")
@@ -770,8 +828,9 @@ class TestRunDecomposition:
         mock_block_parent: MagicMock,
         mock_comment: MagicMock,
         mock_record: MagicMock,
+        mock_delete: MagicMock,
     ) -> None:
-        """Partial creation: only successfully created children are recorded."""
+        """All-or-nothing: partial creation rolls back, so nothing is recorded."""
         item = _make_item()
         mock_sdk.return_value = [
             SubTask(title="Subtask that succeeds first", description="d1", priority=2),
@@ -779,14 +838,16 @@ class TestRunDecomposition:
             SubTask(title="Subtask that succeeds at end", description="d3", priority=2),
         ]
         mock_create.side_effect = ["child-1", None, "child-3"]
-        mock_update.return_value = True
+        mock_delete.return_value = True
 
-        run_decomposition(item, failure_count=3)
+        result = run_decomposition(item, failure_count=3)
 
-        mock_record.assert_called_once_with([
-            ("child-1", "Subtask that succeeds first"),
-            ("child-3", "Subtask that succeeds at end"),
-        ])
+        # With all-or-nothing, partial failure means no items are recorded
+        assert result.success is False
+        mock_record.assert_not_called()
+
+        # Should have rolled back created children
+        assert mock_delete.call_count == 2
 
 
 # ---------------------------------------------------------------------------
