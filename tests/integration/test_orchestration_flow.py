@@ -104,6 +104,23 @@ def shutdown_controls(monkeypatch: pytest.MonkeyPatch):
 
 
 @pytest.fixture(autouse=True)
+def _isolate_session_lifecycle(monkeypatch: pytest.MonkeyPatch):
+    """Prevent real git/beads I/O from session_lifecycle and orchestrator init.
+
+    _finalize_session and _init_beads_state have their own module-level imports
+    of get_beads_stats, get_merge_queue, commit_state_branch, etc. that are NOT
+    reached by patches on the orchestrator module.  In worktree / xdist contexts
+    these real operations race on the git index and cause spurious failures.
+    """
+    from pokepoke.orchestration import session_lifecycle
+
+    monkeypatch.setattr(session_lifecycle, "commit_state_branch", lambda *a, **kw: False)
+    monkeypatch.setattr(session_lifecycle, "get_beads_stats", lambda: BeadsStats())
+    monkeypatch.setattr(session_lifecycle, "get_merge_queue", lambda: type("_MQ", (), {"is_running": False, "stats": None, "reset_stats": lambda self: None})())
+    monkeypatch.setattr(orchestrator, "_init_beads_state", lambda *a, **kw: None)
+
+
+@pytest.fixture(autouse=True)
 def agent_context_controls(monkeypatch: pytest.MonkeyPatch):
     monkeypatch.setattr("pokepoke.agents.agent_context.get_agent_name", lambda default="pokepoke": "base-agent")
     monkeypatch.setattr("pokepoke.agents.agent_context.set_agent_name", lambda *_args, **_kwargs: None)
