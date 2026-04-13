@@ -17,6 +17,7 @@ logger = logging.getLogger(__name__)
 
 DECOMPOSITION_LABEL = "auto-decomposed"
 DECOMPOSITION_COMMENT_PREFIX = "🔀 Auto-decomposition triggered"
+DEFAULT_MAX_DECOMPOSITION_DEPTH = 3
 
 MIN_TITLE_LENGTH = 10
 _PLACEHOLDER_TITLE_RE = re.compile(
@@ -213,7 +214,7 @@ def _delete_child_item(child_id: str) -> bool:
 
 
 def _update_parent_metadata(parent_id: str, child_ids: list[str]) -> bool:
-    """Mark parent with decomposition metadata and ``auto-decomposed`` label."""
+    """Mark parent with decomposition metadata (depth tracking, child IDs)."""
     try:
         # Read current metadata
         result = _run_bd(["show", parent_id, "--json"], check=False)
@@ -225,19 +226,16 @@ def _update_parent_metadata(parent_id: str, child_ids: list[str]) -> bool:
         metadata = item.get("metadata", {})
         if not isinstance(metadata, dict):
             metadata = {}
-        labels = item.get("labels") or []
-        if not isinstance(labels, list):
-            labels = []
 
         metadata["decomposed"] = True
         metadata["decomposition_child_ids"] = child_ids
+        current_depth = metadata.get("decomposition_depth", 0)
+        metadata["decomposition_depth"] = current_depth + 1
 
         cmd = [
             "update", parent_id,
             "--metadata", json.dumps(metadata),
         ]
-        if DECOMPOSITION_LABEL not in labels:
-            cmd.extend(["--add-label", DECOMPOSITION_LABEL])
         _run_bd(cmd)
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, Exception) as e:
@@ -398,19 +396,30 @@ def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionR
 
 
 def should_decompose(
-    item: BeadsWorkItem, failure_count: int, threshold: int, enabled: bool = True,
+    item: BeadsWorkItem,
+    failure_count: int,
+    threshold: int,
+    enabled: bool = True,
+    max_depth: int = DEFAULT_MAX_DECOMPOSITION_DEPTH,
 ) -> bool:
-    """Return True if *item* should be decomposed based on failure count."""
+    """Return True if *item* should be decomposed based on failure count.
+
+    Supports re-decomposition up to *max_depth* rounds.  Depth is tracked
+    via ``decomposition_depth`` in item metadata.
+    """
     if not enabled:
         return False
 
     if failure_count < threshold:
         return False
 
-    # Don't decompose items that were already decomposed
-    if item.labels and DECOMPOSITION_LABEL in item.labels:
+    # Check decomposition depth via metadata instead of label
+    metadata = item.metadata or {}
+    depth = metadata.get("decomposition_depth", 0)
+    if depth >= max_depth:
         logger.info(
-            "🔀 Skipping decomposition for %s — already decomposed", item.id,
+            "🔀 Skipping decomposition for %s — max depth %d reached",
+            item.id, max_depth,
         )
         return False
 

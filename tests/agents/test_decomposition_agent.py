@@ -35,6 +35,7 @@ def _make_item(
     priority: int = 2,
     labels: list[str] | None = None,
     issue_type: str = "task",
+    metadata: dict | None = None,
 ) -> BeadsWorkItem:
     return BeadsWorkItem(
         id=item_id,
@@ -44,6 +45,7 @@ def _make_item(
         priority=priority,
         issue_type=issue_type,
         labels=labels,
+        metadata=metadata,
     )
 
 
@@ -71,8 +73,8 @@ class TestShouldDecompose:
         item = _make_item()
         assert should_decompose(item, failure_count=5, threshold=3, enabled=True) is True
 
-    def test_skips_already_decomposed_items(self) -> None:
-        item = _make_item(labels=[DECOMPOSITION_LABEL])
+    def test_skips_items_at_max_depth(self) -> None:
+        item = _make_item(metadata={"decomposition_depth": 3})
         assert should_decompose(item, failure_count=5, threshold=3, enabled=True) is False
 
     def test_allows_items_with_other_labels(self) -> None:
@@ -86,6 +88,24 @@ class TestShouldDecompose:
     def test_threshold_of_one(self) -> None:
         item = _make_item()
         assert should_decompose(item, failure_count=1, threshold=1, enabled=True) is True
+
+    def test_allows_re_decomposition_below_max_depth(self) -> None:
+        item = _make_item(metadata={"decomposition_depth": 1})
+        assert should_decompose(item, failure_count=5, threshold=3, enabled=True) is True
+
+    def test_allows_items_with_decomposed_label_but_no_depth(self) -> None:
+        """Items with the label but no depth metadata can still be decomposed."""
+        item = _make_item(labels=[DECOMPOSITION_LABEL])
+        assert should_decompose(item, failure_count=5, threshold=3, enabled=True) is True
+
+    def test_custom_max_depth(self) -> None:
+        item = _make_item(metadata={"decomposition_depth": 1})
+        assert should_decompose(item, failure_count=5, threshold=3, max_depth=1) is False
+        assert should_decompose(item, failure_count=5, threshold=3, max_depth=2) is True
+
+    def test_none_metadata_treated_as_depth_zero(self) -> None:
+        item = _make_item(metadata=None)
+        assert should_decompose(item, failure_count=3, threshold=3, enabled=True) is True
 
 
 # ---------------------------------------------------------------------------
@@ -443,7 +463,7 @@ class TestUpdateParentMetadata:
         assert metadata["decomposed"] is True
 
     @patch(f"{_DECOMP}._run_bd")
-    def test_adds_decomposition_label_when_missing(self, mock_run: MagicMock) -> None:
+    def test_no_label_added_to_parent(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(
             ["bd"], 0,
             stdout='[{"id": "parent-1", "labels": ["priority:1"], "metadata": {}}]',
@@ -452,21 +472,35 @@ class TestUpdateParentMetadata:
         _update_parent_metadata("parent-1", ["child-1"])
         update_call = mock_run.call_args_list[1]
         update_args = update_call[0][0]
-        assert "--add-label" in update_args
-        label_idx = update_args.index("--add-label") + 1
-        assert update_args[label_idx] == "auto-decomposed"
+        assert "--add-label" not in update_args
 
     @patch(f"{_DECOMP}._run_bd")
-    def test_skips_label_add_when_already_present(self, mock_run: MagicMock) -> None:
+    def test_increments_decomposition_depth(self, mock_run: MagicMock) -> None:
         mock_run.return_value = subprocess.CompletedProcess(
             ["bd"], 0,
-            stdout='[{"id": "parent-1", "labels": ["auto-decomposed"], "metadata": {}}]',
+            stdout='[{"id": "parent-1", "metadata": {"decomposition_depth": 1}}]',
             stderr="",
         )
         _update_parent_metadata("parent-1", ["child-1"])
         update_call = mock_run.call_args_list[1]
         update_args = update_call[0][0]
-        assert "--add-label" not in update_args
+        meta_idx = update_args.index("--metadata") + 1
+        metadata = json.loads(update_args[meta_idx])
+        assert metadata["decomposition_depth"] == 2
+
+    @patch(f"{_DECOMP}._run_bd")
+    def test_initialises_decomposition_depth_from_zero(self, mock_run: MagicMock) -> None:
+        mock_run.return_value = subprocess.CompletedProcess(
+            ["bd"], 0,
+            stdout='[{"id": "parent-1", "metadata": {}}]',
+            stderr="",
+        )
+        _update_parent_metadata("parent-1", ["child-1"])
+        update_call = mock_run.call_args_list[1]
+        update_args = update_call[0][0]
+        meta_idx = update_args.index("--metadata") + 1
+        metadata = json.loads(update_args[meta_idx])
+        assert metadata["decomposition_depth"] == 1
 
     @patch(f"{_DECOMP}._run_bd")
     def test_returns_false_on_show_failure(self, mock_run: MagicMock) -> None:
