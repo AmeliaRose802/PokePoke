@@ -260,14 +260,14 @@ class _EventHandler:
         self._stats['last_tool_activity_time'] = time.monotonic()
         with self._pending_tool_calls_lock:
             pending = self._stats['pending_tool_calls']
-        logger.info("Turn %d started (pending=%d)", self._stats['turn_count'] + 1, pending)
+        logger.debug("Turn %d started (pending=%d)", self._stats['turn_count'] + 1, pending)
 
     def _on_turn_end(self, _event: Any) -> None:
         self._stats['turn_count'] += 1
         self._stats['last_tool_activity_time'] = time.monotonic()
         with self._pending_tool_calls_lock:
             pending = self._stats['pending_tool_calls']
-        logger.info("Turn %d ended (pending=%d)", self._stats['turn_count'], pending)
+        logger.debug("Turn %d ended (pending=%d)", self._stats['turn_count'], pending)
 
     def _on_context_reduction(self, _event: Any) -> None:
         logger.warning("Context reduction (events=%d, in=%d tok)", self._stats['event_count'], self._stats['total_input_tokens'])
