@@ -252,7 +252,6 @@ def process_work_item(  # noqa: C901
 
             _log_commit_status(worktree_cwd)
 
-            # ── Fail-fast on non-completion outcomes ──
             outcome = result.work_agent_outcome
             if outcome and outcome.status in _FAIL_FAST_STATUSES:
                 reason = outcome.reason or outcome.status
@@ -260,7 +259,6 @@ def process_work_item(  # noqa: C901
                 logger.info("Work agent fail-fast: status=%s reason=%s — skipping gate", outcome.status, reason)
                 break
 
-            # Skip cleanup/gate if agent already closed the beads item (self-merge)
             from pokepoke.beads.reconciliation import is_beads_item_closed
             if is_beads_item_closed(item.id):
                 logger.warning("\n✅ Agent already closed beads item — skipping cleanup and gate checks")
@@ -278,15 +276,12 @@ def process_work_item(  # noqa: C901
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
                                     failure_reason="Cleanup agent failed to resolve uncommitted changes")
-
-            if not config.gate_agent_enabled:
+            if not config.gate_agent_enabled:
                 logger.warning("\n⏭️  Gate Agent disabled via config — skipping verification")
                 gate_success = True
                 break
 
-            # Run gate agent with crash and timeout retry loops
-            gate_crash_attempts = 0
-            gate_timeout_attempts = 0
+            gate_crash_attempts = gate_timeout_attempts = 0
             gate_resume_session_id: str | None = None
             _gate_resume_output: str | None = None
             while gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
@@ -296,8 +291,7 @@ def process_work_item(  # noqa: C901
                 gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
                 gate_is_resume = gate_resume_session_id is not None
                 resume_in_place = gate_is_resume
-                gate_crashed = False
-                gate_timed_out = False
+                gate_crashed = gate_timed_out = False
                 try:
                     with terminal_ui.ui.agent_output_for(gate_agent_id):
                         if resume_in_place:
@@ -379,8 +373,6 @@ def process_work_item(  # noqa: C901
                     gate_success = True
                 break
             else:
-                # Check for fallback accept: if verdict parsing failed but worktree has valid commits
-                # that pass pre-commit hooks, accept the work anyway (prevents false rejections)
                 from pokepoke.beads.reconciliation import worktree_branch_has_commits
                 if ("Gate Agent did not explicitly approve" in gate_reason or "could not be parsed" in gate_reason) and \
                         worktree_branch_has_commits(item.id, pokepoke_root):
@@ -389,7 +381,7 @@ def process_work_item(  # noqa: C901
                     gate_success = True
                     break
 
-                # Genuine code rejection — increment persistent counter and check cap
+                # Genuine code rejection — check cap
                 from pokepoke.beads.beads_management import increment_gate_rejection_count
                 new_count = increment_gate_rejection_count(item.id)
                 if new_count < 0:
@@ -407,11 +399,10 @@ def process_work_item(  # noqa: C901
                     result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
                     _log_failure(run_logger, item_logger, request_count)
                     break
-                # Restart work agent with feedback
                 resume_session_id = None
                 resume_output_summary = None
                 last_feedback = gate_reason
-                last_retry_was_gate_feedback = True  # Gate rejection → new card
+                last_retry_was_gate_feedback = True
 
         # Save worker context for future workers when this attempt failed
         if not result.success:
@@ -440,6 +431,9 @@ def process_work_item(  # noqa: C901
         set_current_work_item_id(None)
         set_current_repo_name(None)
         if _session is not None and not is_shutting_down():
-            _session.cleanup_on_failure()
+            try:
+                _session.cleanup_on_failure()
+            except Exception as exc:
+                logger.error("Cleanup failed in finally block: %s", exc, exc_info=True)
         unregister_agent()
 
