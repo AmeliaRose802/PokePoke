@@ -1760,6 +1760,266 @@
   padding: 24px;
 }
 
+/* ── Flowchart View ───────────────────────────────────────────────────── */
+
+.flowchart-view {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: auto;
+  padding: 16px;
+  background: var(--bg-secondary);
+}
+
+.flowchart-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  margin-bottom: 16px;
+}
+
+.flowchart-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.flowchart-attempts-badge {
+  font-size: 11px;
+  padding: 2px 8px;
+  border-radius: 10px;
+  background: var(--accent-warning);
+  color: var(--bg-primary);
+  font-weight: 600;
+}
+
+.flowchart-body {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 0;
+}
+
+.flowchart-attempt-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+  max-width: 280px;
+}
+
+.flowchart-attempt {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.flowchart-attempt-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-warning);
+  text-transform: uppercase;
+  letter-spacing: 0.05em;
+  margin-bottom: 8px;
+  padding: 2px 10px;
+  border: 1px solid var(--accent-warning);
+  border-radius: 10px;
+}
+
+.flowchart-attempt-nodes {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+.flowchart-step {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* ── Flowchart Node ─────────────────────────────────────────────── */
+
+.flowchart-node {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 16px;
+  border-radius: 8px;
+  border: 2px solid var(--border-primary);
+  background: var(--bg-elevated);
+  width: 100%;
+  box-sizing: border-box;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+}
+
+.flowchart-node--done {
+  border-color: var(--accent-success, #2ea043);
+  background: rgba(46, 160, 67, 0.08);
+}
+
+.flowchart-node--active {
+  border-color: var(--accent-primary);
+  background: rgba(34, 197, 94, 0.12);
+  box-shadow: 0 0 8px rgba(34, 197, 94, 0.3);
+  animation: flowchart-pulse 2s ease-in-out infinite;
+}
+
+.flowchart-node--pending {
+  border-color: var(--border-secondary, var(--border-primary));
+  background: var(--bg-primary);
+  opacity: 0.5;
+}
+
+.flowchart-node--skipped {
+  border-color: var(--border-secondary, var(--border-primary));
+  background: var(--bg-primary);
+  opacity: 0.35;
+  border-style: dashed;
+}
+
+.flowchart-node--completed {
+  border-color: var(--accent-success, #2ea043);
+}
+
+.flowchart-node--failed {
+  border-color: var(--accent-danger, #f85149);
+}
+
+.flowchart-node--failed.flowchart-node--done {
+  background: rgba(248, 81, 73, 0.08);
+  border-color: var(--accent-danger, #f85149);
+}
+
+.flowchart-node--retry.flowchart-node--done {
+  border-color: var(--accent-warning);
+  background: rgba(210, 153, 34, 0.08);
+}
+
+.flowchart-node-icon {
+  font-size: 16px;
+  flex-shrink: 0;
+}
+
+.flowchart-node-label {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+  flex: 1;
+}
+
+.flowchart-node-detail {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  max-width: 120px;
+}
+
+@keyframes flowchart-pulse {
+  0%, 100% { box-shadow: 0 0 6px rgba(34, 197, 94, 0.2); }
+  50% { box-shadow: 0 0 14px rgba(34, 197, 94, 0.45); }
+}
+
+/* ── Flowchart Edge ─────────────────────────────────────────────── */
+
+.flowchart-edge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 24px;
+  position: relative;
+}
+
+.flowchart-edge-line {
+  width: 2px;
+  flex: 1;
+  background: var(--border-primary);
+}
+
+.flowchart-edge--done .flowchart-edge-line {
+  background: var(--accent-success, #2ea043);
+}
+
+.flowchart-edge--active .flowchart-edge-line {
+  background: var(--accent-primary);
+}
+
+.flowchart-edge-arrow {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.flowchart-edge--done .flowchart-edge-arrow {
+  color: var(--accent-success, #2ea043);
+}
+
+.flowchart-edge--active .flowchart-edge-arrow {
+  color: var(--accent-primary);
+}
+
+/* ── Flowchart Retry Connector ──────────────────────────────────── */
+
+.flowchart-retry-connector {
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 8px 0;
+}
+
+.flowchart-retry-arrow {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 4px 12px;
+  border-radius: 12px;
+  background: rgba(210, 153, 34, 0.1);
+  border: 1px dashed var(--accent-warning);
+}
+
+.flowchart-retry-curve {
+  display: block;
+  width: 12px;
+  height: 2px;
+  background: var(--accent-warning);
+}
+
+.flowchart-retry-label {
+  font-size: 11px;
+  font-weight: 600;
+  color: var(--accent-warning);
+  white-space: nowrap;
+}
+
+/* ── Flowchart Toggle ───────────────────────────────────────────── */
+
+.flowchart-toggle-btn {
+  background: transparent;
+  border: 1px solid var(--border-primary);
+  border-radius: 4px;
+  color: var(--text-secondary);
+  font-size: 12px;
+  padding: 2px 8px;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+}
+
+.flowchart-toggle-btn:hover {
+  background: var(--bg-elevated);
+  color: var(--text-primary);
+}
+
+.flowchart-toggle-btn.active {
+  background: var(--accent-primary);
+  color: var(--bg-primary);
+  border-color: var(--accent-primary);
+}
+
 /* ── Log Panel ─────────────────────────────────────────────────────────── */
 
 .log-panel {

@@ -18,6 +18,7 @@ import {
 } from "../utils/agentHelpers";
 import { getEmojiAvatar, STATUS_INDICATOR } from "../utils/agentsPanelHelpers";
 import { groupPlainLines, processLogsToRenderItems, stringsToLogEntries } from "../utils/logProcessor";
+import { FlowchartView } from "./FlowchartView";
 import { RenderLogItems } from "./LogComponents";
 
 interface Props {
@@ -49,6 +50,7 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
   const [isLoadingDetail, setIsLoadingDetail] = useState(false);
   const [detailError, setDetailError] = useState<string | null>(null);
   const [copyStatus, setCopyStatus] = useState<"idle" | "success" | "error">("idle");
+  const [showFlowchart, setShowFlowchart] = useState(false);
   const isGate = isGateAgent(agent);
   const linkedParent = isGate
     ? (agents.find((candidate) => {
@@ -286,18 +288,32 @@ export function AgentLogPanel({ agent, onClose, showClose = true }: Props) {
           {isLoadingDetail ? "Loading detailed logs..." : `${logLines.length} lines`}
           {detailError && " (Error loading details)"}
         </span>
+        <button
+          className={`flowchart-toggle-btn${showFlowchart ? " active" : ""}`}
+          onClick={() => setShowFlowchart((prev) => !prev)}
+          title={showFlowchart ? "Show logs" : "Show pipeline flowchart"}
+        >
+          {showFlowchart ? "📜 Logs" : "📊 Flow"}
+        </button>
       </div>
-      <div className="agent-log-panel-content log-entries" ref={containerRef} onScroll={handleScroll}>
-        {isLoadingDetail && logLines.length === 0 ? (
-          <div className="agent-log-panel-empty">Loading detailed logs…</div>
-        ) : logLines.length === 0 ? (
-          <div className="agent-log-panel-empty">Waiting for output…</div>
-        ) : (
-          <div className="agent-log-panel-logs">
-            <RenderLogItems items={renderItems} />
-          </div>
-        )}
-      </div>
+      {showFlowchart ? (
+        <div className="agent-log-panel-content">
+          <FlowchartView agent={agent} allAgents={agents} />
+        </div>
+      ) : (
+        <div className="agent-log-panel-content log-entries" ref={containerRef} onScroll={handleScroll}>
+          {isLoadingDetail && logLines.length === 0 ? (
+            <div className="agent-log-panel-empty">Loading detailed logs…</div>
+          ) : logLines.length === 0 ? (
+            <div className="agent-log-panel-empty">Waiting for output…</div>
+          ) : (
+            <div className="agent-log-panel-logs">
+              <RenderLogItems items={renderItems} />
+            </div>
+          )}
+        </div>
+      )}
     </div>
   );
 }
+
