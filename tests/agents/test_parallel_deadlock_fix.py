@@ -137,8 +137,13 @@ def test_health_check_invoked_when_future_start_times_provided():
     assert any("stalled" in msg.lower() for msg in run_logger.orchestrator_messages)
 
 
-def test_concurrent_wait_timeout_has_error_handling():
-    """Test that concurrent.futures.wait has error handling protection."""
+def test_collect_done_futures_uses_nonblocking_polling():
+    """Test that collect_done_futures uses non-blocking .done() polling instead of wait().
+
+    The fix for PokePoke-82v1j removed concurrent.futures.wait() which could hang
+    indefinitely. This test verifies the function never calls wait() and instead
+    relies solely on non-blocking .done() checks.
+    """
     from unittest.mock import patch
 
     futures_dict: dict[concurrent.futures.Future, BeadsWorkItem] = {}
@@ -150,7 +155,7 @@ def test_concurrent_wait_timeout_has_error_handling():
     def record_fn(item, result, stats, logger):
         pass
 
-    # Create a future that blocks indefinitely
+    # Create a future that is not done (would cause wait() to block)
     fut = Mock(spec=concurrent.futures.Future)
     fut.done.return_value = False
 
@@ -164,11 +169,8 @@ def test_concurrent_wait_timeout_has_error_handling():
 
     futures_dict[fut] = item
 
-    # Mock concurrent.futures.wait to raise an exception simulating a hang
-    with patch('pokepoke.agents.parallel_worker_pool.concurrent.futures.wait') as mock_wait:
-        mock_wait.side_effect = TimeoutError("Simulated wait timeout")
-
-        # This should not hang - the try/except should handle the error
+    # Patch concurrent.futures.wait to detect if it's ever called
+    with patch('concurrent.futures.wait') as mock_wait:
         _, _, _, _ = collect_done_futures(
             futures_dict,
             failed_claim_ids,
@@ -180,5 +182,10 @@ def test_concurrent_wait_timeout_has_error_handling():
             future_start_times=None,
         )
 
-    # Should handle the error gracefully
-    assert any("wait error" in msg.lower() for msg in run_logger.orchestrator_messages)
+        # wait() must never be called — the fix uses .done() polling only
+        mock_wait.assert_not_called()
+
+    # The not-done future should remain in the dict (not collected)
+    assert fut in futures_dict
+    # .done() was called to check status
+    fut.done.assert_called()
