@@ -1,0 +1,17 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <ItemGroup>
+    <ProjectReference Include="..\PokePoke.Core\PokePoke.Core.csproj" />
+    <ProjectReference Include="..\PokePoke.Agents\PokePoke.Agents.csproj" />
+    <ProjectReference Include="..\PokePoke.Beads\PokePoke.Beads.csproj" />
+    <ProjectReference Include="..\PokePoke.Git\PokePoke.Git.csproj" />
+    <ProjectReference Include="..\PokePoke.Models\PokePoke.Models.csproj" />
+  </ItemGroup>
+
+  <PropertyGroup>
+    <TargetFramework>net9.0</TargetFramework>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+  </PropertyGroup>
+
+</Project>
