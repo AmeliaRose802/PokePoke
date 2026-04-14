@@ -7,7 +7,7 @@ Bug fix for PokePoke-p8tia.
 from unittest.mock import patch
 
 from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.types import CopilotResult, GateAgentResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
 from tests.orchestration.conftest import (
     PATCH_WF_ADD_COMMENT,
     make_process_item_mocks,
