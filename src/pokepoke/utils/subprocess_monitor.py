@@ -98,6 +98,11 @@ class SubprocessMonitor:
             self._monitor_thread.join(timeout=2.0)
             self._monitor_thread = None
 
+        # Release all tracked state to avoid memory leaks
+        self._monitored_pids.clear()
+        self._process_threads.clear()
+        self._process_pipes.clear()
+
         logger.debug(
             "SubprocessMonitor stopped for copilot PID %d",
             self._copilot_pid,
@@ -165,6 +170,7 @@ class SubprocessMonitor:
         for pid in dead_pids:
             thread = self._process_threads.pop(pid, None)
             self._process_pipes.pop(pid, None)
+            self._monitored_pids.discard(pid)
             if thread and thread.is_alive():
                 thread.join(timeout=0.5)
 

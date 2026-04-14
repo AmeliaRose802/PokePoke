@@ -1,11 +1,13 @@
 """Resume prompt helpers for the Copilot SDK integration."""
+from collections.abc import Sequence
+
 from pokepoke.types import BeadsWorkItem
 
 _MAX_OUTPUT_SUMMARY_LEN = 2000
 
 
 def _summarize_output(
-    output_lines: list[str], max_length: int = _MAX_OUTPUT_SUMMARY_LEN,
+    output_lines: Sequence[str], max_length: int = _MAX_OUTPUT_SUMMARY_LEN,
 ) -> str | None:
     """Extract a truncated summary from agent output lines.
 

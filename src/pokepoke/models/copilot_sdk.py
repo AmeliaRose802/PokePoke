@@ -5,6 +5,7 @@ import asyncio
 import logging
 import os
 import shutil
+from collections import deque
 from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
@@ -275,7 +276,6 @@ async def invoke_copilot_sdk(  # noqa: C901
 
     # Track subprocess monitor for cleanup
     subprocess_monitor = None
-
     try:
         logger.info("[SDK] Starting Copilot client...")
         await client.start()
@@ -319,7 +319,7 @@ async def invoke_copilot_sdk(  # noqa: C901
 
         # Explicit retry loop: at most 2 attempts (original + one fallback)
         max_attempts = 2
-        output_lines: list[str] = []
+        output_lines: deque[str] = deque(maxlen=2000)
         errors: list[str] = []
         handler = None
         stats: _SDKSessionStats | None = None
@@ -388,9 +388,7 @@ async def invoke_copilot_sdk(  # noqa: C901
 
         # Handle timeout/interrupt/inactivity/tool_timeout/process_dead early exits
         timed_out = abort_reason == "timeout"
-        interrupted = abort_reason == "shutdown" or (
-            attempt_result.interrupted and abort_reason is None
-        )
+        interrupted = abort_reason == "shutdown" or (attempt_result.interrupted and abort_reason is None)
         inactivity_detected = abort_reason == "inactivity"
         tool_timed_out = abort_reason == "tool_timeout"
         process_dead = abort_reason == "process_dead"

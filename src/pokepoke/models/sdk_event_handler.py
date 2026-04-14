@@ -4,7 +4,7 @@ import asyncio
 import logging
 import threading
 import time
-from collections.abc import Callable
+from collections.abc import Callable, MutableSequence
 from typing import Any, TypedDict
 
 from pokepoke.beads.sdk_beads_tracker import extract_command, is_beads_create, parse_created_items, record_items_created
@@ -49,7 +49,7 @@ class _EventHandler:
     def __init__(
         self,
         done: asyncio.Event,
-        output_lines: list[str],
+        output_lines: MutableSequence[str],
         errors: list[str],
         stats: SdkSessionStats,
         item_logger: Any | None,
@@ -86,7 +86,7 @@ class _EventHandler:
     def reset_for_retry(
         self,
         done: asyncio.Event,
-        output_lines: list[str],
+        output_lines: MutableSequence[str],
         errors: list[str],
     ) -> None:
         """Reset handler state for a fallback retry attempt."""
@@ -368,7 +368,7 @@ class _EventHandler:
 
 def create_event_handler(
     done: asyncio.Event,
-    output_lines: list[str],
+    output_lines: MutableSequence[str],
     errors: list[str],
     item_logger: Any | None = None,
     idle_timeout: float = 90.0,

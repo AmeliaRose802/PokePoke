@@ -6,6 +6,8 @@ functions.  Default implementations delegate to the existing module-level
 helpers.
 """
 
+from __future__ import annotations
+
 import concurrent.futures
 import subprocess
 import threading
@@ -256,7 +258,7 @@ class ParallelLoop(Protocol):
         failed_claim_ids: set[str],
         session_stats: SessionStats,
         start_time: float,
-        run_logger: "RunLogger",
+        run_logger: RunLogger,
         continuous: bool,
         record_fn: RecordFn,
         finalize_fn: Any,
@@ -324,7 +326,7 @@ class CollectFn(Protocol):
         failed_claim_ids: set[str],
         total_requests: int,
         session_stats: SessionStats,
-        run_logger: 'RunLogger',
+        run_logger: RunLogger,
         record_fn: RecordFn,
         lock: threading.Lock | None = None,
     ) -> tuple[int, bool, int, int]:
@@ -347,7 +349,7 @@ class ProcessItemFn(Protocol):
     def __call__(
         self,
         item: BeadsWorkItem,
-        run_logger: 'RunLogger',
+        run_logger: RunLogger,
         semaphore: threading.Semaphore,
         worker_agent_name: str | None = None,
     ) -> WorkItemResult:
@@ -357,7 +359,7 @@ class ProcessItemFn(Protocol):
 
 class CheckAndCommitMainRepoFn(Protocol):
     """Protocol for checking and committing main repository."""
-    def __call__(self, repo_path: Path, run_logger: 'RunLogger', /) -> bool:
+    def __call__(self, repo_path: Path, run_logger: RunLogger, /) -> bool:
         """Check main repository status and commit if needed.
 
         Returns True if successful, False otherwise.
@@ -380,7 +382,7 @@ class FinalizeFn(Protocol):
         start_time: float,
         items_completed: int,
         total_requests: int,
-        run_logger: 'RunLogger',
+        run_logger: RunLogger,
     ) -> None:
         """Finalize session, print summary, and clean up."""
         ...
