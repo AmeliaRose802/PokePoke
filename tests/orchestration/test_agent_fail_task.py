@@ -29,7 +29,8 @@ from pokepoke.orchestration.workflow_helpers import (
     run_cleanup_with_timeout,
 )
 from pokepoke.stats.session_journal import SessionPhase
-from pokepoke.types import AgentStats, CopilotResult, GateAgentResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_stats import AgentStats
 from tests.orchestration.conftest import (
     make_process_item_mocks,
     make_work_item,
@@ -357,7 +358,7 @@ class TestFailResultValidation:
         stats = AgentStats()
         stats.input_tokens = 100
         stats.output_tokens = 50
-        from pokepoke.types import ModelCompletionRecord
+        from pokepoke.types_stats import ModelCompletionRecord
         completion = ModelCompletionRecord(
             item_id="test", model="gpt-4", duration_seconds=10.0,
             gate_passed=False, input_tokens=100, output_tokens=50,

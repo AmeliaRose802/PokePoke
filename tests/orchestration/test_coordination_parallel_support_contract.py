@@ -17,12 +17,9 @@ import threading
 import time
 from unittest.mock import MagicMock, patch
 
-from pokepoke.types import (
-    AgentStats,
-    BeadsWorkItem,
-    SessionStats,
-    WorkItemResult,
-)
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, SessionStats
 
 # ---------------------------------------------------------------------------
 # Helpers

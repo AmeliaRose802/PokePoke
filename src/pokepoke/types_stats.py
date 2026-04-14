@@ -14,7 +14,7 @@ from pokepoke.agents.agent_types import (
 from pokepoke.git.merge_queue_stats import MergeQueueStats
 
 if TYPE_CHECKING:
-    from pokepoke.types import BeadsCreatedItem, BeadsWorkItem
+    from pokepoke.types_beads import BeadsCreatedItem, BeadsWorkItem
 
 
 @dataclass

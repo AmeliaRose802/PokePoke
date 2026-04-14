@@ -15,7 +15,8 @@ from pokepoke.orchestration.work_item_session import WorkItemSession
 from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.orchestration.workflow_helpers import run_cleanup_with_timeout as _run_cleanup_with_timeout
 from pokepoke.orchestration.workflow_helpers import setup_worktree
-from pokepoke.types import BeadsWorkItem, CopilotResult
+from pokepoke.types_agent import CopilotResult
+from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.worktrees.worktree_finalization import check_and_merge_worktree
 
 

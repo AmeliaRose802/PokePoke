@@ -13,7 +13,8 @@ from unittest.mock import patch
 import pytest
 
 from pokepoke.orchestration.workflow import process_work_item
-from pokepoke.types import AgentStats, CopilotResult, GateAgentResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_stats import AgentStats
 from tests.orchestration.conftest import (
     PATCH_MODEL_CONFIG,
     PATCH_WF_ADD_COMMENT,
@@ -577,21 +578,21 @@ class TestWorkAgentOutcomeFailFast:
     async def test_blocked_outcome_breaks_loop(self):
         """When work agent returns 'blocked', the workflow breaks early."""
         from pokepoke.orchestration.workflow import _FAIL_FAST_STATUSES
-        from pokepoke.types import WorkAgentOutcome
+        from pokepoke.work_agent_outcome import WorkAgentOutcome
         outcome = WorkAgentOutcome(status="blocked", reason="Missing dependency")
         assert outcome.status in _FAIL_FAST_STATUSES
 
     @pytest.mark.asyncio
     async def test_too_large_outcome_breaks_loop(self):
         from pokepoke.orchestration.workflow import _FAIL_FAST_STATUSES
-        from pokepoke.types import WorkAgentOutcome
+        from pokepoke.work_agent_outcome import WorkAgentOutcome
         outcome = WorkAgentOutcome(status="too_large", reason="Too many files", suggested_split=["a", "b"])
         assert outcome.status in _FAIL_FAST_STATUSES
 
     @pytest.mark.asyncio
     async def test_needs_clarification_breaks_loop(self):
         from pokepoke.orchestration.workflow import _FAIL_FAST_STATUSES
-        from pokepoke.types import WorkAgentOutcome
+        from pokepoke.work_agent_outcome import WorkAgentOutcome
         outcome = WorkAgentOutcome(status="needs_clarification", reason="Unclear requirements")
         assert outcome.status in _FAIL_FAST_STATUSES
 

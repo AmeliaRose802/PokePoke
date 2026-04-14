@@ -1,4 +1,9 @@
-"""Type definitions for PokePoke orchestrator."""
+"""Type definitions for PokePoke orchestrator.
+
+This module defines RetryConfig and WorkItemResult, and re-exports all
+domain-specific types from types_beads, types_stats, types_agent, and
+work_agent_outcome for backwards compatibility.
+"""
 from dataclasses import dataclass
 from typing import Literal
 

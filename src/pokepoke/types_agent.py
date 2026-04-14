@@ -13,7 +13,7 @@ from typing import TYPE_CHECKING, Any
 from pokepoke.work_agent_outcome import WorkAgentOutcome
 
 if TYPE_CHECKING:
-    from pokepoke.types import AgentStats
+    from pokepoke.types_stats import AgentStats
 
 
 @dataclass

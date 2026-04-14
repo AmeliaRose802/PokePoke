@@ -10,7 +10,7 @@ import pytest
 
 from pokepoke.beads.beads_query import BD_CONFIG, BR_CONFIG, get_active_backend, set_active_backend
 from pokepoke.orchestration.work_item_selection import autonomous_selection
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 
 
 def _make_item(

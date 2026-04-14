@@ -4,7 +4,7 @@ from unittest.mock import Mock, patch
 
 from pokepoke.git.repo_check import check_and_commit_main_repo
 from pokepoke.orchestration.orchestrator import run_orchestrator
-from pokepoke.types import AgentStats, BeadsStats
+from pokepoke.types_stats import AgentStats, BeadsStats
 from tests.orchestration.conftest import make_orchestrator_mocks
 
 

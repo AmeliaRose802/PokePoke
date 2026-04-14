@@ -17,13 +17,9 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pokepoke.types import (
-    AgentStats,
-    BeadsWorkItem,
-    ModelCompletionRecord,
-    SessionStats,
-    WorkItemResult,
-)
+from pokepoke.types import WorkItemResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, ModelCompletionRecord, SessionStats
 
 # ---------------------------------------------------------------------------
 # Helpers

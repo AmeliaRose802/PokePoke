@@ -18,7 +18,9 @@ from unittest.mock import MagicMock, patch
 import pytest
 
 from pokepoke.agents.gate_agent_executor import run_gate_agent
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, GateAgentResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats
 from pokepoke.work_agent_outcome import WorkAgentOutcome
 
 # ── Fixtures ────────────────────────────────────────────────────────────────

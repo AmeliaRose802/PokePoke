@@ -7,15 +7,10 @@ import pytest
 
 from pokepoke.agents import parallel
 from pokepoke.orchestration import finalization, orchestrator, workflow, workflow_helpers
-from pokepoke.types import (
-    AgentStats,
-    BeadsStats,
-    BeadsWorkItem,
-    CopilotResult,
-    GateAgentResult,
-    SessionStats,
-    WorkItemResult,
-)
+from pokepoke.types import WorkItemResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, BeadsStats, SessionStats
 
 
 def _make_item(item_id: str = "task-1") -> BeadsWorkItem:

@@ -11,7 +11,7 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.worktrees.worktree_finalization import (
     check_parent_hierarchy,
     close_work_item_and_parents,

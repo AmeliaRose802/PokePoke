@@ -9,7 +9,7 @@ from pokepoke.orchestration.work_item_selection import (
     select_multiple_items,
     select_work_item,
 )
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 
 
 def _make_item(id: str = "task-1", title: str = "Task", labels: list[str] | None = None,

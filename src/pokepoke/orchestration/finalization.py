@@ -11,7 +11,10 @@ from pokepoke.beads.reconciliation import reconcile_completed_item
 from pokepoke.desktop import terminal_ui
 from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner
 from pokepoke.orchestration.workflow_helpers import _fail_result, _log_failure
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, ModelCompletionRecord, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_agent import CopilotResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, ModelCompletionRecord
 from pokepoke.worktrees.worktree_finalization import finalize_work_item
 
 if TYPE_CHECKING:

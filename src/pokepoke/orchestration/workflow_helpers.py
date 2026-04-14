@@ -11,7 +11,10 @@ from pokepoke.beads.beads import assign_and_sync_item
 from pokepoke.desktop import terminal_ui
 from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner
 from pokepoke.git.git_operations import has_uncommitted_changes
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, ModelCompletionRecord, WorkItemResult
+from pokepoke.types import WorkItemResult
+from pokepoke.types_agent import CopilotResult
+from pokepoke.types_beads import BeadsWorkItem
+from pokepoke.types_stats import AgentStats, ModelCompletionRecord
 from pokepoke.worktrees.worktrees import create_worktree
 
 if TYPE_CHECKING:
