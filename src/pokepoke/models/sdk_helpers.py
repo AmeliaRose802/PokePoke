@@ -1,6 +1,6 @@
 """Helper functions for the Copilot SDK integration."""
 import logging
-from collections.abc import Callable
+from collections.abc import Callable, Sequence
 from typing import Any
 
 _PERMISSION_RESULT_CLS: type | None = None
@@ -56,9 +56,13 @@ def _build_token_usage_callback() -> Callable[[int, int], None]:
 
     return _on_token_usage
 
+# Keep at most 512 KB of output text in the result object.
+# Full output is already written to the item log file on disk.
+_MAX_RESULT_OUTPUT_BYTES = 512 * 1024
+
 def _build_copilot_result(
     work_item: BeadsWorkItem,
-    output_lines: list[str],
+    output_lines: Sequence[str],
     errors: list[str],
     stats: SdkSessionStats,
     current_model: str,
@@ -68,6 +72,8 @@ def _build_copilot_result(
 ) -> CopilotResult:
     """Assemble the final CopilotResult and print summary statistics."""
     output_text = "".join(output_lines)
+    if len(output_text) > _MAX_RESULT_OUTPUT_BYTES:
+        output_text = output_text[-_MAX_RESULT_OUTPUT_BYTES:]
     success = len(errors) == 0
     logger.error(f"\n{'='*60}\n[SDK] Result: {'SUCCESS' if success else 'FAILURE'}\n{'='*60}")
     if stats["turn_count"] > 0 or stats["total_input_tokens"] > 0:

@@ -441,7 +441,7 @@ class TestLogProcessTreeSnapshot:
         mock_handler = AsyncMock()
         mock_handler._item_logger = AsyncMock()
         _log_process_tree_snapshot("powershell", "test", 900.0, handler=mock_handler)
-        mock_handler._item_logger.log_error.assert_called_once()
+        mock_handler._item_logger.log_debug.assert_called_once()
 
 
 # ── _build_token_usage_callback ──────────────────────────────────────────────
