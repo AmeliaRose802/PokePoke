@@ -67,10 +67,10 @@ class TestAgentHealthMonitoring:
 
         _check_agent_health(futures, start_times, run_logger)
 
-        # Should log error about system deadlock
+        # Should log error about stalled agents being cancelled
         calls = [str(call) for call in run_logger.log_orchestrator.call_args_list]
         error_calls = [c for c in calls if "level='ERROR'" in c]
-        assert any("deadlock" in c.lower() for c in error_calls)
+        assert any("stalled" in c.lower() for c in error_calls)
 
     def test_check_agent_health_ignores_completed_futures(self):
         """Health check should only consider non-completed futures."""
