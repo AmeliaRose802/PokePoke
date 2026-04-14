@@ -131,6 +131,8 @@ max-statements = 50
     "PERF401", # Tests: allow manual list comprehension
 ]
 "src/pokepoke/models/sdk_await.py" = ["C901"]  # Complex timeout logic (extracted from sdk_helpers)
+"src/pokepoke/agents/parallel_support.py" = ["C901"]  # Complex dispatch logic with many edge cases
+"src/pokepoke/agents/parallel_worker_pool.py" = ["C901"]  # Complex future collection with health monitoring
 
 # Mypy type checking configuration
 [tool.mypy]

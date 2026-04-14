@@ -441,26 +441,51 @@ class TestContinuousModeLoopBack:
 
 
 class TestCollectDoneFuturesWait:
-    """Tests for _collect_done_futures wait fallback path."""
+    """Tests for _collect_done_futures polling behavior.
 
-    def test_waits_for_not_done_futures(self) -> None:
-        """When no futures are immediately done, falls back to wait()."""
-        # Create a future that is not immediately done but completes during wait
+    IMPORTANT: After fix PokePoke-82v1j, collect_done_futures NO LONGER uses
+    concurrent.futures.wait() because it can hang indefinitely even with timeout.
+    Instead, it relies solely on non-blocking .done() polling. This means if no
+    futures are done on a given call, it returns an empty batch immediately.
+    """
+
+    def test_returns_empty_when_futures_not_done(self) -> None:
+        """When no futures are immediately done, returns empty batch (no wait)."""
+        # Create a future that is not immediately done
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             import time as _time
-            fut = pool.submit(lambda: (_time.sleep(0.1), WorkItemResult(success=True, request_count=1))[1])
+            fut = pool.submit(lambda: (_time.sleep(0.5), WorkItemResult(success=True, request_count=1))[1])
             item = _make_item("w1")
             futures = {fut: item}
             failed: set[str] = set()
             stats = SessionStats(agent_stats=AgentStats())
             record_fn = Mock()
 
+            # Call immediately - future is not done yet
             _total, any_ok, _successes, _failures = _collect_done_futures(
                 futures, failed, 0, stats, Mock(), record_fn,
             )
 
-            assert any_ok is True
-            assert record_fn.call_count == 1
+            # Should return empty batch (no blocking wait)
+            assert any_ok is False, "No futures should be collected (not done yet)"
+            assert _successes == 0, "No successes yet"
+            assert _failures == 0, "No failures yet"
+            assert record_fn.call_count == 0, "No results recorded yet"
+
+            # Future should still be in the dict (not collected)
+            assert len(futures) == 1, "Future should still be tracked"
+
+            # On next poll (after it completes), it will be collected
+            _time.sleep(0.6)  # Let it complete
+            _total, any_ok, _successes, _failures = _collect_done_futures(
+                futures, failed, 0, stats, Mock(), record_fn,
+            )
+
+            # Now it should be collected
+            assert any_ok is True, "Future should now be collected"
+            assert _successes == 1, "One success"
+            assert record_fn.call_count == 1, "Result recorded"
+            assert len(futures) == 0, "Future removed from dict"
 
 
 # -- Dynamic parallel ceiling (PokePoke-4yvi) ---------------------------------
@@ -655,7 +680,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # Simulate all 10 agents completing simultaneously.
@@ -713,7 +738,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # 9 failures + 1 success; all slots freed.
@@ -769,7 +794,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 1:
                 # First iteration: no completions yet.
@@ -905,7 +930,7 @@ class TestCircuitBreaker:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # 5 failures in one round → counts as 1 failure-round

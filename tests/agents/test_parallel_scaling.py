@@ -84,7 +84,7 @@ class TestRunParallelLoopScaling:
         # Iteration 2: collect clears all 3 futures (simulates 3 completions).
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 2:
                 futures.clear()
@@ -169,7 +169,7 @@ class TestRunParallelLoopScaling:
         mock_ready.return_value = [item]
         mock_sel.return_value = [item]
         mock_pwi.return_value = WorkItemResult(success=True, request_count=1, stats=AgentStats())
-        mock_collect.side_effect = lambda futures, failed, total, stats, logger, record_fn, lock=None: (total, False, 0, 0)
+        mock_collect.side_effect = lambda *args, **kwargs: (0, False, 0, 0)
 
         # Two full loop iterations + shutdown, accounting for the inner sleep loop checks.
         mock_shut.side_effect = [False] + ([False] * 10) + [False, True, True]
@@ -252,7 +252,7 @@ class TestRunParallelLoopScaling:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
             call_idx[0] += 1
             if call_idx[0] == 2:
                 futures.clear()

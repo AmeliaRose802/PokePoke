@@ -19,6 +19,8 @@ from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_
 from pokepoke.worktrees.coordination import with_worktree_lock
 from pokepoke.worktrees.merge_helpers import (
     is_worktree_merged as is_worktree_merged,  # re-export
+)
+from pokepoke.worktrees.merge_helpers import (
     log_merge_failure,
     push_or_rollback,
     validate_post_merge_or_rollback,
