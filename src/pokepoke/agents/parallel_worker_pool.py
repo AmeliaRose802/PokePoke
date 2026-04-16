@@ -32,7 +32,7 @@ _Future = concurrent.futures.Future[WorkItemResult]
 
 # Agent health monitoring configuration
 _AGENT_HEALTH_CHECK_INTERVAL = 60.0  # Check agent health every 60 seconds
-_AGENT_STALL_THRESHOLD = 600.0  # Consider agent stalled after 10 minutes without progress
+_AGENT_STALL_THRESHOLD = 1800.0  # Consider agent stalled after 30 minutes without progress
 _MAX_STALLED_AGENTS = 3  # Trigger circuit breaker if this many agents are stalled
 
 # Thread-safe helper functions

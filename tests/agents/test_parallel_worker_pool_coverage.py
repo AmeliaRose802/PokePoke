@@ -204,8 +204,8 @@ class TestAgentHealthMonitoring:
         item = create_test_item("stalled-1")
         futures = {fut: item}
 
-        # Agent started 11 minutes ago (> 10 minute threshold)
-        start_times = {fut: time.time() - 660}
+        # Agent started 31 minutes ago (> 30 minute threshold)
+        start_times = {fut: time.time() - 1860}
         run_logger = Mock()
 
         stalled = _check_agent_health(futures, start_times, run_logger, None)
@@ -229,7 +229,7 @@ class TestAgentHealthMonitoring:
             fut.cancel.return_value = True  # Simulate successful cancel
             item = create_test_item(f"stalled-{i}")
             futures[fut] = item
-            start_times[fut] = time.time() - 660  # 11 minutes ago
+            start_times[fut] = time.time() - 1860  # 31 minutes ago
 
         run_logger = Mock()
 
@@ -249,7 +249,7 @@ class TestAgentHealthMonitoring:
         fut.done.return_value = False
         item = create_test_item("stalled-1")
         futures = {fut: item}
-        start_times = {fut: time.time() - 660}
+        start_times = {fut: time.time() - 1860}
         run_logger = Mock()
 
         stalled = _check_agent_health(futures, start_times, run_logger, lock)
