@@ -154,7 +154,7 @@ class TestInvokeCopilotSDKSync:
         self, mock_asyncio_run, sample_work_item
     ):
         """Test invoke_copilot_sdk_sync with custom prompt."""
-        from pokepoke.types import CopilotResult
+        from pokepoke.types_agent import CopilotResult
 
         mock_result = CopilotResult(
             work_item_id=sample_work_item.id,

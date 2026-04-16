@@ -8,7 +8,8 @@ from pokepoke.agents.agent_runner import (
     AgentRunnerConfig,
     _reconcile_worktree_branch,
 )
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 
 # Import compat wrapper and alias it to _run_worktree_agent for backwards compatibility
 from .conftest_agent_runner import run_worktree_agent_compat as _run_worktree_agent
@@ -121,6 +122,7 @@ class TestRunWorktreeAgent:
         mock_cleanup: Mock, mock_branch_has_commits: Mock,
     ) -> None:
         """Test exception handling when invoke_copilot raises."""
+        mock_getcwd.return_value = "/tmp"
         mock_create.return_value = Path("/tmp/wt")
         mock_invoke.side_effect = RuntimeError("Boom")
         mock_cleanup_loop.return_value = (False, 0)

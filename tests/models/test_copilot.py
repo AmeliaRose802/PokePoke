@@ -3,7 +3,7 @@
 from unittest.mock import MagicMock, patch
 
 from pokepoke.models.ai_backends import invoke_copilot
-from pokepoke.types import CopilotResult
+from pokepoke.types_agent import CopilotResult
 
 
 class TestInvokeCopilot:

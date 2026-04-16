@@ -13,7 +13,8 @@ from pokepoke.models.copilot_sdk import (
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
 )
-from pokepoke.types import BeadsWorkItem, CopilotResult
+from pokepoke.types import BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 
 
 class TestBuildPromptIntegration:

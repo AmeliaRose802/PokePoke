@@ -10,7 +10,8 @@ from pokepoke.models.ai_backends import (
     CopilotBackend,
     get_backend,
 )
-from pokepoke.types import BeadsWorkItem, CopilotResult
+from pokepoke.types import BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 
 
 def _work_item(item_id: str = "item-1") -> BeadsWorkItem:

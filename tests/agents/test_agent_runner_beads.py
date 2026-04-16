@@ -7,7 +7,8 @@ from pokepoke.agents.agent_runner import (
     AgentRunnerConfig,
     _run_beads_only_agent,
 )
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 
 
 class TestRunBeadsOnlyAgent:
