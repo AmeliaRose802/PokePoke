@@ -258,9 +258,17 @@ def _reconcile_worktree_branch(
         config.agent_name,
     )
     agent_stats = parse_agent_stats(result.output) if result.output else None
+    from pokepoke.worktrees.worktree_merge_handler import WorktreeMergeContext
     merge_success, _worktree_cleaned = handle_worktree_merge(
-        config.agent_id, config.agent_item, config.agent_name, config.worktree_path, config.repo_root,
-        agent_stats, parent_agent_id=cleanup_parent_id,
+        WorktreeMergeContext(
+            agent_id=config.agent_id,
+            agent_item=config.agent_item,
+            agent_name=config.agent_name,
+            worktree_path=config.worktree_path,
+            repo_root=config.repo_root,
+            parent_agent_id=cleanup_parent_id,
+        ),
+        agent_stats,
     )
     if merge_success:
         logger.info("Reconciliation: merged partial work from %s", config.agent_name)
@@ -296,9 +304,17 @@ def _handle_successful_agent(
 
     logger.info("All changes committed and validated")
     agent_stats = parse_agent_stats(result.output) if result.output else None
+    from pokepoke.worktrees.worktree_merge_handler import WorktreeMergeContext
     merge_success, worktree_cleaned = handle_worktree_merge(
-        config.agent_id, config.agent_item, config.agent_name, config.worktree_path, config.repo_root,
-        agent_stats, parent_agent_id=cleanup_parent_id,
+        WorktreeMergeContext(
+            agent_id=config.agent_id,
+            agent_item=config.agent_item,
+            agent_name=config.agent_name,
+            worktree_path=config.worktree_path,
+            repo_root=config.repo_root,
+            parent_agent_id=cleanup_parent_id,
+        ),
+        agent_stats,
     )
     if not merge_success:
         _print_preserved_worktree_debug(config.agent_id, config.worktree_path, config.repo_root)

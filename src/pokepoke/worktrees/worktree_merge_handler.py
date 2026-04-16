@@ -5,6 +5,7 @@ the maintenance-agent path (handle_worktree_merge) delegate to perform_worktree_
 """
 
 import logging
+from dataclasses import dataclass
 from pathlib import Path
 
 from filelock import Timeout
@@ -21,15 +22,21 @@ from pokepoke.worktrees.worktrees import merge_worktree
 logger = logging.getLogger(__name__)
 
 
+@dataclass
+class WorktreeMergeContext:
+    """Context bundle for worktree merge parameters."""
+    agent_id: str
+    agent_item: BeadsWorkItem
+    agent_name: str
+    worktree_path: Path
+    repo_root: Path
+    parent_agent_id: str | None = None
+    repo_path: str | None = None
+
+
 def handle_worktree_merge(
-    agent_id: str,
-    agent_item: BeadsWorkItem,
-    agent_name: str,
-    worktree_path: Path,
-    repo_root: Path,
-    agent_stats: AgentStats | None,
-    parent_agent_id: str | None = None,
-    repo_path: str | None = None,
+    ctx: WorktreeMergeContext,
+    agent_stats: AgentStats | None = None,
 ) -> tuple[bool, bool]:
     """Handle worktree merge with conflict resolution.
 
@@ -37,46 +44,40 @@ def handle_worktree_merge(
     parallel agents. This prevents merge conflict cascades.
 
     Args:
-        agent_id: Agent ID for worktree tracking
-        agent_item: Work item for the agent
-        agent_name: Display name of the agent
-        worktree_path: Path to the worktree
-        repo_root: Repository root path
+        ctx: Merge context bundle with agent and worktree information
         agent_stats: Agent statistics (unused, kept for API compatibility)
-        parent_agent_id: Optional parent agent ID for UI nesting of sub-agents
-        repo_path: Target repo root for git operations.
 
     Returns:
         Tuple of (merge_success, worktree_cleaned)
     """
     # Acquire merge lock to serialize with other parallel agents
-    logger.info("Waiting for merge lock for agent %s", agent_id)
+    logger.info("Waiting for merge lock for agent %s", ctx.agent_id)
 
     try:
         with merge_lock():
-            logger.info("Acquired merge lock for agent %s", agent_id)
+            logger.info("Acquired merge lock for agent %s", ctx.agent_id)
             # Fall back to agent_id for cleanup parent if no parent_agent_id
-            cleanup_parent_id = parent_agent_id if parent_agent_id else agent_id
+            cleanup_parent_id = ctx.parent_agent_id if ctx.parent_agent_id else ctx.agent_id
             return perform_worktree_merge(
-                agent_id, agent_item, worktree_path, repo_root,
+                ctx.agent_id, ctx.agent_item, ctx.worktree_path, ctx.repo_root,
                 parent_agent_id=cleanup_parent_id,
-                repo_path=repo_path,
+                repo_path=ctx.repo_path,
             )
     except Timeout as e:
-        logger.warning("Merge lock timeout for agent %s: %s", agent_id, e)
+        logger.warning("Merge lock timeout for agent %s: %s", ctx.agent_id, e)
 
         add_uncleaned_worktree(
-            agent_id,
-            str(worktree_path),
+            ctx.agent_id,
+            str(ctx.worktree_path),
             f"Merge lock timeout after 10 minutes: {e}"
         )
         return False, False
     except Exception as e:
-        logger.error("Merge coordination error for agent %s: %s", agent_id, e, exc_info=True)
+        logger.error("Merge coordination error for agent %s: %s", ctx.agent_id, e, exc_info=True)
 
         add_uncleaned_worktree(
-            agent_id,
-            str(worktree_path),
+            ctx.agent_id,
+            str(ctx.worktree_path),
             f"Merge coordination error: {e}"
         )
         return False, False

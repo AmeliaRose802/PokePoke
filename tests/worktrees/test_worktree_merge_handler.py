@@ -7,7 +7,11 @@ from unittest.mock import patch
 import pytest
 
 from pokepoke.types import BeadsWorkItem
-from pokepoke.worktrees.worktree_merge_handler import handle_worktree_merge, perform_worktree_merge
+from pokepoke.worktrees.worktree_merge_handler import (
+    WorktreeMergeContext,
+    handle_worktree_merge,
+    perform_worktree_merge,
+)
 from pokepoke.worktrees.worktrees import MergeResult
 
 
@@ -18,6 +22,26 @@ def _make_agent_item(item_id: str = "maintenance-test") -> BeadsWorkItem:
         status="ready",
         priority=1,
         issue_type="task",
+    )
+
+
+def _make_merge_context(
+    agent_id: str = "maintenance-test",
+    agent_name: str = "Janitor",
+    worktree_path: Path = Path("C:/worktrees/task-maintenance-test"),
+    repo_root: Path = Path("C:/repo"),
+    parent_agent_id: str | None = None,
+    repo_path: str | None = None,
+) -> WorktreeMergeContext:
+    """Helper to create a WorktreeMergeContext for testing."""
+    return WorktreeMergeContext(
+        agent_id=agent_id,
+        agent_item=_make_agent_item(agent_id),
+        agent_name=agent_name,
+        worktree_path=worktree_path,
+        repo_root=repo_root,
+        parent_agent_id=parent_agent_id,
+        repo_path=repo_path,
     )
 
 
@@ -43,20 +67,15 @@ def test_handle_worktree_merge_retries_after_successful_cleanup(
     mock_invoke_cleanup.return_value = (True, None)
     mock_merge_worktree.return_value = MergeResult(success=True)
 
-    agent_item = _make_agent_item()
     success, cleaned = handle_worktree_merge(
-        agent_id=agent_item.id,
-        agent_item=agent_item,
-        agent_name="Janitor",
-        worktree_path=Path("C:/worktrees/task-maintenance-test"),
-        repo_root=Path("C:/repo"),
+        _make_merge_context(),
         agent_stats=None,
     )
 
     assert success is True
     assert cleaned is True
     assert mock_merge_worktree.call_count == 1
-    mock_remove_from_manifest.assert_called_once_with(agent_item.id)
+    mock_remove_from_manifest.assert_called_once_with("maintenance-test")
     mock_add_manifest.assert_called_once()  # ensure manifest still tracks preserved state before cleanup
 
 
@@ -76,13 +95,8 @@ def test_handle_worktree_merge_cleanup_retry_respects_second_failure(
     mock_check_ready.side_effect = [(False, "dirty state"), (False, "still dirty")]
     mock_invoke_cleanup.return_value = (True, None)
 
-    agent_item = _make_agent_item()
     success, cleaned = handle_worktree_merge(
-        agent_id=agent_item.id,
-        agent_item=agent_item,
-        agent_name="Janitor",
-        worktree_path=Path("C:/worktrees/task-maintenance-test"),
-        repo_root=Path("C:/repo"),
+        _make_merge_context(),
         agent_stats=None,
     )
 
@@ -120,14 +134,7 @@ def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
     mock_abort_merge.return_value = (True, "")
 
     agent_item = _make_agent_item()
-    success, cleaned = handle_worktree_merge(
-        agent_id=agent_item.id,
-        agent_item=agent_item,
-        agent_name="Janitor",
-        worktree_path=Path("C:/worktrees/task-maintenance-test"),
-        repo_root=Path("C:/repo"),
-        agent_stats=None,
-    )
+    success, cleaned = handle_worktree_merge(_make_merge_context(), agent_stats=None)
 
     assert success is True
     assert cleaned is True
@@ -160,15 +167,7 @@ def test_handle_worktree_merge_conflict_cleanup_failure(
     mock_invoke_conflict_cleanup.return_value = (False, None)
     mock_is_merge_in_progress.return_value = True
 
-    agent_item = _make_agent_item()
-    success, cleaned = handle_worktree_merge(
-        agent_id=agent_item.id,
-        agent_item=agent_item,
-        agent_name="Janitor",
-        worktree_path=Path("C:/worktrees/task-maintenance-test"),
-        repo_root=Path("C:/repo"),
-        agent_stats=None,
-    )
+    success, cleaned = handle_worktree_merge(_make_merge_context(), agent_stats=None)
 
     assert success is False
     assert cleaned is False
@@ -578,15 +577,7 @@ def test_handle_worktree_merge_lock_timeout(monkeypatch) -> None:
     with patch("pokepoke.worktrees.worktree_merge_handler.add_uncleaned_worktree") as mock_add, \
          patch("builtins.print"):
 
-        agent_item = _make_agent_item()
-        success, cleaned = handle_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name="Janitor",
-            worktree_path=Path("C:/worktrees/task-test"),
-            repo_root=Path("C:/repo"),
-            agent_stats=None,
-        )
+        success, cleaned = handle_worktree_merge(_make_merge_context(agent_id="test", worktree_path=Path("C:/worktrees/task-test")), agent_stats=None)
 
         assert success is False
         assert cleaned is False
@@ -610,15 +601,7 @@ def test_handle_worktree_merge_unexpected_exception(monkeypatch) -> None:
     with patch("pokepoke.worktrees.worktree_merge_handler.add_uncleaned_worktree") as mock_add, \
          patch("builtins.print"):
 
-        agent_item = _make_agent_item()
-        success, cleaned = handle_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name="Janitor",
-            worktree_path=Path("C:/worktrees/task-test"),
-            repo_root=Path("C:/repo"),
-            agent_stats=None,
-        )
+        success, cleaned = handle_worktree_merge(_make_merge_context(agent_id="test", worktree_path=Path("C:/worktrees/task-test")), agent_stats=None)
 
         assert success is False
         assert cleaned is False

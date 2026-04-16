@@ -1,6 +1,7 @@
 """Workflow management for work item selection and processing."""
 import logging
 import time
+from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -47,36 +48,51 @@ _FAIL_FAST_STATUSES = frozenset({"blocked", "needs_clarification", "too_large"})
 _MAX_GATE_CRASH_RETRIES = _MAX_GATE_TIMEOUT_RETRIES = 3
 _LOCK_TIMEOUT_PER_AGENT, _BACKOFF_BASE_SECONDS, _BACKOFF_MAX_SECONDS = 120.0, 30, 240
 
+
+@dataclass
+class WorkItemConfig:
+    """Configuration bundle for optional process_work_item parameters."""
+    timeout_hours: float = 0
+    run_beta_test: bool = False
+    max_timeout_restarts: int = 3
+    repo_path: str | None = None
+    beads_client: BeadsClient | None = None
+
 def process_work_item(  # noqa: C901
     item: BeadsWorkItem,
     interactive: bool,
-    timeout_hours: float = 0,
-    run_beta_test: bool = False,
     run_logger: 'RunLogger | None' = None,
-    max_timeout_restarts: int = 3,
     agent_id: str | None = None,
-    repo_path: str | None = None,
-    beads_client: BeadsClient | None = None,
+    config: WorkItemConfig | None = None,
 ) -> WorkItemResult:
-    """Process a single work item with timeout protection."""
+    """Process a single work item with timeout protection.
+
+    Args:
+        item: Work item to process
+        interactive: Whether to use interactive mode
+        run_logger: Optional logger for orchestrator events
+        agent_id: Optional agent identifier
+        config: Optional configuration bundle for timeout, beta testing, and beads client
+    """
     register_agent()
-    _assign = beads_client.assign_and_sync_item if beads_client else assign_and_sync_item
-    _comment = beads_client.add_comment if beads_client else add_comment
-    _defer = beads_client.defer_item if beads_client else defer_item
+    cfg = config or WorkItemConfig()
+    _assign = cfg.beads_client.assign_and_sync_item if cfg.beads_client else assign_and_sync_item
+    _comment = cfg.beads_client.add_comment if cfg.beads_client else add_comment
+    _defer = cfg.beads_client.defer_item if cfg.beads_client else defer_item
     _session: WorkItemSession | None = None
     try:
         start_time = time.time()
-        timeout_seconds = timeout_hours * 3600
+        timeout_seconds = cfg.timeout_hours * 3600
         request_count = cleanup_agent_runs = gate_agent_runs = 0
-        config = get_config()
+        global_config = get_config()
         selected_model = select_model_for_item(item)
         _, selected_prompt_template = get_assignment_for_item(item)
         base_agent_id = agent_id or item.id
-        backend_provider = config.ai_backend.provider
-        worktree_lock_timeout = max(float(config.command_timeout), _LOCK_TIMEOUT_PER_AGENT * max(1, int(config.max_parallel_agents)))
+        backend_provider = global_config.ai_backend.provider
+        worktree_lock_timeout = max(float(global_config.command_timeout), _LOCK_TIMEOUT_PER_AGENT * max(1, int(global_config.max_parallel_agents)))
 
         set_current_work_item_id(item.id)
-        repo_name = Path(repo_path).name if repo_path else Path.cwd().name
+        repo_name = Path(cfg.repo_path).name if cfg.repo_path else Path.cwd().name
         set_current_repo_name(repo_name)
 
         terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
@@ -84,11 +100,11 @@ def process_work_item(  # noqa: C901
             work_item_id=item.id, work_item_title=item.title, agent_type="work")
 
         logger.info(f"\n🚀 Processing work item: {item.id} — {item.title}")
-        logger.info(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {f'{timeout_hours}h' if timeout_hours > 0 else 'unlimited'}\n")
+        logger.info(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {f'{cfg.timeout_hours}h' if cfg.timeout_hours > 0 else 'unlimited'}\n")
 
         item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
 
-        max_gate_rejections = config.max_gate_rejections_per_item
+        max_gate_rejections = global_config.max_gate_rejections_per_item
 
         if interactive:
             terminal_ui.ui.stop()
@@ -106,7 +122,7 @@ def process_work_item(  # noqa: C901
         _session = WorkItemSession(item_id=item.id, agent_name=get_agent_name(default="pokepoke"))
         _session._assigned = True
         worktree_path = setup_worktree(item, lock_timeout=worktree_lock_timeout,
-            run_logger=run_logger, item_logger=item_logger, repo_path=repo_path)
+            run_logger=run_logger, item_logger=item_logger, repo_path=cfg.repo_path)
 
         if worktree_path is None:
             logger.error(f"↩️  Returning {item.id} to queue (worktree creation failed)")
@@ -115,7 +131,7 @@ def process_work_item(  # noqa: C901
         _session.worktree_path = str(worktree_path)
         _session._worktree_created = True
         _session._branch_created = True
-        pokepoke_root = Path(repo_path) if repo_path else Path.cwd()
+        pokepoke_root = Path(cfg.repo_path) if cfg.repo_path else Path.cwd()
         worktree_cwd = str(worktree_path)
         logger.info(f"   Working directory: {worktree_cwd}\n")
         last_feedback = ""
@@ -134,7 +150,7 @@ def process_work_item(  # noqa: C901
             error="Session aborted due to application shutdown", attempt_count=0)
 
         # Load previous worker context from beads comments (persists across sessions)
-        _get_comments = beads_client.get_item_comments if beads_client else None
+        _get_comments = cfg.beads_client.get_item_comments if cfg.beads_client else None
         prior_contexts = get_worker_contexts(item.id, get_comments_fn=_get_comments)
         previous_worker_context = format_worker_context_for_prompt(prior_contexts)
         if previous_worker_context:
@@ -144,13 +160,13 @@ def process_work_item(  # noqa: C901
             elapsed = time.time() - start_time
             if timeout_seconds > 0 and elapsed >= timeout_seconds:
                 timeout_restart_count += 1
-                if timeout_restart_count > max_timeout_restarts:
+                if timeout_restart_count > cfg.max_timeout_restarts:
                     _log_failure(run_logger, item_logger, request_count)
                     terminal_ui.ui.set_current_agent(None)
                     return _fail_result(request_count=request_count, stats=accumulated_stats,
                                         cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
-                                        failure_reason=f"Exceeded max timeout restarts ({max_timeout_restarts})")
-                logger.info(f"\n\u23f1\ufe0f  TIMEOUT: Restarting {item.id} (attempt {timeout_restart_count}/{max_timeout_restarts}), backing off {backoff_delay}s")
+                                        failure_reason=f"Exceeded max timeout restarts ({cfg.max_timeout_restarts})")
+                logger.info(f"\n\u23f1\ufe0f  TIMEOUT: Restarting {item.id} (attempt {timeout_restart_count}/{cfg.max_timeout_restarts}), backing off {backoff_delay}s")
                 time.sleep(backoff_delay)
                 backoff_delay = min(backoff_delay * 2, _BACKOFF_MAX_SECONDS)
                 start_time = time.time()
@@ -238,13 +254,13 @@ def process_work_item(  # noqa: C901
                     logger.warning(f"\n⚠️  CLI process crashed: {result.error}")
 
                 retry, feedback = _maybe_retry_copilot(
-                    result, copilot_failure_count, config.max_copilot_failure_retries, run_logger, item.id)
+                    result, copilot_failure_count, global_config.max_copilot_failure_retries, run_logger, item.id)
                 if retry:
                     last_feedback = feedback
                     last_retry_was_gate_feedback = False  # Not a gate rejection
                     continue
 
-                _maybe_decompose(item, copilot_failure_count, gate_rejection_count, config)
+                _maybe_decompose(item, copilot_failure_count, gate_rejection_count, global_config)
                 break
 
             _log_commit_status(worktree_cwd)
@@ -263,7 +279,7 @@ def process_work_item(  # noqa: C901
                 break
 
             cleanup_success, cleanup_runs = run_cleanup_with_timeout(
-                item, result, pokepoke_root, start_time, timeout_seconds, timeout_hours,
+                item, result, pokepoke_root, start_time, timeout_seconds, cfg.timeout_hours,
                 worktree_cwd, parent_agent_id=base_agent_id)
             cleanup_agent_runs += cleanup_runs
 
@@ -273,7 +289,7 @@ def process_work_item(  # noqa: C901
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
                                     failure_reason="Cleanup agent failed to resolve uncommitted changes")
-            if not config.gate_agent_enabled:
+            if not global_config.gate_agent_enabled:
                 logger.warning("\n⏭️  Gate Agent disabled via config — skipping verification")
                 gate_success = True
                 break
@@ -418,7 +434,7 @@ def process_work_item(  # noqa: C901
             request_count=request_count, accumulated_stats=accumulated_stats,
             cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
             gate_success=gate_success, run_logger=run_logger, item_logger=item_logger,
-            base_agent_id=base_agent_id, run_beta_test=run_beta_test, repo_path=repo_path,
+            base_agent_id=base_agent_id, run_beta_test=cfg.run_beta_test, repo_path=cfg.repo_path,
         ))
         if finalized:
             _session = None  # Finalization succeeded — skip cleanup

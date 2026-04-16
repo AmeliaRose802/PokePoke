@@ -147,7 +147,11 @@ def _parallel_process_item(
     increment_total_attempts(item.id)
     try:
         with terminal_ui.ui.agent_output_for(agent_id):
-            result = process_work_item(item, interactive=False, run_logger=run_logger, agent_id=agent_id, repo_path=repo_path)
+            from pokepoke.orchestration.workflow import WorkItemConfig
+            result = process_work_item(
+                item, interactive=False, run_logger=run_logger, agent_id=agent_id,
+                config=WorkItemConfig(repo_path=repo_path)
+            )
         success = result.success
         _push("success" if success else "failed")
         emoji = "\u2705" if success else "\u274c"

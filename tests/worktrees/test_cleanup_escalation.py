@@ -14,7 +14,6 @@ from pokepoke.worktrees.cleanup_escalation import (
     retry_failed_cleanups,
 )
 
-
 # ---------------------------------------------------------------------------
 # _get_quarantine_dir
 # ---------------------------------------------------------------------------
