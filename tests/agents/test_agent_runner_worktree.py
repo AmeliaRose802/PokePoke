@@ -127,6 +127,7 @@ class TestRunWorktreeAgent:
         mock_invoke.side_effect = RuntimeError("Boom")
         mock_cleanup_loop.return_value = (False, 0)
         mock_branch_has_commits.return_value = False
+        mock_getcwd.return_value = "/tmp"
 
         item = BeadsWorkItem(
             id="1", title="T", description="D",

@@ -280,14 +280,36 @@ class TestCollectDoneFutures:
 
 
 class TestCollectDoneFuturesWait:
-    """Tests for _collect_done_futures wait fallback path."""
+    """Tests for _collect_done_futures non-blocking polling behavior."""
 
-    def test_waits_for_not_done_futures(self) -> None:
-        """When no futures are immediately done, falls back to wait()."""
-        # Create a future that is not immediately done but completes during wait
+    def test_not_done_futures_skipped(self) -> None:
+        """When no futures are immediately done, returns without processing (non-blocking)."""
+        # collect_done_futures uses non-blocking .done() polling only,
+        # so a future that hasn't completed yet is simply skipped.
         with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
             import time as _time
-            fut = pool.submit(lambda: (_time.sleep(0.1), WorkItemResult(success=True, request_count=1))[1])
+            fut = pool.submit(lambda: (_time.sleep(0.5), WorkItemResult(success=True, request_count=1))[1])
+            item = _make_item("w1")
+            futures = {fut: item}
+            failed: set[str] = set()
+            stats = SessionStats(agent_stats=AgentStats())
+            record_fn = Mock()
+
+            _total, any_ok, _successes, _failures = _collect_done_futures(
+                futures, failed, 0, stats, Mock(), record_fn,
+            )
+
+            # Not-yet-done futures are skipped; no results collected
+            assert any_ok is False
+            assert record_fn.call_count == 0
+            # Future remains in the dict for next polling pass
+            assert len(futures) == 1
+
+    def test_already_done_futures_collected(self) -> None:
+        """When futures are already done, they are collected and processed."""
+        with concurrent.futures.ThreadPoolExecutor(max_workers=1) as pool:
+            fut = pool.submit(lambda: WorkItemResult(success=True, request_count=1))
+            fut.result()  # wait for completion
             item = _make_item("w1")
             futures = {fut: item}
             failed: set[str] = set()

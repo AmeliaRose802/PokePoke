@@ -22,7 +22,8 @@ from pokepoke.desktop import terminal_ui
 from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.stats.metrics_context import agent_type_context
 from pokepoke.stats.stats import parse_agent_stats
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 from pokepoke.utils.constants import STATUS_IN_PROGRESS
 from pokepoke.worktrees.worktree_cleanup import (
     add_uncleaned_worktree,

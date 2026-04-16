@@ -35,20 +35,17 @@ from pokepoke.orchestration.workflow_helpers import (
 )
 from pokepoke.protocols import BeadsClient
 from pokepoke.stats.metrics_context import set_current_repo_name, set_current_work_item_id
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, WorkItemResult
+from pokepoke.types import AgentStats, BeadsWorkItem, WorkItemResult
+from pokepoke.types_agent import CopilotResult
 from pokepoke.utils.shutdown import is_shutting_down, register_agent, unregister_agent
 from pokepoke.worktrees.worktrees import cleanup_worktree, create_worktree  # noqa: F401 — kept for test patching
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import RunLogger
-
 logger = logging.getLogger(__name__)
-
 _FAIL_FAST_STATUSES = frozenset({"blocked", "needs_clarification", "too_large"})
 _MAX_GATE_CRASH_RETRIES = _MAX_GATE_TIMEOUT_RETRIES = 3
-_LOCK_TIMEOUT_PER_AGENT = 120.0
-_BACKOFF_BASE_SECONDS = 30
-_BACKOFF_MAX_SECONDS = 240
+_LOCK_TIMEOUT_PER_AGENT, _BACKOFF_BASE_SECONDS, _BACKOFF_MAX_SECONDS = 120.0, 30, 240
 
 def process_work_item(  # noqa: C901
     item: BeadsWorkItem,

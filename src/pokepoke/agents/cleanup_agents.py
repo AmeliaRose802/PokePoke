@@ -8,7 +8,8 @@ from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import commit_all_changes, verify_main_repo_clean
 from pokepoke.models.ai_backends import invoke_copilot
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 from pokepoke.utils.constants import (
     CLEANUP_AGENT_TIMEOUT,
     CLEANUP_AGGREGATE_TIMEOUT,

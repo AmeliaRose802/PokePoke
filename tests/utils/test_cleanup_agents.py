@@ -18,7 +18,8 @@ from pokepoke.agents.cleanup_agents import (
     load_prompt_file,
     run_cleanup_loop,
 )
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 
 
 class TestCleanupAgents:
@@ -923,7 +924,9 @@ class TestWorktreeCleanupPromptSafety:
 
         # Verify the prompt passed to _run_main_repo_agent includes the PID
         call_args = mock_run_agent.call_args
-        prompt_passed = call_args[1].get('agent_prompt') or call_args[0][2]
+        # _run_main_repo_agent signature: (config: AgentRunnerConfig, agent_prompt: str, cwd: str | None = None, add_parent_dir: bool = False)
+        # The prompt is the second positional argument (index 1)
+        prompt_passed = call_args[0][1]
         assert str(os.getpid()) in prompt_passed, "Orchestrator PID must be injected into cleanup prompt"
         assert "DO NOT TOUCH" in prompt_passed
 

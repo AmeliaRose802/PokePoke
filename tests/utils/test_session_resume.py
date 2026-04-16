@@ -10,7 +10,8 @@ from pokepoke.models.copilot_sdk import (
     build_resume_prompt,
     invoke_copilot_sdk_sync,
 )
-from pokepoke.types import BeadsWorkItem, CopilotResult
+from pokepoke.types import BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 
 # ── Fixtures ─────────────────────────────────────────────────────────────────
 
@@ -138,7 +139,7 @@ class TestGateAgentResult:
     """Tests for GateAgentResult dataclass."""
 
     def test_tuple_unpacking(self):
-        from pokepoke.types import GateAgentResult
+        from pokepoke.types_agent import GateAgentResult
         result = GateAgentResult(success=True, reason="ok")
         success, reason, stats, crashed = result
         assert success is True
@@ -147,7 +148,7 @@ class TestGateAgentResult:
         assert crashed is False
 
     def test_timeout_fields(self):
-        from pokepoke.types import GateAgentResult
+        from pokepoke.types_agent import GateAgentResult
         result = GateAgentResult(
             success=False, reason="timed out", is_timeout=True,
             session_id="sess-123", last_output_summary="test output",
@@ -161,7 +162,7 @@ class TestGateAgentResult:
         assert crashed is False
 
     def test_len(self):
-        from pokepoke.types import GateAgentResult
+        from pokepoke.types_agent import GateAgentResult
         result = GateAgentResult(success=True, reason="ok")
         assert len(result) == 4
 
