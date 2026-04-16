@@ -24,7 +24,8 @@ except (ImportError, AttributeError):
         _approve_all = None
 
 from pokepoke.desktop import terminal_ui
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, parse_work_agent_outcome
+from pokepoke.types import AgentStats, BeadsWorkItem, parse_work_agent_outcome
+from pokepoke.types_agent import CopilotResult
 from pokepoke.utils.command_validator import validate_and_rewrite_powershell_tool_args
 from pokepoke.utils.prompt_sanitizer import sanitize_prompt_input, sanitize_short
 from pokepoke.utils.shutdown import is_shutting_down

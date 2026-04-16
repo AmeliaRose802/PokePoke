@@ -14,7 +14,8 @@ from pokepoke.models.copilot_sdk import (
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
 )
-from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
+from pokepoke.types import BeadsWorkItem, RetryConfig
+from pokepoke.types_agent import CopilotResult
 from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
 from pokepoke.utils.logging_utils import ItemLogger
 
