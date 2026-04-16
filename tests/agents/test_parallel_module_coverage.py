@@ -351,7 +351,10 @@ class TestParallelProcessItem:
         sem = threading.Semaphore(0)
         _parallel_process_item(_make_item(), _make_run_logger(), sem, repo_path="/tmp/repo")
         mock_pw.assert_called_once()
-        assert mock_pw.call_args.kwargs.get("repo_path") == "/tmp/repo"
+        # repo_path is now in the config object, not a direct kwarg
+        call_config = mock_pw.call_args.kwargs.get("config")
+        assert call_config is not None
+        assert call_config.repo_path == "/tmp/repo"
 
 
 # ===================================================================

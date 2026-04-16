@@ -298,9 +298,13 @@ class TestCollectDoneFutures:
         assert total == 0
         assert any_success is False
 
-    @patch('concurrent.futures.wait')
-    def test_collect_done_futures_waits_for_completion(self, mock_wait) -> None:
-        """Wait for futures to complete if none are immediately done."""
+    def test_collect_done_futures_uses_nonblocking_polling(self) -> None:
+        """Verify that collect_done_futures uses non-blocking .done() polling instead of wait().
+
+        The fix for PokePoke-82v1j removed concurrent.futures.wait() which could hang
+        indefinitely. This test verifies the function never calls wait() and instead
+        relies solely on non-blocking .done() checks.
+        """
         future = Mock(spec=concurrent.futures.Future)
         future.done.return_value = False
         item = self._make_work_item()
@@ -311,14 +315,16 @@ class TestCollectDoneFutures:
         run_logger = Mock(spec=RunLogger)
         record_fn = Mock()
 
-        # Mock wait to return empty set (no futures completed)
-        mock_wait.return_value = (set(), {future})
+        # Call collect_done_futures - it should return immediately without calling wait()
+        with patch('concurrent.futures.wait') as mock_wait:
+            _collect_done_futures(
+                futures, failed_claim_ids, 0, session_stats, run_logger, record_fn
+            )
+            # Verify wait() was never called
+            mock_wait.assert_not_called()
 
-        _collect_done_futures(
-            futures, failed_claim_ids, 0, session_stats, run_logger, record_fn
-        )
-
-        mock_wait.assert_called_once()
+        # Verify that .done() was called for non-blocking polling
+        future.done.assert_called()
 
     def test_collect_done_futures_records_successful_result(self) -> None:
         """Record successful work item result."""

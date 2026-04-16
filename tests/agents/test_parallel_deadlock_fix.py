@@ -44,8 +44,8 @@ def test_health_monitoring_detects_stalled_agents():
     )
 
     futures[fut] = item
-    # Set start time to 11 minutes ago (beyond 10 minute threshold)
-    future_start_times[fut] = time.time() - 660.0
+    # Set start time to 4 hours ago (beyond 3 hour threshold)
+    future_start_times[fut] = time.time() - 14400.0
 
     # Run health check
     stalled_count = _check_agent_health(futures, future_start_times, run_logger, lock=None)
@@ -76,7 +76,7 @@ def test_health_monitoring_cancels_multiple_stalled_agents():
         )
 
         futures[fut] = item
-        future_start_times[fut] = time.time() - 660.0  # 11 minutes ago
+        future_start_times[fut] = time.time() - 14400.0  # 4 hours ago
         stalled_futures.append(fut)
 
     # Run health check (it will try to cancel stalled futures)
@@ -118,7 +118,7 @@ def test_health_check_invoked_when_future_start_times_provided():
     )
 
     futures_dict[fut] = item
-    future_start_times[fut] = time.time() - 660.0  # 11 minutes ago
+    future_start_times[fut] = time.time() - 14400.0  # 4 hours ago
 
     # Call collect_done_futures with future_start_times
     # This should trigger health monitoring

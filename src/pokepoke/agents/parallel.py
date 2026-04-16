@@ -34,7 +34,7 @@ from pokepoke.beads.beads import (
 from pokepoke.desktop import terminal_ui
 from pokepoke.git.repo_check import check_and_commit_main_repo
 from pokepoke.orchestration.work_item_selection import select_multiple_items
-from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.orchestration.workflow import WorkItemConfig, process_work_item
 from pokepoke.types import WorkItemResult
 from pokepoke.types_beads import BeadsWorkItem, RecordFn
 from pokepoke.types_stats import SessionStats
@@ -147,7 +147,6 @@ def _parallel_process_item(
     increment_total_attempts(item.id)
     try:
         with terminal_ui.ui.agent_output_for(agent_id):
-            from pokepoke.orchestration.workflow import WorkItemConfig
             result = process_work_item(
                 item, interactive=False, run_logger=run_logger, agent_id=agent_id,
                 config=WorkItemConfig(repo_path=repo_path)

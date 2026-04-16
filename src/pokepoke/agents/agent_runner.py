@@ -32,7 +32,7 @@ from pokepoke.worktrees.worktree_cleanup import (
     remove_from_manifest,
     retry_failed_cleanups,
 )
-from pokepoke.worktrees.worktree_merge_handler import handle_worktree_merge
+from pokepoke.worktrees.worktree_merge_handler import WorktreeMergeContext, handle_worktree_merge
 from pokepoke.worktrees.worktrees import cleanup_worktree, create_worktree
 
 if TYPE_CHECKING:
@@ -258,7 +258,6 @@ def _reconcile_worktree_branch(
         config.agent_name,
     )
     agent_stats = parse_agent_stats(result.output) if result.output else None
-    from pokepoke.worktrees.worktree_merge_handler import WorktreeMergeContext
     merge_success, _worktree_cleaned = handle_worktree_merge(
         WorktreeMergeContext(
             agent_id=config.agent_id,
@@ -304,7 +303,6 @@ def _handle_successful_agent(
 
     logger.info("All changes committed and validated")
     agent_stats = parse_agent_stats(result.output) if result.output else None
-    from pokepoke.worktrees.worktree_merge_handler import WorktreeMergeContext
     merge_success, worktree_cleaned = handle_worktree_merge(
         WorktreeMergeContext(
             agent_id=config.agent_id,

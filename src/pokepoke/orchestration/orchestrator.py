@@ -321,6 +321,8 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:  # noqa: C901
     return 0
 
 def run_orchestrator(
+    # Entry point with 6 params representing distinct CLI options; all have defaults.
+    # Config dataclass not used here as it would reduce clarity at the CLI boundary.
     interactive: bool = True, continuous: bool = False,
     run_beta_first: bool = False, agent_name_override: str | None = None,
     max_parallel_agents: int = 1,
