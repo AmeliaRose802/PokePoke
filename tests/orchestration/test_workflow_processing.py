@@ -12,7 +12,7 @@ from unittest.mock import patch
 
 import pytest
 
-from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.orchestration.workflow import WorkItemConfig, process_work_item
 from pokepoke.types_agent import CopilotResult, GateAgentResult
 from pokepoke.types_stats import AgentStats
 from tests.orchestration.conftest import (
@@ -388,7 +388,8 @@ class TestProcessWorkItem:
                  patch(PATCH_WF_ADD_COMMENT), \
                  patch('time.sleep'):
                 result = process_work_item(
-                    item, interactive=True, timeout_hours=0.001, max_timeout_restarts=2,
+                    item, interactive=True,
+                    config=WorkItemConfig(timeout_hours=0.001, max_timeout_restarts=2),
                 )
 
             assert result.success is False
@@ -416,7 +417,8 @@ class TestProcessWorkItem:
             mocks['time'].side_effect = time_side_effect
 
             result = process_work_item(
-                item, interactive=True, max_timeout_restarts=3,
+                item, interactive=True,
+                config=WorkItemConfig(max_timeout_restarts=3),
             )
 
             assert result.success is True
@@ -442,7 +444,8 @@ class TestProcessWorkItem:
                  patch(PATCH_WF_ADD_COMMENT), \
                  patch('time.sleep') as mock_sleep:
                 result = process_work_item(
-                    item, interactive=True, timeout_hours=0.001, max_timeout_restarts=3,
+                    item, interactive=True,
+                    config=WorkItemConfig(timeout_hours=0.001, max_timeout_restarts=3),
                 )
 
             assert result.success is False
@@ -475,7 +478,8 @@ class TestProcessWorkItem:
                  patch('time.sleep') as mock_sleep:
                 # Allow enough restarts to hit the cap: 30→60→120→240→240
                 result = process_work_item(
-                    item, interactive=True, timeout_hours=0.001, max_timeout_restarts=5,
+                    item, interactive=True,
+                    config=WorkItemConfig(timeout_hours=0.001, max_timeout_restarts=5),
                 )
 
             assert result.success is False
@@ -511,7 +515,8 @@ class TestProcessWorkItem:
             with patch('time.sleep') as mock_sleep:
                 mock_sleep.side_effect = sleep_side_effect
                 result = process_work_item(
-                    item, interactive=True, timeout_hours=0.001, max_timeout_restarts=3,
+                    item, interactive=True,
+                    config=WorkItemConfig(timeout_hours=0.001, max_timeout_restarts=3),
                 )
 
             assert result.success is True
