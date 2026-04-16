@@ -7,7 +7,8 @@ import pytest
 from pokepoke.agents.agent_runner import (
     run_gate_agent,
 )
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult, GateAgentResult
+from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.types_agent import CopilotResult, GateAgentResult
 
 
 class TestRunGateAgent:

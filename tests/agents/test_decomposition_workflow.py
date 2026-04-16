@@ -6,7 +6,7 @@ import pytest
 
 from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.orchestration.workflow_helpers import _maybe_decompose
-from pokepoke.types import CopilotResult, GateAgentResult
+from pokepoke.types_agent import CopilotResult, GateAgentResult
 from tests.orchestration.conftest import make_process_item_mocks, make_work_item
 
 # Patch targets for decomposition

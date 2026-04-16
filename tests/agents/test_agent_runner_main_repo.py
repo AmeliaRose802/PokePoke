@@ -4,7 +4,8 @@ from pathlib import Path
 from unittest.mock import Mock, patch
 
 from pokepoke.agents.agent_runner import AgentRunnerConfig
-from pokepoke.types import AgentStats, BeadsWorkItem, CopilotResult
+from pokepoke.types import AgentStats, BeadsWorkItem
+from pokepoke.types_agent import CopilotResult
 
 
 class TestRunMainRepoAgent:

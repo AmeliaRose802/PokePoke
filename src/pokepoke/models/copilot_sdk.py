@@ -18,7 +18,8 @@ except ImportError:
 
 from pokepoke.config import DEFAULT_MODEL, FALLBACK_MODEL, get_config
 from pokepoke.desktop import terminal_ui
-from pokepoke.types import BeadsWorkItem, CopilotResult, RetryConfig
+from pokepoke.types import BeadsWorkItem, RetryConfig
+from pokepoke.types_agent import CopilotResult
 from pokepoke.utils.constants import DEFAULT_AGENT_TIMEOUT
 from pokepoke.utils.process_utils import (
     get_active_pid_registry,

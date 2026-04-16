@@ -14,7 +14,8 @@ from pokepoke.prompts.prompts import PromptService
 from pokepoke.stats.gate_rejection_tracker import record_gate_check
 from pokepoke.stats.metrics_context import agent_type_context
 from pokepoke.stats.stats import parse_agent_stats
-from pokepoke.types import BeadsWorkItem, GateAgentResult
+from pokepoke.types import BeadsWorkItem
+from pokepoke.types_agent import GateAgentResult
 from pokepoke.utils.output_sanitizer import contains_process_monitor_noise, strip_process_monitor_lines
 
 if TYPE_CHECKING:
