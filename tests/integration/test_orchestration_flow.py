@@ -255,7 +255,7 @@ def test_process_work_item_successful_run(workflow_harness: WorkflowHarness):
     )
     workflow_harness.gate_results.append((True, "Looks good", AgentStats()))
 
-    result = workflow.process_work_item(item, interactive=False, run_logger=None, run_beta_test=False)
+    result = workflow.process_work_item(item, interactive=False, run_logger=None)
 
     assert result.success is True
     assert result.request_count == 1
@@ -294,7 +294,7 @@ def test_process_work_item_gate_rejection_retries_with_feedback(workflow_harness
         ]
     )
 
-    result = workflow.process_work_item(item, interactive=False, run_logger=None, run_beta_test=False)
+    result = workflow.process_work_item(item, interactive=False, run_logger=None)
 
     assert result.success is True
     assert result.request_count == 2
@@ -332,7 +332,7 @@ def test_process_work_item_gate_crash_retries_gate_not_work_agent(workflow_harne
         ]
     )
 
-    result = workflow.process_work_item(item, interactive=False, run_logger=None, run_beta_test=False)
+    result = workflow.process_work_item(item, interactive=False, run_logger=None)
 
     assert result.success is True
     # Work agent should only have been called once — the crash retried the gate, not work

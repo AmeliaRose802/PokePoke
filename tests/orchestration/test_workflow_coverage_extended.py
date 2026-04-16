@@ -12,7 +12,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
-from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.orchestration.workflow import WorkItemConfig, process_work_item
 from pokepoke.types import WorkItemResult
 from pokepoke.types_agent import CopilotResult, GateAgentResult
 from pokepoke.types_beads import BeadsWorkItem
@@ -399,7 +399,7 @@ class TestFailFastOutcomes:
         )
         ctx = _PatchCtx(patches, ui, finalize_rv=False)
         with ctx:
-            process_work_item(item, interactive=False, beads_client=client)
+            process_work_item(item, interactive=False, config=WorkItemConfig(beads_client=client))
 
         # Gate should NOT be called for fail-fast outcomes
         ctx.mocks["run_gate_agent"].assert_not_called()

@@ -21,7 +21,7 @@ import pytest
 from pokepoke.agents.decomposition_agent import DecompositionResult
 from pokepoke.orchestration.finalization import ResultContext, _finalize_item_result
 from pokepoke.orchestration.work_item_session import WorkItemSession
-from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.orchestration.workflow import WorkItemConfig, process_work_item
 from pokepoke.orchestration.workflow_helpers import (
     _fail_result,
     _maybe_decompose,
@@ -880,8 +880,10 @@ class TestTimeoutRestartExhaustion:
             mocks['time'].side_effect = time_side_effect
             result = process_work_item(
                 item, interactive=False,
-                timeout_hours=0.001,  # Very short timeout
-                max_timeout_restarts=0,  # No restarts allowed
+                config=WorkItemConfig(
+                    timeout_hours=0.001,  # Very short timeout
+                    max_timeout_restarts=0,  # No restarts allowed
+                ),
             )
 
             assert result.success is False

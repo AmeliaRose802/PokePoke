@@ -10,7 +10,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
-from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.orchestration.workflow import WorkItemConfig, process_work_item
 from pokepoke.orchestration.workflow_helpers import setup_worktree
 from pokepoke.types import WorkItemResult
 from pokepoke.types_agent import CopilotResult, GateAgentResult
@@ -256,7 +256,7 @@ class TestProcessWorkItemTimeoutRestart:
             return 100000.0  # way past any timeout
         monkeypatch.setattr("pokepoke.orchestration.workflow.time.time", fake_time)
         # timeout_hours=0.001 → timeout_seconds≈3.6, max_timeout_restarts=0
-        result = process_work_item(_item(), interactive=False, timeout_hours=0.001, max_timeout_restarts=0)
+        result = process_work_item(_item(), interactive=False, config=WorkItemConfig(timeout_hours=0.001, max_timeout_restarts=0))
         assert result.success is False
 
     def test_timeout_restarts_then_succeeds(self, monkeypatch, _mock_workflow_deps):
@@ -278,7 +278,7 @@ class TestProcessWorkItemTimeoutRestart:
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=True, request_count=1), True),
         )
-        result = process_work_item(_item(), interactive=False, timeout_hours=0.001, max_timeout_restarts=3)
+        result = process_work_item(_item(), interactive=False, config=WorkItemConfig(timeout_hours=0.001, max_timeout_restarts=3))
         assert result.success is True
 
 
@@ -575,7 +575,7 @@ class TestProcessWorkItemRepoPath:
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=True, request_count=1), True),
         )
-        result = process_work_item(_item(), interactive=False, repo_path="/custom/path")
+        result = process_work_item(_item(), interactive=False, config=WorkItemConfig(repo_path="/custom/path"))
         assert result.success is True
 
 
