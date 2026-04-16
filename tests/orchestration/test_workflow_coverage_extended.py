@@ -212,13 +212,16 @@ def _run(item=None, interactive=False, beads_client=None, timeout_hours=0,
     patches, ui = _base_patches(**patch_kwargs)
     finalize_rv = patch_kwargs.get("finalize_rv", True)
     ctx = _PatchCtx(patches, ui, finalize_rv=finalize_rv)
+    wi_config = WorkItemConfig(
+        timeout_hours=timeout_hours,
+        max_timeout_restarts=max_timeout_restarts,
+        beads_client=beads_client,
+    )
     with ctx:
         result = process_work_item(
             item,
             interactive=interactive,
-            timeout_hours=timeout_hours,
-            max_timeout_restarts=max_timeout_restarts,
-            beads_client=beads_client,
+            config=wi_config,
         )
     return result, ctx
 
@@ -462,8 +465,7 @@ class TestTimeoutRestart:
             result = process_work_item(
                 item,
                 interactive=False,
-                timeout_hours=1.0,
-                max_timeout_restarts=3,
+                config=WorkItemConfig(timeout_hours=1.0, max_timeout_restarts=3),
             )
 
         assert result.success is True
@@ -504,8 +506,7 @@ class TestTimeoutRestartExhausted:
                 result = process_work_item(
                     item,
                     interactive=False,
-                    timeout_hours=0.001,
-                    max_timeout_restarts=2,
+                    config=WorkItemConfig(timeout_hours=0.001, max_timeout_restarts=2),
                 )
 
         assert result.success is False
