@@ -219,7 +219,11 @@ def run_tests_with_coverage(
     else:
         max_workers = min(4, max(1, multiprocessing.cpu_count() // 2))
 
-    basetemp = repo_root / ".pytest_tmp"
+    # Use a CWD-unique basetemp to prevent xdist worker collisions when
+    # multiple worktrees run pre-commit hooks concurrently.
+    import hashlib
+    cwd_hash = hashlib.sha256(str(Path.cwd().resolve()).encode()).hexdigest()[:8]
+    basetemp = repo_root / ".pytest_tmp" / f"wt-{cwd_hash}"
 
     cmd = [
         sys.executable,
