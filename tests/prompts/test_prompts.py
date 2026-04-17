@@ -716,13 +716,21 @@ def test_template_include_depth_limit(tmp_path):
 # ── Label-Based Template Selection Tests ─────────────────────────────────
 
 
-def test_build_prompt_with_label_template_selection():
+def test_build_prompt_with_label_template_selection(tmp_path, monkeypatch):
     """Test that prompt template is selected based on work item labels."""
     from pokepoke.config import reset_config
     from pokepoke.models.sdk_helpers import build_prompt_from_work_item
     from pokepoke.types import BeadsWorkItem
 
     reset_config()
+
+    # Create a fake orchestrator-work template in a temp builtin dir
+    builtin_dir = tmp_path / "builtin_prompts"
+    builtin_dir.mkdir()
+    (builtin_dir / "orchestrator-work.md").write_text(
+        "# Orchestrator Context\nHandle orchestrator tasks.\n"
+        "{{work_item_id}} {{work_item_title}} {{work_item_description}}"
+    )
 
     # Mock config with prompt_templates mapping
     import pokepoke.config as config_module
@@ -734,6 +742,15 @@ def test_build_prompt_with_label_template_selection():
         return cfg
 
     config_module.get_config = mock_get_config
+
+    # Patch PromptService to use our temp builtin dir
+    from pokepoke.prompts.prompts import PromptService
+    _orig_init = PromptService.__init__
+
+    def _patched_init(self, prompts_dir=None, builtin_dir_arg=None):
+        _orig_init(self, prompts_dir=prompts_dir, builtin_dir=builtin_dir)
+
+    monkeypatch.setattr(PromptService, "__init__", _patched_init)
 
     try:
         work_item = BeadsWorkItem(
