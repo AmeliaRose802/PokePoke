@@ -100,22 +100,19 @@ def _drain_orphaned_futures(
         return
     run_logger.log_orchestrator(f"Draining {len(orphaned)} orphan(s)", level="WARNING")
 
-    # Give in-progress futures a grace period to finish naturally.
-    pending_futs = [f for f, _ in orphaned if not f.done()]
-    if pending_futs:
-        grace_seconds = 300
-        run_logger.log_orchestrator(f"Waiting up to {grace_seconds}s for {len(pending_futs)} in-progress agent(s)")
-        concurrent.futures.wait(pending_futs, timeout=grace_seconds)
-        done_count = sum(1 for f in pending_futs if f.done())
-        run_logger.log_orchestrator(f"After grace period: {done_count}/{len(pending_futs)} agent(s) completed")
-
     for fut, item in orphaned:
+        if not fut.done():
+            # Worker still running — preserve its worktree and assignment so the
+            # work isn't lost.  Startup reconciliation will handle it next session.
+            run_logger.log_orchestrator(
+                f"Orphan {item.id} still in progress — preserving worktree and assignment",
+                level="WARNING")
+            continue
         result = WorkItemResult(success=False, request_count=0)
-        if fut.done():
-            try:
-                result = fut.result(timeout=0)
-            except Exception as e:
-                run_logger.log_orchestrator(f"Failed to retrieve result for {item.id}: {e}", level="WARNING")
+        try:
+            result = fut.result(timeout=0)
+        except Exception as e:
+            run_logger.log_orchestrator(f"Failed to retrieve result for {item.id}: {e}", level="WARNING")
         try:
             record_fn(item, result, session_stats, run_logger)
         except Exception as e:

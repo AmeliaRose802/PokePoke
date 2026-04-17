@@ -110,14 +110,25 @@ def _safe_unassign(item_id: str, run_logger: RunLogger, reason: str) -> None:
 def _drain_orphaned_futures(
     futures: dict[_Future, BeadsWorkItem], run_logger: RunLogger, lock: threading.Lock | None = None,
 ) -> None:
-    """Cancel and drain any remaining futures when shutting down."""
+    """Drain remaining futures on shutdown, preserving in-progress worktrees."""
     snapshot, _ = _locked_snapshot(lock, futures)
     for fut in snapshot:
-        if not fut.done():
-            fut.cancel()
         item = _locked_pop(lock, futures, fut)
-        if item:
-            _safe_unassign(item.id, run_logger, "orphaned")
+        if not item:
+            continue
+        if not fut.done():
+            # Still running — preserve worktree and assignment for next session.
+            run_logger.log_orchestrator(
+                f"Shutdown: {item.id} still in progress — preserving worktree", level="WARNING")
+            continue
+        try:
+            result = fut.result(timeout=0)
+            if result.success:
+                run_logger.log_orchestrator(f"Shutdown: {item.id} completed successfully")
+                continue
+        except Exception:
+            pass
+        _safe_unassign(item.id, run_logger, "orphaned")
 def _update_failed_ids(
     lock: threading.Lock | None, failed_claim_ids: set[str],
     item_id: str, success: bool, was_exception: bool, request_count: int,
