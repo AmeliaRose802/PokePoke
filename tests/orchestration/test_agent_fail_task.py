@@ -24,6 +24,7 @@ from pokepoke.orchestration.work_item_session import WorkItemSession
 from pokepoke.orchestration.workflow import WorkItemConfig, process_work_item
 from pokepoke.orchestration.workflow_helpers import (
     _fail_result,
+    _log_failure,
     _maybe_decompose,
     _maybe_retry_copilot,
     run_cleanup_with_timeout,
@@ -888,3 +889,582 @@ class TestTimeoutRestartExhaustion:
 
             assert result.success is False
             mocks['session_cleanup'].assert_called()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _log_failure with loggers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestLogFailure:
+    """Tests for _log_failure helper."""
+
+    def test_logs_when_both_loggers_present(self) -> None:
+        """Both loggers receive calls when provided."""
+        from unittest.mock import Mock
+        run_logger = Mock()
+        item_logger = Mock()
+        _log_failure(run_logger, item_logger, request_count=5)
+        item_logger.log_summary.assert_called_once_with(False, 5)
+        run_logger.log_orchestrator.assert_called_once()
+        assert "5 agent requests" in run_logger.log_orchestrator.call_args[0][0]
+        assert "FAILURE" in run_logger.log_orchestrator.call_args[0][0]
+
+    def test_noop_when_run_logger_is_none(self) -> None:
+        """No error when run_logger is None."""
+        from unittest.mock import Mock
+        item_logger = Mock()
+        _log_failure(None, item_logger, request_count=1)
+        item_logger.log_summary.assert_not_called()
+
+    def test_noop_when_item_logger_is_none(self) -> None:
+        """No error when item_logger is None."""
+        from unittest.mock import Mock
+        run_logger = Mock()
+        _log_failure(run_logger, None, request_count=1)
+        run_logger.log_orchestrator.assert_not_called()
+
+    def test_noop_when_both_loggers_none(self) -> None:
+        """No error when both loggers are None."""
+        _log_failure(None, None, request_count=0)
+
+    def test_default_request_count_is_zero(self) -> None:
+        """Default request_count is 0."""
+        from unittest.mock import Mock
+        run_logger = Mock()
+        item_logger = Mock()
+        _log_failure(run_logger, item_logger)
+        item_logger.log_summary.assert_called_once_with(False, 0)
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _build_completion_record validation
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestBuildCompletionRecord:
+    """Tests for _build_completion_record in finalization.py."""
+
+    def test_basic_completion_record(self) -> None:
+        """Build a record with full stats."""
+        from pokepoke.orchestration.finalization import _build_completion_record
+        stats = AgentStats()
+        stats.input_tokens = 500
+        stats.output_tokens = 200
+        stats.api_duration = 1.5
+        stats.lines_added = 10
+        stats.lines_removed = 3
+        record = _build_completion_record(
+            "item-1", "model-x", 120.0, True, True, stats, 4,
+        )
+        assert record.item_id == "item-1"
+        assert record.model == "model-x"
+        assert record.duration_seconds == 120.0
+        assert record.gate_passed is True
+        assert record.input_tokens == 500
+        assert record.output_tokens == 200
+        assert record.agent_turns == 4
+        assert record.retry_attempts == 3
+        assert record.api_duration == 1.5
+        assert record.lines_added == 10
+        assert record.lines_removed == 3
+
+    def test_completion_record_with_none_stats(self) -> None:
+        """Stats default to 0 when stats is None."""
+        from pokepoke.orchestration.finalization import _build_completion_record
+        record = _build_completion_record(
+            "item-2", "model-y", 60.0, False, None, None, 1,
+        )
+        assert record.input_tokens == 0
+        assert record.output_tokens == 0
+        assert record.agent_turns == 1
+        assert record.retry_attempts == 0
+        assert record.api_duration is None
+        assert record.lines_added is None
+        assert record.lines_removed is None
+
+    def test_single_request_has_zero_retries(self) -> None:
+        """retry_attempts = max(0, request_count - 1)."""
+        from pokepoke.orchestration.finalization import _build_completion_record
+        record = _build_completion_record("i", "m", 1.0, True, None, None, 1)
+        assert record.retry_attempts == 0
+
+    def test_zero_requests_has_zero_retries(self) -> None:
+        """retry_attempts never goes negative."""
+        from pokepoke.orchestration.finalization import _build_completion_record
+        record = _build_completion_record("i", "m", 1.0, False, None, None, 0)
+        assert record.retry_attempts == 0
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _extract_agent_stats
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestExtractAgentStats:
+    """Tests for _extract_agent_stats helper."""
+
+    def test_returns_stats_from_result_directly(self) -> None:
+        """When result.stats is set, return it directly."""
+        from pokepoke.orchestration.workflow_helpers import _extract_agent_stats
+        stats = AgentStats()
+        stats.input_tokens = 42
+        result = CopilotResult(
+            work_item_id="t1", success=True, output="x", attempt_count=1,
+            stats=stats,
+        )
+        extracted = _extract_agent_stats(result)
+        assert extracted is stats
+
+    def test_parses_stats_from_output(self) -> None:
+        """When result.stats is None, parse from output."""
+        from pokepoke.orchestration.workflow_helpers import _extract_agent_stats
+        result = CopilotResult(
+            work_item_id="t1", success=True, output="some output text",
+            attempt_count=1,
+        )
+        with patch("pokepoke.stats.stats.parse_agent_stats") as mock_parse:
+            mock_parse.return_value = AgentStats()
+            extracted = _extract_agent_stats(result)
+            mock_parse.assert_called_once_with("some output text")
+            assert extracted is not None
+
+    def test_returns_none_for_no_stats_no_output(self) -> None:
+        """When both stats and output are empty/None, return None."""
+        from pokepoke.orchestration.workflow_helpers import _extract_agent_stats
+        result = CopilotResult(
+            work_item_id="t1", success=True, output="", attempt_count=1,
+        )
+        extracted = _extract_agent_stats(result)
+        assert extracted is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _apply_gate_feedback
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestApplyGateFeedback:
+    """Tests for _apply_gate_feedback helper."""
+
+    def test_appends_feedback_and_bumps_iteration(self) -> None:
+        """New feedback is appended, iteration incremented."""
+        from pokepoke.orchestration.workflow_helpers import _apply_gate_feedback
+        updated, next_iter = _apply_gate_feedback("fix tests", [], 0)
+        assert updated == ["fix tests"]
+        assert next_iter == 1
+
+    def test_trims_to_last_three(self) -> None:
+        """Only the last 3 feedback entries are kept."""
+        from pokepoke.orchestration.workflow_helpers import _apply_gate_feedback
+        existing = ["a", "b", "c"]
+        updated, next_iter = _apply_gate_feedback("d", existing, 3)
+        assert updated == ["b", "c", "d"]
+        assert next_iter == 4
+
+    def test_does_not_mutate_original_list(self) -> None:
+        """Original feedback list is not modified."""
+        from pokepoke.orchestration.workflow_helpers import _apply_gate_feedback
+        original = ["x", "y"]
+        _apply_gate_feedback("z", original, 1)
+        assert original == ["x", "y"]
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _log_commit_status
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestLogCommitStatus:
+    """Tests for _log_commit_status helper."""
+
+    def test_returns_early_when_uncommitted_changes(self) -> None:
+        """When uncommitted changes exist, just return."""
+        from pokepoke.orchestration.workflow_helpers import _log_commit_status
+        with (
+            patch(f"{_WFH}.has_uncommitted_changes", return_value=True),
+            patch("pokepoke.git.git_operations.has_commits_ahead") as mock_ahead,
+        ):
+            _log_commit_status("/some/path")
+            mock_ahead.assert_not_called()
+
+    def test_logs_commits_ahead(self) -> None:
+        """When no uncommitted changes and commits ahead, logs skip message."""
+        from pokepoke.orchestration.workflow_helpers import _log_commit_status
+        with (
+            patch(f"{_WFH}.has_uncommitted_changes", return_value=False),
+            patch("pokepoke.git.git_operations.has_commits_ahead", return_value=3),
+        ):
+            _log_commit_status("/some/path")
+
+    def test_logs_no_changes_when_zero_ahead(self) -> None:
+        """When no uncommitted and zero commits ahead, logs no-changes message."""
+        from pokepoke.orchestration.workflow_helpers import _log_commit_status
+        with (
+            patch(f"{_WFH}.has_uncommitted_changes", return_value=False),
+            patch("pokepoke.git.git_operations.has_commits_ahead", return_value=0),
+        ):
+            _log_commit_status("/some/path")
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _maybe_retry_copilot with run_logger
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestMaybeRetryCopilotWithLogger:
+    """Tests for _maybe_retry_copilot when run_logger is provided."""
+
+    def test_logs_retry_with_run_logger(self) -> None:
+        """Run logger receives retry information."""
+        from unittest.mock import Mock
+        run_logger = Mock()
+        result = CopilotResult(
+            work_item_id="task-1", success=False,
+            error="timeout", attempt_count=1,
+        )
+        should_retry, _feedback = _maybe_retry_copilot(
+            result, failure_count=1, max_retries=3, run_logger=run_logger,
+            item_id="task-1",
+        )
+        assert should_retry is True
+        run_logger.log_orchestrator.assert_called_once()
+        assert "task-1" in run_logger.log_orchestrator.call_args[0][0]
+
+    def test_rate_limited_result_does_not_retry(self) -> None:
+        """Rate-limited results should not retry regardless of count."""
+        result = CopilotResult(
+            work_item_id="task-1", success=False,
+            error="rate limited", attempt_count=1,
+            is_rate_limited=True,
+        )
+        should_retry, _ = _maybe_retry_copilot(
+            result, failure_count=1, max_retries=10, run_logger=None,
+            item_id="task-1",
+        )
+        assert should_retry is False
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# run_cleanup_with_timeout – timeout path
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestCleanupTimeoutPath:
+    """Tests for the timeout branch in run_cleanup_with_timeout."""
+
+    def test_returns_false_when_timeout_exceeded(self) -> None:
+        """When elapsed >= timeout_seconds during cleanup, returns (False, runs)."""
+        item = make_work_item()
+        result = CopilotResult(
+            work_item_id="task-1", success=True, output="done", attempt_count=1,
+        )
+        time_call = 0
+
+        def time_side(*_a, **_kw):
+            nonlocal time_call
+            time_call += 1
+            return time_call * 5000.0
+
+        with (
+            patch(f"{_WFH}.has_uncommitted_changes", return_value=True),
+            patch(f"{_WFH}.run_cleanup_loop", return_value=(True, 1)),
+            patch("time.time", side_effect=time_side),
+        ):
+            success, runs = run_cleanup_with_timeout(
+                item, result, Path("/repo"), start_time=0.0,
+                timeout_seconds=100, timeout_hours=0.03,
+            )
+            assert success is False
+            assert runs == 0
+
+    def test_cleanup_loop_failure_breaks_loop(self) -> None:
+        """When run_cleanup_loop returns success=False, loop breaks."""
+        item = make_work_item()
+        result = CopilotResult(
+            work_item_id="task-1", success=True, output="done", attempt_count=1,
+        )
+        call_count = 0
+
+        def uncommitted_side_effect(cwd=None):
+            nonlocal call_count
+            call_count += 1
+            return True  # always uncommitted
+
+        with (
+            patch(f"{_WFH}.has_uncommitted_changes", side_effect=uncommitted_side_effect),
+            patch(f"{_WFH}.run_cleanup_loop", return_value=(False, 1)),
+            patch("time.time", return_value=0.0),
+        ):
+            _success, runs = run_cleanup_with_timeout(
+                item, result, Path("/repo"), start_time=0.0,
+                timeout_seconds=3600, timeout_hours=1.0,
+            )
+            # Loop broke due to cleanup failure, not timeout
+            assert runs == 1
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _fail_result with failure_reason
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestFailResultWithReason:
+    """Tests for _fail_result carrying failure_reason."""
+
+    def test_fail_result_carries_failure_reason(self) -> None:
+        """failure_reason is passed through to WorkItemResult."""
+        result = _fail_result(failure_reason="agent timed out")
+        assert result.failure_reason == "agent timed out"
+        assert result.success is False
+
+    def test_fail_result_none_reason(self) -> None:
+        """Default failure_reason is None."""
+        result = _fail_result()
+        assert result.failure_reason is None
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# Reconciliation with loggers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestReconcileWithLoggers:
+    """Tests for _reconcile_as_success when loggers are provided."""
+
+    def test_reconcile_logs_to_both_loggers(self) -> None:
+        """When loggers are present, reconciliation logs to both."""
+        from unittest.mock import Mock
+        result = CopilotResult(
+            work_item_id="task-log", success=False,
+            error="died", attempt_count=1,
+        )
+        item = make_work_item(id="task-log", title="Log Task")
+        run_logger = Mock()
+        item_logger = Mock()
+
+        with (
+            patch(
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
+                return_value=(True, {"beads_closed": True}),
+            ),
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
+        ):
+            wi_result, _finalized = _finalize_item_result(ResultContext(
+                result=result,
+                item=item,
+                worktree_path=Path("/fake/wt"),
+                selected_model="test-model",
+                start_time=0.0,
+                request_count=2,
+                accumulated_stats=AgentStats(),
+                cleanup_agent_runs=0,
+                gate_agent_runs=0,
+                gate_success=False,
+                run_logger=run_logger,
+                item_logger=item_logger,
+                base_agent_id="test-agent",
+                run_beta_test=False,
+            ))
+
+        assert wi_result.success is True
+        item_logger.log_summary.assert_called_once_with(True, 2)
+        run_logger.log_orchestrator.assert_called_once()
+        assert "reconciled" in run_logger.log_orchestrator.call_args[0][0].lower()
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _handle_failure with loggers
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestHandleFailureWithLoggers:
+    """Tests for _handle_failure logging behavior."""
+
+    def test_failure_logs_to_both_loggers(self) -> None:
+        """When loggers are present, failure logs to both."""
+        from unittest.mock import Mock
+        result = CopilotResult(
+            work_item_id="task-fail-log", success=False,
+            error="agent crashed hard", attempt_count=1,
+        )
+        item = make_work_item(id="task-fail-log", title="Fail Log Task")
+        run_logger = Mock()
+        item_logger = Mock()
+
+        with (
+            patch(
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
+                return_value=(False, {}),
+            ),
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
+            patch("pokepoke.beads.beads_management.fail_task") as mock_fail,
+        ):
+            wi_result, finalized = _finalize_item_result(ResultContext(
+                result=result,
+                item=item,
+                worktree_path=Path("/fake/wt"),
+                selected_model="test-model",
+                start_time=0.0,
+                request_count=3,
+                accumulated_stats=AgentStats(),
+                cleanup_agent_runs=1,
+                gate_agent_runs=2,
+                gate_success=False,
+                run_logger=run_logger,
+                item_logger=item_logger,
+                base_agent_id="test-agent",
+                run_beta_test=False,
+            ))
+
+        assert wi_result.success is False
+        assert finalized is False
+        mock_fail.assert_called_once_with("task-fail-log", "agent crashed hard")
+        # _log_failure is called internally
+        item_logger.log_summary.assert_called_once_with(False, 3)
+        run_logger.log_orchestrator.assert_called_once()
+
+    def test_failure_result_carries_failure_reason(self) -> None:
+        """The WorkItemResult from _handle_failure carries failure_reason."""
+        result = CopilotResult(
+            work_item_id="task-reason", success=False,
+            error="memory exhausted", attempt_count=1,
+        )
+        item = make_work_item(id="task-reason", title="Reason Task")
+
+        with (
+            patch(
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
+                return_value=(False, {}),
+            ),
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
+            patch("pokepoke.beads.beads_management.fail_task"),
+        ):
+            wi_result, _ = _finalize_item_result(ResultContext(
+                result=result,
+                item=item,
+                worktree_path=Path("/fake/wt"),
+                selected_model="test-model",
+                start_time=0.0,
+                request_count=1,
+                accumulated_stats=AgentStats(),
+                cleanup_agent_runs=0,
+                gate_agent_runs=0,
+                gate_success=False,
+                run_logger=None,
+                item_logger=None,
+                base_agent_id="test-agent",
+                run_beta_test=False,
+            ))
+
+        assert wi_result.failure_reason == "memory exhausted"
+
+    def test_failure_with_unknown_error(self) -> None:
+        """When error is None, failure_reason defaults to 'Unknown failure'."""
+        result = CopilotResult(
+            work_item_id="task-unknown", success=False,
+            error=None, attempt_count=1,
+        )
+        item = make_work_item(id="task-unknown", title="Unknown Task")
+
+        with (
+            patch(
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
+                return_value=(False, {}),
+            ),
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
+            patch("pokepoke.beads.beads_management.fail_task"),
+        ):
+            wi_result, _ = _finalize_item_result(ResultContext(
+                result=result,
+                item=item,
+                worktree_path=Path("/fake/wt"),
+                selected_model="test-model",
+                start_time=0.0,
+                request_count=0,
+                accumulated_stats=AgentStats(),
+                cleanup_agent_runs=0,
+                gate_agent_runs=0,
+                gate_success=False,
+                run_logger=None,
+                item_logger=None,
+                base_agent_id="test-agent",
+                run_beta_test=False,
+            ))
+
+        assert wi_result.failure_reason == "Unknown failure"
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# _store_discoveries
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestStoreDiscoveries:
+    """Tests for _store_discoveries in finalization.py."""
+
+    def test_skipped_when_memory_disabled(self) -> None:
+        """No discovery logic runs when memory is disabled."""
+        from pokepoke.orchestration.finalization import _store_discoveries
+        item = make_work_item(id="task-disc", title="Disc Task")
+        with patch("pokepoke.config.get_config") as mock_cfg:
+            mock_cfg.return_value.mcp_server.memory_enabled = False
+            _store_discoveries(item, Path("/wt"))
+
+    def test_stores_discoveries_when_found(self) -> None:
+        """Discoveries are stored when auto_discover finds them."""
+        from pokepoke.orchestration.finalization import _store_discoveries
+        item = make_work_item(id="task-disc2", title="Disc Task 2")
+        with (
+            patch("pokepoke.config.get_config") as mock_cfg,
+            patch("pokepoke.models.memory_helpers.auto_discover_from_prompt", return_value=["d1"]),
+            patch("pokepoke.models.memory_helpers.store_agent_discoveries") as mock_store,
+            patch("pokepoke.models.sdk_helpers.build_prompt_from_work_item", return_value="prompt"),
+        ):
+            mock_cfg.return_value.mcp_server.memory_enabled = True
+            _store_discoveries(item, Path("/wt"))
+            mock_store.assert_called_once()
+
+    def test_exception_in_discovery_is_swallowed(self) -> None:
+        """Exceptions during discovery are caught and logged."""
+        from pokepoke.orchestration.finalization import _store_discoveries
+        item = make_work_item(id="task-disc3", title="Disc Task 3")
+        with (
+            patch("pokepoke.config.get_config") as mock_cfg,
+            patch("pokepoke.models.memory_helpers.auto_discover_from_prompt", side_effect=ImportError("no module")),
+            patch("pokepoke.models.sdk_helpers.build_prompt_from_work_item", return_value="prompt"),
+        ):
+            mock_cfg.return_value.mcp_server.memory_enabled = True
+            # Should not raise
+            _store_discoveries(item, Path("/wt"))
+
+
+# ═══════════════════════════════════════════════════════════════════════════
+# DefaultBeadsClient.fail_task protocol contract
+# ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestDefaultBeadsClientFailTask:
+    """Tests for DefaultBeadsClient.fail_task protocol method."""
+
+    def test_delegates_to_beads_management(self) -> None:
+        """DefaultBeadsClient.fail_task delegates to beads_management.fail_task."""
+        from pokepoke.protocols import DefaultBeadsClient
+        with (
+            patch("pokepoke.beads.beads_management.add_comment", return_value=True),
+            patch("pokepoke.beads.beads_item_stats_store.record_event"),
+        ):
+            client = DefaultBeadsClient()
+            result = client.fail_task("PP-1", "test reason", agent_type="gate")
+            assert result is True
+
+    def test_passes_agent_type_through(self) -> None:
+        """agent_type parameter is forwarded correctly."""
+        from pokepoke.protocols import DefaultBeadsClient
+        with (
+            patch("pokepoke.beads.beads_management.add_comment", return_value=True),
+            patch("pokepoke.beads.beads_item_stats_store.record_event") as mock_record,
+        ):
+            client = DefaultBeadsClient()
+            client.fail_task("PP-2", "gate rejected", agent_type="gate")
+            mock_record.assert_called_once_with("failed", "PP-2", "gate", path=None, repo_name="")
