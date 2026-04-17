@@ -81,7 +81,7 @@ def is_item_claimable(item_id: str) -> bool:
 
         # Item is claimable if assignee is empty
         return not current_assignee
-    except (subprocess.CalledProcessError, json.JSONDecodeError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError):
         # On error, assume not claimable (safer to skip than to try)
         return False
 
@@ -135,7 +135,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
                             logger.info("ℹ️  %s already assigned to %s and %s — skipping bd update", item_id, agent_name, STATUS_IN_PROGRESS)
                             return True
 
-            except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
                 logger.warning(f"⚠️  Failed to verify {item_id} ownership: {e}")
                 return False
 
@@ -166,7 +166,7 @@ def assign_and_sync_item(item_id: str, agent_name: str | None = None) -> bool:
 
                 claimed = True
 
-            except (subprocess.CalledProcessError, json.JSONDecodeError) as e:
+            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError) as e:
                 stderr = e.stderr if isinstance(e, subprocess.CalledProcessError) else str(e)
                 logger.error(f"⚠️  Failed to assign {item_id}: {stderr}")
                 if update_succeeded:
@@ -202,15 +202,15 @@ def unassign_item(item_id: str) -> bool:
         if result.stderr and 'error' in result.stderr.lower():
             raise subprocess.CalledProcessError(1, 'bd', stderr=result.stderr)
         logger.info("↩️  Unassigned %s from %s and reset to 'open'", item_id, agent_name)
-    except subprocess.CalledProcessError:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
         # Some bd versions may not accept an empty -a; fall back to status-only reset.
         try:
             result = _run_bd(['update', item_id, '--status', 'open'])
             if result.stderr and 'error' in result.stderr.lower():
                 raise subprocess.CalledProcessError(1, 'bd', stderr=result.stderr)
             logger.info("↩️  Reset %s to 'open' (assignee field may still reference %s)", item_id, agent_name)
-        except subprocess.CalledProcessError as e:
-            logger.error(f"⚠️  Failed to unassign {item_id}: {e.stderr}")
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
+            logger.error(f"⚠️  Failed to unassign {item_id}: {e}")
             return False
 
     # Best-effort sync so other agents see the item is available again.

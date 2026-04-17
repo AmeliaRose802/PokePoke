@@ -1,7 +1,7 @@
 """Beads hierarchy operations - parent-child relationships."""
 
 import logging
-from subprocess import CalledProcessError
+from subprocess import CalledProcessError, TimeoutExpired
 
 from pokepoke.agents.agent_context import get_agent_name as _get_agent_name
 from pokepoke.types import BeadsWorkItem
@@ -325,8 +325,8 @@ def close_parent_if_complete(parent_id: str) -> bool:
         _run_bd(['close', parent_id, '-r', 'All child items completed'])
         logger.info("Auto-closed parent %s - all children complete", parent_id)
         return True
-    except CalledProcessError as e:
-        logger.error(f"⚠️  Failed to close parent {parent_id}: {e.stderr}")
+    except (CalledProcessError, TimeoutExpired) as e:
+        logger.error(f"⚠️  Failed to close parent {parent_id}: {e}")
         return False
 
 
