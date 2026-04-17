@@ -543,8 +543,10 @@ def test_code_reviewer_prompt_has_summary_requirements():
     assert "Never say" in content or "NEVER say" in content
 
 
-def test_code_reviewer_builtin_matches_user_version():
+def test_code_reviewer_builtin_matches_user_version(monkeypatch):
     """Built-in code-reviewer.md must have same mandatory requirements as user version."""
+    import os
+    monkeypatch.chdir(os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__)))))
     service = PromptService()
 
     # Load from user dir
