@@ -1,4 +1,4 @@
-"""Test implementation for PokePoke-1waaq: Test Task
+"""Test implementation for PokePoke-1waaq and PokePoke-yxd7e: Test Task
 
 This test file verifies the core logic implementation for the test task.
 Since this is an auto-generated test task with minimal specification,
@@ -6,6 +6,8 @@ this serves as a placeholder test to satisfy the completion criteria.
 """
 
 import pytest
+
+from pokepoke.test_task_impl import perform_test_task, validate_test_task_completion
 
 
 def test_basic_functionality():
@@ -21,13 +23,11 @@ def test_core_logic_exists():
     assert result == "test_task_complete", "Task should complete successfully"
 
 
-def perform_test_task():
-    """Core logic for test task.
-
-    Returns:
-        str: Status message indicating task completion
-    """
-    return "test_task_complete"
+def test_validation_function():
+    """Test the validation function."""
+    result = perform_test_task()
+    assert validate_test_task_completion(result), "Validation should pass for correct result"
+    assert not validate_test_task_completion("wrong_result"), "Validation should fail for incorrect result"
 
 
 class TestTaskImplementation:
@@ -50,3 +50,9 @@ class TestTaskImplementation:
         """Test that task completes successfully."""
         result = perform_test_task()
         assert "complete" in result.lower(), "Task should indicate completion"
+
+    def test_validation_integration(self):
+        """Test that validation function works with task execution."""
+        result = perform_test_task()
+        assert validate_test_task_completion(result), "Validation should confirm task completion"
+
