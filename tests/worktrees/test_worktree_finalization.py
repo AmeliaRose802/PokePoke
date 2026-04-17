@@ -49,8 +49,9 @@ class TestMergeWorktreeToDevDelegation:
         assert result is True
         mock_perform.assert_called_once()
         call_args = mock_perform.call_args
-        assert call_args[0][0] == item.id
-        assert call_args[0][1] is item
+        ctx = call_args[0][0]
+        assert ctx.agent_id == item.id
+        assert ctx.agent_item is item
 
     @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
     def test_returns_false_on_merge_failure(self, mock_perform: Mock) -> None:
@@ -61,28 +62,32 @@ class TestMergeWorktreeToDevDelegation:
     def test_passes_parent_agent_id(self, mock_perform: Mock) -> None:
         mock_perform.return_value = (True, True)
         merge_worktree_to_dev(_make_test_item(), parent_agent_id="parent-1")
-        assert mock_perform.call_args.kwargs["parent_agent_id"] == "parent-1"
+        ctx = mock_perform.call_args[0][0]
+        assert ctx.parent_agent_id == "parent-1"
 
     @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
     def test_uses_explicit_repo_root(self, mock_perform: Mock) -> None:
         mock_perform.return_value = (True, True)
         repo = Path("C:/my-repo")
         merge_worktree_to_dev(_make_test_item(), repo_root=repo)
-        assert mock_perform.call_args[0][3] == repo
+        ctx = mock_perform.call_args[0][0]
+        assert ctx.repo_root == repo
 
     @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
     def test_uses_explicit_worktree_path(self, mock_perform: Mock) -> None:
         mock_perform.return_value = (True, True)
         wt = Path("C:/worktrees/task-task-1")
         merge_worktree_to_dev(_make_test_item(), worktree_path=wt)
-        assert mock_perform.call_args[0][2] == wt
+        ctx = mock_perform.call_args[0][0]
+        assert ctx.worktree_path == wt
 
     @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
     def test_defaults_worktree_path_from_repo_root(self, mock_perform: Mock) -> None:
         mock_perform.return_value = (True, True)
         repo = Path("C:/my-repo")
         merge_worktree_to_dev(_make_test_item("abc"), repo_root=repo)
-        assert mock_perform.call_args[0][2] == repo / "worktrees" / "task-abc"
+        ctx = mock_perform.call_args[0][0]
+        assert ctx.worktree_path == repo / "worktrees" / "task-abc"
 class TestFinalizeWorkItem:
     """Test finalize_work_item function (lines 21-29)."""
 

@@ -112,7 +112,7 @@ def merge_worktree_to_dev(
         worktree_path: Worktree directory (defaults to worktrees/task-{id}).
         repo_path: Target repo root for git operations.
     """
-    from .worktree_merge_handler import perform_worktree_merge
+    from .worktree_merge_handler import WorktreeMergeContext, perform_worktree_merge
 
     effective_repo_root = repo_root if repo_root is not None else (Path(repo_path) if repo_path else Path.cwd())
     effective_worktree_path = (
@@ -120,14 +120,16 @@ def merge_worktree_to_dev(
         else effective_repo_root / WORKTREE_DIR / f"{WORKTREE_TASK_PREFIX}{item.id}"
     )
 
-    merge_success, _ = perform_worktree_merge(
-        item.id,
-        item,
-        effective_worktree_path,
-        effective_repo_root,
+    ctx = WorktreeMergeContext(
+        agent_id=item.id,
+        agent_item=item,
+        agent_name="",  # Not used in perform_worktree_merge
+        worktree_path=effective_worktree_path,
+        repo_root=effective_repo_root,
         parent_agent_id=parent_agent_id,
         repo_path=repo_path,
     )
+    merge_success, _ = perform_worktree_merge(ctx)
     return merge_success
 
 

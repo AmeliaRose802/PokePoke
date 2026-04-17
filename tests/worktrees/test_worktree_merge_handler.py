@@ -194,10 +194,8 @@ def test_perform_first_merge_succeeds(
     mock_check.return_value = (True, "")
     mock_merge.return_value = MergeResult(success=True)
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is True
     assert cleaned is True
     mock_add.assert_not_called()
@@ -213,10 +211,8 @@ def test_perform_pre_merge_cleanup_fails(
     mock_check.return_value = (False, "dirty")
     mock_cleanup.return_value = (False, None)
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is False
     assert cleaned is False
     mock_add.assert_called_once()
@@ -242,10 +238,8 @@ def test_perform_abort_merge_failure_returns_false(
     mock_conflict_cleanup.return_value = (True, None)
     mock_abort.return_value = (False, "Cannot abort")
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is False
     assert cleaned is False
     mock_abort.assert_called_once()
@@ -271,10 +265,8 @@ def test_perform_retry_merge_succeeds_after_cleanup(
     mock_get_unmerged.return_value = ["file.py"]
     mock_conflict_cleanup.return_value = (True, None)
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is True
     assert cleaned is True
     mock_abort.assert_not_called()
@@ -301,10 +293,8 @@ def test_perform_retry_merge_fails_aborts(
     mock_conflict_cleanup.return_value = (True, None)
     mock_abort.return_value = (True, "")
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is False
     assert cleaned is False
     mock_abort.assert_called_once()
@@ -326,10 +316,8 @@ def test_perform_cleanup_failure_no_abort_when_not_merging(
     mock_is_merging.side_effect = [True, False]
     mock_conflict_cleanup.return_value = (False, None)
 
-    success, _ = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, _ = perform_worktree_merge(ctx)
     assert success is False
     mock_abort.assert_not_called()
 
@@ -353,10 +341,8 @@ def test_perform_conflict_details_in_cleanup_prompt(
     mock_get_unmerged.return_value = files
     mock_conflict_cleanup.return_value = (True, None)
 
-    perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    perform_worktree_merge(ctx)
 
     call_args = mock_conflict_cleanup.call_args
     error_msg = call_args[0][1]
@@ -384,10 +370,8 @@ def test_perform_handles_many_conflict_files(
     mock_get_unmerged.return_value = many_files
     mock_conflict_cleanup.return_value = (True, None)
 
-    perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    perform_worktree_merge(ctx)
 
     call_kwargs = mock_conflict_cleanup.call_args
     assert len(call_kwargs.kwargs["unmerged_files"]) == 15
@@ -410,10 +394,8 @@ def test_perform_fetches_fresh_unmerged_when_not_merging(
     mock_get_unmerged.return_value = ["stale.py"]
     mock_conflict_cleanup.return_value = (True, None)
 
-    success, _ = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, _ = perform_worktree_merge(ctx)
     assert success is True
     mock_get_unmerged.assert_called_once()
 
@@ -435,10 +417,8 @@ def test_perform_first_merge_worktree_persists(
     worktree_dir = tmp_path / "task-item-1"
     worktree_dir.mkdir()
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        worktree_dir, tmp_path,
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=worktree_dir, repo_root=tmp_path)
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is True
     assert cleaned is False
     mock_add.assert_called_once()
@@ -465,10 +445,8 @@ def test_perform_retry_abort_failure_logs_error(
     mock_conflict_cleanup.return_value = (True, None)
     mock_abort.return_value = (False, "Cannot abort: lock held")
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is False
     assert cleaned is False
     mock_abort.assert_called_once()
@@ -491,10 +469,8 @@ def test_perform_cleanup_failure_abort_failure_logged(
     mock_conflict_cleanup.return_value = (False, None)
     mock_abort.return_value = (False, "Cannot abort")
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        Path("C:/wt"), Path("C:/repo"),
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is False
     assert cleaned is False
     mock_abort.assert_called_once()
@@ -522,10 +498,8 @@ def test_perform_retry_merge_worktree_persists(
     worktree_dir = tmp_path / "task-item-1"
     worktree_dir.mkdir()
 
-    success, cleaned = perform_worktree_merge(
-        "item-1", _make_agent_item("item-1"),
-        worktree_dir, tmp_path,
-    )
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=worktree_dir, repo_root=tmp_path)
+    success, cleaned = perform_worktree_merge(ctx)
     assert success is True
     assert cleaned is False
     # Should track in manifest since worktree persists

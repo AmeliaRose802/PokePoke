@@ -9,6 +9,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktrees.worktree_merge_handler import (
+    WorktreeMergeContext,
     handle_worktree_merge,
     perform_worktree_merge,
 )
@@ -23,6 +24,25 @@ def _make_test_item(item_id: str = "test-item") -> BeadsWorkItem:
         status="ready",
         priority=1,
         issue_type="task",
+    )
+
+
+def _make_context(
+    item_id: str = "test-item",
+    worktree_path: Path = Path("C:/repos/worktrees/task-test-item"),
+    repo_root: Path = Path("C:/repos"),
+    parent_agent_id: str | None = None,
+    repo_path: str | None = None,
+) -> WorktreeMergeContext:
+    """Create a WorktreeMergeContext for testing."""
+    return WorktreeMergeContext(
+        agent_id=item_id,
+        agent_item=_make_test_item(item_id),
+        agent_name="test-agent",
+        worktree_path=worktree_path,
+        repo_root=repo_root,
+        parent_agent_id=parent_agent_id,
+        repo_path=repo_path,
     )
 
 
@@ -49,13 +69,13 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-123')
         worktree_path = Path('C:/repos/worktrees/task-test-123')
 
-        success, cleaned = perform_worktree_merge(
+        ctx = _make_context(
             item_id=agent_item.id,
-            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        success, cleaned = perform_worktree_merge(ctx)
 
         assert success is True
         assert cleaned is True
@@ -85,13 +105,13 @@ class TestPerformWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-456')
 
         with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=MergeResult(success=True)):
-            success, _cleaned = perform_worktree_merge(
+            ctx = _make_context(
                 item_id=agent_item.id,
-                item=agent_item,
                 worktree_path=worktree_path,
                 repo_root=Path('C:/repos'),
                 parent_agent_id='parent-123'
             )
+            success, _cleaned = perform_worktree_merge(ctx)
 
         assert success is True
         mock_invoke_cleanup.assert_called_once()
@@ -120,13 +140,13 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-789')
         worktree_path = Path('C:/repos/worktrees/task-test-789')
 
-        success, cleaned = perform_worktree_merge(
+        ctx = _make_context(
             item_id=agent_item.id,
-            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        success, cleaned = perform_worktree_merge(ctx)
 
         assert success is False
         assert cleaned is False
@@ -152,13 +172,13 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-conflicts')
         worktree_path = Path('C:/repos/worktrees/task-test-conflicts')
 
-        success, _cleaned = perform_worktree_merge(
+        ctx = _make_context(
             item_id=agent_item.id,
-            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        success, _cleaned = perform_worktree_merge(ctx)
 
         assert success is False
         mock_conflict_agent.assert_called_once()
@@ -193,13 +213,13 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-failed')
         worktree_path = Path('C:/repos/worktrees/task-test-failed')
 
-        success, cleaned = perform_worktree_merge(
+        ctx = _make_context(
             item_id=agent_item.id,
-            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        success, cleaned = perform_worktree_merge(ctx)
 
         assert success is False
         assert cleaned is False
@@ -225,13 +245,13 @@ class TestPerformWorktreeMergeIntegration:
         agent_item = _make_test_item('test-manifest')
         worktree_path = Path('C:/repos/worktrees/task-test-manifest')
 
-        success, cleaned = perform_worktree_merge(
+        ctx = _make_context(
             item_id=agent_item.id,
-            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        success, cleaned = perform_worktree_merge(ctx)
 
         assert success is True
         assert cleaned is True
@@ -256,15 +276,13 @@ class TestHandleWorktreeMergeIntegration:
         agent_item = _make_test_item('test-lock')
         worktree_path = Path('C:/repos/worktrees/task-test-lock')
 
-        success, cleaned = handle_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+        ctx = _make_context(
+            item_id=agent_item.id,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
+        success, cleaned = handle_worktree_merge(ctx)
 
         assert success is True
         assert cleaned is True
@@ -287,15 +305,13 @@ class TestHandleWorktreeMergeIntegration:
         agent_item = _make_test_item('test-passthrough')
         worktree_path = Path('C:/repos/worktrees/task-test-passthrough')
 
-        success, cleaned = handle_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+        ctx = _make_context(
+            item_id=agent_item.id,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
+        success, cleaned = handle_worktree_merge(ctx)
 
         assert success is False
         assert cleaned is False
@@ -316,15 +332,13 @@ class TestHandleWorktreeMergeIntegration:
         worktree_path = Path('C:/repos/worktrees/task-test-exception')
 
         # With new error handling, should return (False, False) instead of raising
-        result = handle_worktree_merge(
-            agent_id=agent_item.id,
-            agent_item=agent_item,
-            agent_name='TestAgent',
+        ctx = _make_context(
+            item_id=agent_item.id,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
-            agent_stats=None,
             parent_agent_id=None
         )
+        result = handle_worktree_merge(ctx)
 
         # Should return failure result instead of raising
         assert result == (False, False)
@@ -361,13 +375,13 @@ class TestMergeSequenceErrorRecovery:
         agent_item = _make_test_item('test-retry')
         worktree_path = Path('C:/repos/worktrees/task-test-retry')
 
-        success, _cleaned = perform_worktree_merge(
+        ctx = _make_context(
             item_id=agent_item.id,
-            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        success, _cleaned = perform_worktree_merge(ctx)
 
         assert success is True
         # Verify both checks were called
@@ -393,13 +407,13 @@ class TestMergeSequenceErrorRecovery:
         worktree_path = Path('C:/repos/worktrees/task-test-no-retry')
 
         with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree') as mock_merge:
-            success, _cleaned = perform_worktree_merge(
+            ctx = _make_context(
                 item_id=agent_item.id,
-                item=agent_item,
                 worktree_path=worktree_path,
                 repo_root=Path('C:/repos'),
                 parent_agent_id=None
             )
+            success, _cleaned = perform_worktree_merge(ctx)
 
         assert success is False
         mock_merge.assert_not_called()
@@ -432,13 +446,7 @@ class TestCleanupAgentInvocation:
         parent_id = 'parent-agent-123'
 
         with patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree', return_value=MergeResult(success=True)):
-            perform_worktree_merge(
-                item_id=agent_item.id,
-                item=agent_item,
-                worktree_path=worktree_path,
-                repo_root=repo_root,
-                parent_agent_id=parent_id
-            )
+            perform_worktree_merge(_make_context(item_id=agent_item.id, worktree_path=worktree_path, repo_root=repo_root, parent_agent_id=parent_id, repo_path=None))
 
         # Verify cleanup agent was called with correct parameters
         mock_invoke_cleanup.assert_called_once()
@@ -468,13 +476,13 @@ class TestCleanupAgentInvocation:
         agent_item = _make_test_item('test-conflicts')
         worktree_path = Path('C:/repos/worktrees/task-test-conflicts')
 
-        perform_worktree_merge(
+        ctx = _make_context(
             item_id=agent_item.id,
-            item=agent_item,
             worktree_path=worktree_path,
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        perform_worktree_merge(ctx)
 
         # Verify conflict agent was called
         mock_conflict_agent.assert_called_once()
