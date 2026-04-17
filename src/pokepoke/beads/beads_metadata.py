@@ -26,7 +26,7 @@ def get_total_attempts(item_id: str) -> int:
         if metadata and isinstance(metadata, dict):
             return int(metadata.get('total_attempts', 0))
         return 0
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, TypeError):
         logger.warning(f"Failed to get total_attempts for {item_id}, defaulting to 0")
         return 0
 
@@ -59,7 +59,7 @@ def increment_total_attempts(item_id: str) -> bool:
         _run_bd(['update', item_id, '--metadata', json.dumps(metadata)])
         logger.info(f"Incremented total_attempts for {item_id} to {new_attempts}")
         return True
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, TypeError):
         logger.warning(f"Failed to increment total_attempts for {item_id}")
         return False
 
@@ -77,7 +77,7 @@ def get_gate_rejection_count(item_id: str) -> int:
         if metadata and isinstance(metadata, dict):
             return int(metadata.get('gate_rejection_count', 0))
         return 0
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError):
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, TypeError):
         logger.warning(f"Failed to get gate_rejection_count for {item_id}, defaulting to 0")
         return 0
 
@@ -113,6 +113,6 @@ def increment_gate_rejection_count(item_id: str) -> int:
         _run_bd(['update', item_id, '--metadata', metadata_json])
         logger.info(f"Incremented gate_rejection_count for {item_id} to {new_count}")
         return new_count
-    except (subprocess.CalledProcessError, json.JSONDecodeError, ValueError, TypeError) as e:
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, TypeError) as e:
         logger.warning(f"Failed to increment gate_rejection_count for {item_id}: {e}")
         return -1
