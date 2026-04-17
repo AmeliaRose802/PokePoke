@@ -144,11 +144,10 @@ class TestDrainOrphanedFutures:
     """Test _drain_orphaned_futures cleanup logic."""
 
     @patch('pokepoke.agents.parallel.unassign_with_retry')
-    def test_drain_orphaned_futures_cancels_and_unassigns(self, mock_unassign):
-        """Test _drain_orphaned_futures cancels running futures."""
+    def test_drain_orphaned_futures_preserves_in_progress(self, mock_unassign):
+        """In-progress futures are preserved — no cancel, no unassign."""
         fut = Mock()
         fut.done.return_value = False
-        fut.cancel.return_value = True
 
         item = create_test_item("item-1")
         futures = {fut: item}
@@ -156,8 +155,24 @@ class TestDrainOrphanedFutures:
 
         _drain_orphaned_futures(futures, run_logger, None)
 
-        fut.cancel.assert_called_once()
-        mock_unassign.assert_called_once_with("item-1")
+        fut.cancel.assert_not_called()
+        mock_unassign.assert_not_called()
+        assert len(futures) == 0
+
+    @patch('pokepoke.agents.parallel.unassign_with_retry')
+    def test_drain_orphaned_futures_unassigns_failed(self, mock_unassign):
+        """Done-but-failed futures are unassigned."""
+        fut = Mock()
+        fut.done.return_value = True
+        fut.result.return_value = WorkItemResult(success=False, request_count=0)
+
+        item = create_test_item("item-2")
+        futures = {fut: item}
+        run_logger = Mock()
+
+        _drain_orphaned_futures(futures, run_logger, None)
+
+        mock_unassign.assert_called_once_with("item-2")
         assert len(futures) == 0
 
 

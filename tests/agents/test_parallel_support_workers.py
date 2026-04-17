@@ -104,16 +104,15 @@ class TestDrainOrphanedFutures:
         _drain_orphaned_futures(futures, SessionStats(agent_stats=AgentStats()), time.time(), run_logger, Mock())
         mock_unassign.assert_not_called()
 
-    @patch("pokepoke.agents.parallel_support.concurrent.futures.wait")
     @patch("pokepoke.agents.parallel_support.terminal_ui")
     @patch("pokepoke.agents.parallel.unassign_with_retry")
-    def test_drains_and_records_orphans(self, mock_unassign, mock_tui, mock_wait):
-        """Orphaned futures are recorded via record_fn. Successful ones are NOT unassigned."""
+    def test_drains_and_records_orphans(self, mock_unassign, mock_tui):
+        """Done futures are recorded. Successful ones NOT unassigned. In-progress ones preserved."""
         item1 = _make_item("o1")
         item2 = _make_item("o2")
         fut1 = concurrent.futures.Future()
         fut2 = concurrent.futures.Future()
-        # fut1 still running (not done), fut2 completed during drain
+        # fut1 still running (not done), fut2 completed successfully
         fut2.set_result(WorkItemResult(success=True, request_count=5))
         futures = {fut1: item1, fut2: item2}
         stats = SessionStats(agent_stats=AgentStats())
@@ -124,24 +123,23 @@ class TestDrainOrphanedFutures:
         _drain_orphaned_futures(futures, stats, time.time(), run_logger, record_fn)
 
         assert len(futures) == 0  # Dict is cleared
-        assert record_fn.call_count == 2
-        # Only fut1 (failure) should be unassigned; fut2 (success) should NOT be
-        assert mock_unassign.call_count == 1
-        mock_unassign.assert_called_with("o1")
-        # fut2 was done, so its actual result should be harvested
-        calls = record_fn.call_args_list
-        results = [c[0][1] for c in calls]
-        success_results = [r for r in results if r.success]
-        assert len(success_results) == 1  # fut2's real result
-        assert success_results[0].request_count == 5
+        # Only fut2 (done) is recorded; fut1 (in-progress) is skipped entirely
+        assert record_fn.call_count == 1
+        # fut1 is in-progress — NOT unassigned (worktree preserved)
+        # fut2 is successful — NOT unassigned (already finalized)
+        mock_unassign.assert_not_called()
+        # fut2's actual result should be harvested
+        recorded_result = record_fn.call_args[0][1]
+        assert recorded_result.success is True
+        assert recorded_result.request_count == 5
 
-    @patch("pokepoke.agents.parallel_support.concurrent.futures.wait")
     @patch("pokepoke.agents.parallel_support.terminal_ui")
     @patch("pokepoke.agents.parallel.unassign_with_retry")
-    def test_record_fn_exception_handled(self, mock_unassign, mock_tui, mock_wait):
-        """record_fn raising doesn't crash the drain."""
+    def test_record_fn_exception_handled(self, mock_unassign, mock_tui):
+        """record_fn raising doesn't crash the drain (uses a done-but-failed future)."""
         item = _make_item("e1")
         fut = concurrent.futures.Future()
+        fut.set_result(WorkItemResult(success=False, request_count=0))
         futures = {fut: item}
         run_logger = MagicMock()
         record_fn = Mock(side_effect=RuntimeError("record boom"))
@@ -152,13 +150,13 @@ class TestDrainOrphanedFutures:
         record_fn.assert_called_once()
         mock_unassign.assert_called_once_with("e1")
 
-    @patch("pokepoke.agents.parallel_support.concurrent.futures.wait")
     @patch("pokepoke.agents.parallel_support.terminal_ui")
     @patch("pokepoke.agents.parallel.unassign_with_retry", side_effect=RuntimeError("unassign boom"))
-    def test_unassign_exception_handled(self, mock_unassign, mock_tui, mock_wait):
+    def test_unassign_exception_handled(self, mock_unassign, mock_tui):
         """unassign_with_retry raising doesn't crash the drain and logs a warning."""
         item = _make_item("u1")
         fut = concurrent.futures.Future()
+        fut.set_result(WorkItemResult(success=False, request_count=0))
         futures = {fut: item}
         run_logger = MagicMock()
         record_fn = Mock()
@@ -167,14 +165,11 @@ class TestDrainOrphanedFutures:
 
         record_fn.assert_called_once()
         mock_unassign.assert_called_once_with("u1")
-        # Verify the failure is logged, not silently suppressed
         warning_calls = [
             c for c in run_logger.log_orchestrator.call_args_list
             if c.kwargs.get("level") == "WARNING"
         ]
-        assert any("u1" in str(c) and "unassign" in str(c).lower() for c in warning_calls), (
-            "Expected a WARNING log mentioning item id 'u1' and unassign failure"
-        )
+        assert any("u1" in str(c) and "unassign" in str(c).lower() for c in warning_calls)
 
     @patch("pokepoke.agents.parallel_support.terminal_ui")
     @patch("pokepoke.agents.parallel.unassign_with_retry")
@@ -195,3 +190,21 @@ class TestDrainOrphanedFutures:
         recorded_result = record_fn.call_args[0][1]
         assert recorded_result.success is False
         mock_unassign.assert_called_once_with("x1")
+
+    @patch("pokepoke.agents.parallel_support.terminal_ui")
+    @patch("pokepoke.agents.parallel.unassign_with_retry")
+    def test_in_progress_futures_preserved(self, mock_unassign, mock_tui):
+        """In-progress futures are skipped entirely — no record, no unassign, worktree preserved."""
+        item = _make_item("ip1")
+        fut = concurrent.futures.Future()  # Not done
+        futures = {fut: item}
+        run_logger = MagicMock()
+        record_fn = Mock()
+
+        _drain_orphaned_futures(futures, SessionStats(agent_stats=AgentStats()), time.time(), run_logger, record_fn)
+
+        record_fn.assert_not_called()
+        mock_unassign.assert_not_called()
+        # Should log that the worktree is being preserved
+        log_calls = [str(c) for c in run_logger.log_orchestrator.call_args_list]
+        assert any("preserving" in c.lower() and "ip1" in c for c in log_calls)
