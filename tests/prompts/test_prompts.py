@@ -799,13 +799,25 @@ def test_build_prompt_falls_back_to_default_when_no_label_match():
     assert "Orchestrator Context" not in prompt
 
 
-def test_build_prompt_with_multiple_labels_uses_first_match():
+def test_build_prompt_with_multiple_labels_uses_first_match(tmp_path, monkeypatch):
     """Test that first matching label is used when multiple labels exist."""
     from pokepoke.config import reset_config
     from pokepoke.models.sdk_helpers import build_prompt_from_work_item
     from pokepoke.types import BeadsWorkItem
 
     reset_config()
+
+    # Create fake templates in a temp builtin dir
+    builtin_dir = tmp_path / "builtin_prompts"
+    builtin_dir.mkdir()
+    (builtin_dir / "orchestrator-work.md").write_text(
+        "# Orchestrator Context\nHandle orchestrator tasks.\n"
+        "{{work_item_id}} {{work_item_title}} {{work_item_description}}"
+    )
+    (builtin_dir / "desktop-work.md").write_text(
+        "# Desktop Context\nHandle desktop tasks.\n"
+        "{{work_item_id}} {{work_item_title}} {{work_item_description}}"
+    )
 
     import pokepoke.config as config_module
     original_get_config = config_module.get_config
@@ -819,6 +831,15 @@ def test_build_prompt_with_multiple_labels_uses_first_match():
         return cfg
 
     config_module.get_config = mock_get_config
+
+    # Patch PromptService to use our temp builtin dir
+    from pokepoke.prompts.prompts import PromptService
+    _orig_init = PromptService.__init__
+
+    def _patched_init(self, prompts_dir=None, builtin_dir_arg=None):
+        _orig_init(self, prompts_dir=prompts_dir, builtin_dir=builtin_dir)
+
+    monkeypatch.setattr(PromptService, "__init__", _patched_init)
 
     try:
         work_item = BeadsWorkItem(
@@ -834,8 +855,8 @@ def test_build_prompt_with_multiple_labels_uses_first_match():
         prompt = build_prompt_from_work_item(work_item)
 
         # Should use orchestrator template (first match in labels list)
-        # Note: This test documents current behavior - first label wins
         assert "PokePoke-789" in prompt
+        assert "Orchestrator Context" in prompt
     finally:
         config_module.get_config = original_get_config
         reset_config()
