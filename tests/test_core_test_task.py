@@ -1,106 +1,109 @@
-"""Tests for pokepoke.config_validation module.
+"""Tests for pokepoke.constants module.
 
-Covers clamp_with_warning() and ConfigError for all branches:
-negative-value rejection, below-minimum coercion, above-maximum coercion,
-values within range, and edge cases (None bounds, boundary equality).
+Verifies that named constants are correctly defined with expected types
+and reasonable value ranges.
 """
 
-import logging
-
-import pytest
-
-from pokepoke.config_validation import ConfigError, clamp_with_warning
+import pokepoke.constants as c
 
 
-class TestClampWithWarningInRange:
-    """Values already within [minimum, maximum] are returned unchanged."""
+class TestPreflightConstants:
+    """Verify preflight health-check constants."""
 
-    def test_value_within_range(self):
-        assert clamp_with_warning("Cfg", "field", 5, minimum=1, maximum=10) == 5
+    def test_default_min_disk_space(self) -> None:
+        assert isinstance(c.DEFAULT_MIN_DISK_SPACE_GB, float)
+        assert c.DEFAULT_MIN_DISK_SPACE_GB > 0
 
-    def test_value_equals_minimum(self):
-        assert clamp_with_warning("Cfg", "field", 1, minimum=1, maximum=10) == 1
+    def test_min_disk_space_below_default(self) -> None:
+        assert c.MIN_DISK_SPACE_GB <= c.DEFAULT_MIN_DISK_SPACE_GB
 
-    def test_value_equals_maximum(self):
-        assert clamp_with_warning("Cfg", "field", 10, minimum=1, maximum=10) == 10
+    def test_default_lock_timeout(self) -> None:
+        assert c.DEFAULT_LOCK_TIMEOUT_SECONDS > 0
 
-    def test_float_within_range(self):
-        result = clamp_with_warning("Cfg", "field", 3.5, minimum=1.0, maximum=5.0)
-        assert result == 3.5
+    def test_min_lock_timeout_below_default(self) -> None:
+        assert c.MIN_LOCK_TIMEOUT_SECONDS <= c.DEFAULT_LOCK_TIMEOUT_SECONDS
 
-    def test_no_bounds_returns_value_unchanged(self):
-        assert clamp_with_warning("Cfg", "field", 42) == 42
+    def test_default_worktree_test_timeout(self) -> None:
+        assert c.DEFAULT_WORKTREE_TEST_TIMEOUT > 0
 
-    def test_only_minimum_value_above(self):
-        assert clamp_with_warning("Cfg", "field", 10, minimum=5) == 10
+    def test_min_worktree_timeout_below_default(self) -> None:
+        assert c.MIN_WORKTREE_TEST_TIMEOUT <= c.DEFAULT_WORKTREE_TEST_TIMEOUT
 
-    def test_only_maximum_value_below(self):
-        assert clamp_with_warning("Cfg", "field", 3, maximum=10) == 3
+    def test_default_max_orphan_worktrees(self) -> None:
+        assert isinstance(c.DEFAULT_MAX_ORPHAN_WORKTREES, int)
+        assert c.DEFAULT_MAX_ORPHAN_WORKTREES >= 0
 
+    def test_default_git_operation_timeout(self) -> None:
+        assert c.DEFAULT_GIT_OPERATION_TIMEOUT > 0
 
-class TestClampWithWarningCoercion:
-    """Out-of-range values are coerced to the nearest bound with a warning."""
-
-    def test_below_minimum_coerced(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            result = clamp_with_warning("Cfg", "field", 0.5, minimum=1.0)
-        assert result == 1.0
-        assert "below minimum" in caplog.text
-
-    def test_above_maximum_coerced(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            result = clamp_with_warning("Cfg", "field", 200, maximum=100)
-        assert result == 100
-        assert "exceeds maximum" in caplog.text
-
-    def test_float_below_minimum_coerced(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            result = clamp_with_warning("Cfg", "val", 0.01, minimum=0.1, maximum=1.0)
-        assert result == 0.1
-
-    def test_float_above_maximum_coerced(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            result = clamp_with_warning("Cfg", "val", 99.9, minimum=0.0, maximum=1.0)
-        assert result == 1.0
+    def test_default_max_repair_attempts(self) -> None:
+        assert isinstance(c.DEFAULT_MAX_REPAIR_ATTEMPTS, int)
+        assert c.DEFAULT_MAX_REPAIR_ATTEMPTS >= c.MIN_REPAIR_ATTEMPTS
 
 
-class TestClampWithWarningNegativeRejection:
-    """Negative values when minimum >= 0 raise ConfigError."""
+class TestPerformanceThresholdConstants:
+    """Verify performance threshold constants."""
 
-    def test_negative_int_raises(self):
-        with pytest.raises(ConfigError, match="negative value"):
-            clamp_with_warning("Cfg", "count", -1, minimum=0)
+    def test_merge_queue_depth_positive(self) -> None:
+        assert c.DEFAULT_MAX_MERGE_QUEUE_DEPTH >= c.MIN_MERGE_QUEUE_DEPTH
 
-    def test_negative_float_raises(self):
-        with pytest.raises(ConfigError, match="negative value"):
-            clamp_with_warning("Cfg", "timeout", -0.5, minimum=0.0)
+    def test_lock_wait_seconds(self) -> None:
+        assert c.DEFAULT_MAX_LOCK_WAIT_SECONDS >= c.MIN_LOCK_WAIT_SECONDS
 
-    def test_negative_with_positive_minimum_raises(self):
-        with pytest.raises(ConfigError, match="negative value"):
-            clamp_with_warning("Cfg", "retry", -3, minimum=1, maximum=10)
+    def test_iteration_seconds(self) -> None:
+        assert c.DEFAULT_MAX_ITERATION_SECONDS >= c.MIN_ITERATION_SECONDS
 
+    def test_min_memory_mb(self) -> None:
+        assert c.DEFAULT_MIN_MEMORY_MB >= c.MIN_MEMORY_MB
 
-class TestClampWithWarningNegativeAllowed:
-    """Negative values are allowed when minimum is None or negative."""
-
-    def test_negative_with_no_minimum(self):
-        assert clamp_with_warning("Cfg", "offset", -5) == -5
-
-    def test_negative_with_negative_minimum(self):
-        assert clamp_with_warning("Cfg", "temp", -10, minimum=-20) == -10
-
-    def test_negative_below_negative_minimum_coerced(self, caplog):
-        with caplog.at_level(logging.WARNING):
-            result = clamp_with_warning("Cfg", "temp", -30, minimum=-20)
-        assert result == -20
+    def test_min_success_rate_bounded(self) -> None:
+        assert 0.0 <= c.DEFAULT_MIN_SUCCESS_RATE <= 1.0
 
 
-class TestConfigError:
-    """ConfigError is a plain Exception subclass."""
+class TestOrchestrationConstants:
+    """Verify orchestration session constants."""
 
-    def test_is_exception(self):
-        assert issubclass(ConfigError, Exception)
+    def test_max_parallel_agents(self) -> None:
+        assert c.DEFAULT_MAX_PARALLEL_AGENTS >= c.MIN_MAX_PARALLEL_AGENTS
 
-    def test_message_preserved(self):
-        err = ConfigError("bad config value")
-        assert str(err) == "bad config value"
+    def test_command_timeout(self) -> None:
+        assert c.DEFAULT_COMMAND_TIMEOUT >= c.MIN_COMMAND_TIMEOUT
+
+    def test_idle_timeout(self) -> None:
+        assert c.DEFAULT_IDLE_TIMEOUT_SECONDS >= c.MIN_IDLE_TIMEOUT_SECONDS
+
+    def test_session_inactivity_timeout(self) -> None:
+        assert c.DEFAULT_SESSION_INACTIVITY_TIMEOUT >= c.MIN_SESSION_INACTIVITY_TIMEOUT
+
+    def test_tool_call_timeout(self) -> None:
+        assert c.DEFAULT_TOOL_CALL_TIMEOUT >= c.MIN_TOOL_CALL_TIMEOUT
+
+    def test_process_output_timeout(self) -> None:
+        assert c.DEFAULT_PROCESS_OUTPUT_TIMEOUT >= c.MIN_PROCESS_OUTPUT_TIMEOUT
+
+    def test_max_ping_failures(self) -> None:
+        assert c.DEFAULT_MAX_PING_FAILURES >= c.MIN_MAX_PING_FAILURES
+
+    def test_circuit_breaker_drain_timeout(self) -> None:
+        assert c.DEFAULT_CIRCUIT_BREAKER_DRAIN_TIMEOUT >= c.MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT
+
+
+class TestStateBranchConstants:
+    """Verify git state branch constants."""
+
+    def test_state_branch_name_is_string(self) -> None:
+        assert isinstance(c.STATE_BRANCH_NAME, str)
+        assert len(c.STATE_BRANCH_NAME) > 0
+
+    def test_state_branch_name_value(self) -> None:
+        assert c.STATE_BRANCH_NAME == "pokepoke-state"
+
+
+class TestQualityScoringConstants:
+    """Verify item quality scoring constants."""
+
+    def test_needs_human_attention_defaults(self) -> None:
+        assert c.DEFAULT_NEEDS_HUMAN_ATTENTION_FAILURES >= c.MIN_NEEDS_HUMAN_ATTENTION_FAILURES
+
+    def test_min_needs_human_attention_positive(self) -> None:
+        assert c.MIN_NEEDS_HUMAN_ATTENTION_FAILURES >= 1
