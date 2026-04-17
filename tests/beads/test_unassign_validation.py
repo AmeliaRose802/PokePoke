@@ -98,10 +98,15 @@ class TestUnassignItemExceptionHandling:
     @patch("pokepoke.beads.beads_management._run_bd")
     def test_handles_timeout_error(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
         """Test unassign handles subprocess.TimeoutExpired."""
+        # Both primary and fallback attempts timeout
         mock_run_bd.side_effect = subprocess.TimeoutExpired("bd", 30)
 
-        with pytest.raises(subprocess.TimeoutExpired):
-            unassign_item("item-1")
+        result = unassign_item("item-1")
+
+        # TimeoutExpired is caught and function returns False
+        assert result is False
+        # Should try fallback (two attempts total)
+        assert mock_run_bd.call_count == 2
 
     @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
     @patch("pokepoke.beads.beads_management._run_bd")
@@ -183,6 +188,75 @@ class TestUnassignItemExceptionHandling:
         result = unassign_item("item-1")
 
         assert result is False
+        assert mock_run_bd.call_count == 2
+
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_fallback_stderr_error_detection(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
+        """Test stderr error detection in fallback attempt."""
+        # First attempt succeeds but gets error in stderr, triggers fallback
+        # Fallback also gets error in stderr and raises exception
+        mock_run_bd.side_effect = [
+            Mock(stderr="ERROR: assignee field not supported"),
+            Mock(stderr="ERROR: status update failed"),
+        ]
+
+        result = unassign_item("item-1")
+
+        # Both attempts fail, should return False
+        assert result is False
+        assert mock_run_bd.call_count == 2
+
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_sync_nonzero_returncode_logged(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
+        """Test that non-zero sync returncode is logged as warning."""
+        mock_run_bd.return_value = Mock(stderr='')
+        mock_sync.return_value = Mock(returncode=1)  # Non-zero return code
+
+        result = unassign_item("item-1")
+
+        # Unassign should still succeed despite sync warning
+        assert result is True
+        mock_sync.assert_called_once()
+
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_successful_primary_attempt_logs_correctly(
+        self, mock_run_bd: Mock, mock_sync: Mock
+    ) -> None:
+        """Test successful primary attempt with proper logging."""
+        mock_run_bd.return_value = Mock(stderr='')
+        mock_sync.return_value = Mock(returncode=0)
+
+        result = unassign_item("test-item-123")
+
+        assert result is True
+        # Should only call primary attempt
+        assert mock_run_bd.call_count == 1
+        # Verify correct arguments passed
+        args = mock_run_bd.call_args[0][0]
+        assert 'update' in args
+        assert 'test-item-123' in args
+        assert '--status' in args
+        assert 'open' in args
+
+    @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
+    @patch("pokepoke.beads.beads_management._run_bd")
+    def test_fallback_success_after_primary_fails(
+        self, mock_run_bd: Mock, mock_sync: Mock
+    ) -> None:
+        """Test fallback succeeds when primary attempt fails."""
+        # Primary fails with CalledProcessError, fallback succeeds
+        mock_run_bd.side_effect = [
+            subprocess.CalledProcessError(1, "bd", stderr="assignee not supported"),
+            Mock(stderr=''),  # Fallback succeeds
+        ]
+        mock_sync.return_value = Mock(returncode=0)
+
+        result = unassign_item("item-1")
+
+        assert result is True
         assert mock_run_bd.call_count == 2
 
 
