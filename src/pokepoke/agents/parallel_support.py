@@ -50,13 +50,8 @@ def finalize_workers(
 ) -> tuple[int, bool]:
     """Wait for remaining workers and collect results."""
     timeout_occurred = False
-    if lock:
-        with lock:
-            if not futures:
-                return total_requests, timeout_occurred
-            run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers")
-            snapshot = list(futures.keys())
-    else:
+    ctx = contextlib.nullcontext() if lock is None else lock
+    with ctx:
         if not futures:
             return total_requests, timeout_occurred
         run_logger.log_orchestrator(f"Waiting for {len(futures)} active workers")
@@ -64,10 +59,7 @@ def finalize_workers(
     _dummy = BeadsWorkItem(id="?", title="?", status="?", priority=0, issue_type="?")
     try:
         for fut in concurrent.futures.as_completed(snapshot, timeout=300):
-            if lock:
-                with lock:
-                    item = futures.pop(fut, _dummy)
-            else:
+            with ctx:
                 item = futures.pop(fut, _dummy)
             try:
                 result = fut.result()
@@ -82,10 +74,7 @@ def finalize_workers(
                 logger.warning(f"record_fn failed {item.id}: {exc}", exc_info=True)
             terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     except concurrent.futures.TimeoutError:
-        if lock:
-            with lock:
-                cancelled = sum(1 for f in list(futures.keys()) if f.cancel())
-        else:
+        with ctx:
             cancelled = sum(1 for f in list(futures.keys()) if f.cancel())
         run_logger.log_orchestrator(f"Cancelled {cancelled} workers; timeout", level="WARNING")
         timeout_occurred = True
@@ -98,17 +87,28 @@ def _drain_orphaned_futures(
     futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats, start_time: float,
     run_logger: RunLogger, record_fn: RecordFn, lock: threading.Lock | None = None,
 ) -> None:
-    """Drain futures remaining after a timeout."""
-    if lock:
-        with lock:
-            orphaned = list(futures.items())
-            futures.clear()
-    else:
+    """Drain futures after a timeout, waiting for in-progress ones to finish naturally.
+
+    Successfully completed futures are NOT unassigned — their finalization
+    (merge + close) already happened inside process_work_item.
+    """
+    ctx = contextlib.nullcontext() if lock is None else lock
+    with ctx:
         orphaned = list(futures.items())
         futures.clear()
     if not orphaned:
         return
     run_logger.log_orchestrator(f"Draining {len(orphaned)} orphan(s)", level="WARNING")
+
+    # Give in-progress futures a grace period to finish naturally.
+    pending_futs = [f for f, _ in orphaned if not f.done()]
+    if pending_futs:
+        grace_seconds = 300
+        run_logger.log_orchestrator(f"Waiting up to {grace_seconds}s for {len(pending_futs)} in-progress agent(s)")
+        concurrent.futures.wait(pending_futs, timeout=grace_seconds)
+        done_count = sum(1 for f in pending_futs if f.done())
+        run_logger.log_orchestrator(f"After grace period: {done_count}/{len(pending_futs)} agent(s) completed")
+
     for fut, item in orphaned:
         result = WorkItemResult(success=False, request_count=0)
         if fut.done():
@@ -120,7 +120,10 @@ def _drain_orphaned_futures(
             record_fn(item, result, session_stats, run_logger)
         except Exception as e:
             run_logger.log_orchestrator(f"Failed to record result for {item.id}: {e}", level="WARNING")
-        _safe_unassign(item.id, run_logger, "orphan")
+        if not result.success:
+            _safe_unassign(item.id, run_logger, "orphan")
+        else:
+            run_logger.log_orchestrator(f"Orphan {item.id} completed successfully — preserving finalized state")
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
 def drain_circuit_breaker(
@@ -134,10 +137,7 @@ def drain_circuit_breaker(
     mode_name: str,
     lock: threading.Lock | None = None,
 ) -> int:
-    """Drain remaining futures after circuit breaker trips. Returns updated total_requests.
-
-    lock: Optional lock protecting *futures*.
-    """
+    """Drain remaining futures after circuit breaker trips. Returns updated total_requests."""
     from pokepoke.config import get_config
     total_requests, _any, _succ, _fail = collect_fn(
         futures, failed_claim_ids, total_requests, session_stats, run_logger, record_fn, lock)
@@ -145,9 +145,7 @@ def drain_circuit_breaker(
         return total_requests
     drain_timeout = get_config().circuit_breaker_drain_timeout
     futures_len = _locked_futures_len(lock, futures)
-    run_logger.log_orchestrator(f"Circuit breaker: draining {futures_len} remaining agent(s)")
-    if drain_timeout > 0:
-        run_logger.log_orchestrator(f"Circuit breaker: drain timeout set to {drain_timeout}s")
+    run_logger.log_orchestrator(f"Circuit breaker: draining {futures_len} agent(s), timeout={drain_timeout}s")
     terminal_ui.ui.update_header(
         "PokePoke", f"{mode_name} Mode", f"Draining {futures_len} agents (circuit breaker)")
     start_time = time.time()
@@ -158,9 +156,8 @@ def drain_circuit_breaker(
         if drain_timeout > 0 and (time.time() - start_time) >= drain_timeout:
             futures_len = _locked_futures_len(lock, futures)
             run_logger.log_orchestrator(
-                f"Circuit breaker: drain timeout ({drain_timeout}s) exceeded with "
-                f"{futures_len} agent(s) still running — forcibly terminating",
-                level="WARNING")
+                f"Circuit breaker: drain timeout ({drain_timeout}s) exceeded, "
+                f"{futures_len} agent(s) still running — forcibly terminating", level="WARNING")
             _drain_orphaned_futures(futures, session_stats, start_time, run_logger, record_fn, lock)
             break
         total_requests, _any, _succ, _fail = collect_fn(
