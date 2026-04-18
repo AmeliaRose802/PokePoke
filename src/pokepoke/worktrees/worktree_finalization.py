@@ -1,9 +1,12 @@
 """Worktree finalization and merging operations."""
 
+from __future__ import annotations
+
 import json
 import logging
 import subprocess
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pokepoke.beads.beads_hierarchy import close_parent_if_complete, get_parent_id
 from pokepoke.beads.beads_management import close_item
@@ -16,6 +19,9 @@ from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from .coordination import merge_lock
 from .worktrees import cleanup_worktree
 
+if TYPE_CHECKING:
+    from pokepoke.utils.logging_utils import ItemLogger
+
 logger = logging.getLogger(__name__)
 
 
@@ -24,6 +30,7 @@ def finalize_work_item(
     worktree_path: Path,
     parent_agent_id: str | None = None,
     repo_path: str | None = None,
+    item_logger: ItemLogger | None = None,
 ) -> bool:
     """Finalize work item by merging worktree and closing issue.
 
@@ -39,7 +46,7 @@ def finalize_work_item(
     logger.info("\n✅ Successfully completed work item!")
     logger.info("   All changes committed and validated")
 
-    if not check_and_merge_worktree(item, worktree_path, parent_agent_id=parent_agent_id, repo_path=repo_path):
+    if not check_and_merge_worktree(item, worktree_path, parent_agent_id=parent_agent_id, repo_path=repo_path, item_logger=item_logger):
         return False
 
     close_work_item_and_parents(item)
@@ -52,6 +59,7 @@ def check_and_merge_worktree(
     worktree_path: Path,
     parent_agent_id: str | None = None,
     repo_path: str | None = None,
+    item_logger: ItemLogger | None = None,
 ) -> bool:
     """Check if worktree has commits and merge if needed.
 
@@ -90,7 +98,7 @@ def check_and_merge_worktree(
     logger.info("Waiting for merge lock for item %s", item.id)
     with merge_lock():
         logger.info("Acquired merge lock for item %s", item.id)
-        return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path, repo_path=repo_path)
+        return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path, repo_path=repo_path, item_logger=item_logger)
 
 
 def merge_worktree_to_dev(
@@ -99,6 +107,7 @@ def merge_worktree_to_dev(
     repo_root: Path | None = None,
     worktree_path: Path | None = None,
     repo_path: str | None = None,
+    item_logger: ItemLogger | None = None,
 ) -> bool:
     """Merge worktree to the default development branch.
 
@@ -128,6 +137,7 @@ def merge_worktree_to_dev(
         repo_root=effective_repo_root,
         parent_agent_id=parent_agent_id,
         repo_path=repo_path,
+        item_logger=item_logger,
     )
     merge_success, _ = perform_worktree_merge(ctx)
     return merge_success

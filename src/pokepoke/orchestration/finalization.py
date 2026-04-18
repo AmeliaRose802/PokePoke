@@ -76,7 +76,8 @@ def _handle_success(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
     set_terminal_banner(format_work_item_banner(ctx.item.id, ctx.item.title, "Finalizing"))
     assert ctx.worktree_path is not None, "worktree_path must be set when result is successful"
     success = finalize_work_item(
-        ctx.item, ctx.worktree_path, parent_agent_id=ctx.base_agent_id, repo_path=ctx.repo_path,
+        ctx.item, ctx.worktree_path, parent_agent_id=ctx.base_agent_id,
+        repo_path=ctx.repo_path, item_logger=ctx.item_logger,
     )
     if success:
         _store_discoveries(ctx.item, ctx.worktree_path)

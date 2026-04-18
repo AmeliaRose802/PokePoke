@@ -1,8 +1,11 @@
 """Cleanup agent invocation utilities."""
 
+from __future__ import annotations
+
 import logging
 import time
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_helpers import run_git
@@ -10,6 +13,9 @@ from pokepoke.git.git_operations import commit_all_changes, verify_main_repo_cle
 from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.types import AgentStats, BeadsWorkItem
 from pokepoke.types_agent import CopilotResult
+
+if TYPE_CHECKING:
+    from pokepoke.utils.logging_utils import ItemLogger
 from pokepoke.utils.constants import (
     CLEANUP_AGENT_TIMEOUT,
     CLEANUP_AGGREGATE_TIMEOUT,
@@ -31,7 +37,8 @@ def run_cleanup_loop(
     item: BeadsWorkItem,
     result: CopilotResult,
     cwd: str | None = None,
-    parent_agent_id: str | None = None
+    parent_agent_id: str | None = None,
+    item_logger: ItemLogger | None = None,
 ) -> tuple[bool, int]:
     """Run cleanup loop to commit changes and fix validation failures."""
     cleanup_agent_runs = 0
@@ -95,6 +102,7 @@ def run_cleanup_loop(
             cwd=cwd,
             modified_files=file_paths,
             parent_agent_id=parent_agent_id,
+            item_logger=item_logger,
         )
 
         aggregate_cleanup_stats(result.stats, cleanup_stats)
@@ -203,6 +211,7 @@ def _run_agent_with_ui(
     work_item_title: str | None = None,
     modified_files: list[str] | None = None,
     timeout: float | None = None,
+    item_logger: ItemLogger | None = None,
 ) -> tuple[bool, AgentStats | None]:
     """Invoke copilot with UI status tracking and metrics context."""
     try:
@@ -217,7 +226,12 @@ def _run_agent_with_ui(
                 agent_type=agent_type_key,
                 agent_prompt=cleanup_prompt,
             )
-            copilot_result = invoke_copilot(cleanup_item, prompt=cleanup_prompt, cwd=cwd, timeout=timeout)
+            if item_logger:
+                item_logger.log(f"\n{'='*60}\n{agent_label} ({agent_id})\n{'='*60}")
+            copilot_result = invoke_copilot(
+                cleanup_item, prompt=cleanup_prompt, cwd=cwd, timeout=timeout,
+                item_logger=item_logger,
+            )
 
         status = "success" if copilot_result.success else "failed"
         terminal_ui.ui.push_agent_status(
@@ -261,7 +275,8 @@ def invoke_cleanup_agent(
     cwd: str | None = None,
     modified_files: list[str] | None = None,
     parent_agent_id: str | None = None,
-    wait_for_merge: bool = True
+    wait_for_merge: bool = True,
+    item_logger: ItemLogger | None = None,
 ) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to commit uncommitted changes."""
     # Check if merge is active and wait if requested
@@ -308,6 +323,7 @@ def invoke_cleanup_agent(
         work_item_id=item.id, work_item_title=item.title,
         modified_files=modified_files,
         timeout=CLEANUP_AGENT_TIMEOUT,
+        item_logger=item_logger,
     )
 
 
@@ -317,7 +333,8 @@ def invoke_merge_conflict_cleanup_agent(
     unmerged_files: list[str] | None = None,
     cwd: str | None = None,
     parent_agent_id: str | None = None,
-    wait_for_merge: bool = True
+    wait_for_merge: bool = True,
+    item_logger: ItemLogger | None = None,
 ) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to resolve merge conflicts."""
     # Check if merge is active and wait if requested
@@ -339,7 +356,7 @@ def invoke_merge_conflict_cleanup_agent(
             parent_agent_id=parent_agent_id,
             agent_type="merge_conflict_cleanup",
         )
-        return invoke_cleanup_agent(item, parent_agent_id=parent_agent_id, wait_for_merge=wait_for_merge)
+        return invoke_cleanup_agent(item, parent_agent_id=parent_agent_id, wait_for_merge=wait_for_merge, item_logger=item_logger)
 
     current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
 
@@ -398,4 +415,5 @@ def invoke_merge_conflict_cleanup_agent(
         work_item_id=item.id, work_item_title=item.title,
         modified_files=unmerged_files,
         timeout=CLEANUP_AGENT_TIMEOUT,
+        item_logger=item_logger,
     )

@@ -65,15 +65,7 @@ def process_work_item(  # noqa: C901
     agent_id: str | None = None,
     config: WorkItemConfig | None = None,
 ) -> WorkItemResult:
-    """Process a single work item with timeout protection.
-
-    Args:
-        item: Work item to process
-        interactive: Whether to use interactive mode
-        run_logger: Optional logger for orchestrator events
-        agent_id: Optional agent identifier
-        config: Optional configuration bundle for timeout, beta testing, and beads client
-    """
+    """Process a single work item with timeout protection."""
     register_agent()
     cfg = config or WorkItemConfig()
     _assign = cfg.beads_client.assign_and_sync_item if cfg.beads_client else assign_and_sync_item
@@ -116,7 +108,7 @@ def process_work_item(  # noqa: C901
 
         logger.info("\n\U0001f512 Claiming work item...")
         if not _assign(item.id):
-            logger.error(f"❌ Failed to assign work item {item.id}")
+
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason="Failed to assign work item")
         _session = WorkItemSession(item_id=item.id, agent_name=get_agent_name(default="pokepoke"))
@@ -125,7 +117,7 @@ def process_work_item(  # noqa: C901
             run_logger=run_logger, item_logger=item_logger, repo_path=cfg.repo_path)
 
         if worktree_path is None:
-            logger.error(f"↩️  Returning {item.id} to queue (worktree creation failed)")
+
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason="Failed to create worktree")
         _session.worktree_path = str(worktree_path)
@@ -133,7 +125,6 @@ def process_work_item(  # noqa: C901
         _session._branch_created = True
         pokepoke_root = Path(cfg.repo_path) if cfg.repo_path else Path.cwd()
         worktree_cwd = str(worktree_path)
-        logger.info(f"   Working directory: {worktree_cwd}\n")
         last_feedback = ""
         accumulated_feedback: list[str] = []
         accumulated_stats = AgentStats()
@@ -153,8 +144,6 @@ def process_work_item(  # noqa: C901
         _get_comments = cfg.beads_client.get_item_comments if cfg.beads_client else None
         prior_contexts = get_worker_contexts(item.id, get_comments_fn=_get_comments)
         previous_worker_context = format_worker_context_for_prompt(prior_contexts)
-        if previous_worker_context:
-            logger.info("📋 Loaded context from %d previous worker attempt(s)", len(prior_contexts))
 
         while not is_shutting_down():
             elapsed = time.time() - start_time
@@ -280,7 +269,7 @@ def process_work_item(  # noqa: C901
 
             cleanup_success, cleanup_runs = run_cleanup_with_timeout(
                 item, result, pokepoke_root, start_time, timeout_seconds, cfg.timeout_hours,
-                worktree_cwd, parent_agent_id=base_agent_id)
+                worktree_cwd, parent_agent_id=base_agent_id, item_logger=item_logger)
             cleanup_agent_runs += cleanup_runs
 
             if not cleanup_success:
@@ -289,7 +278,8 @@ def process_work_item(  # noqa: C901
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
                                     failure_reason="Cleanup agent failed to resolve uncommitted changes")
-            if not global_config.gate_agent_enabled:
+
+            if not global_config.gate_agent_enabled:
                 logger.warning("\n⏭️  Gate Agent disabled via config — skipping verification")
                 gate_success = True
                 break

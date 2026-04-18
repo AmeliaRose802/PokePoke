@@ -1141,3 +1141,58 @@ class TestRunCleanupLoopMultipleAttempts:
 
         call_kwargs = mock_invoke.call_args[1]
         assert call_kwargs['modified_files'] == ["src/foo.py"]
+
+
+class TestItemLoggerPassThrough:
+    """Test that item_logger is forwarded to invoke_copilot."""
+
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    def test_run_agent_with_ui_passes_item_logger(self, mock_invoke, mock_ui):
+        """_run_agent_with_ui must forward item_logger to invoke_copilot."""
+        from pokepoke.agents.cleanup_agents import _run_agent_with_ui
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-1", success=True, output="", attempt_count=1
+        )
+        mock_logger = Mock()
+
+        item = BeadsWorkItem(
+            id="test-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        with patch('pokepoke.agents.cleanup_agents.agent_type_context', create=True):
+            _run_agent_with_ui(
+                "test-1", "Test Agent", "cleanup",
+                item, "prompt", None, None,
+                item_logger=mock_logger,
+            )
+
+        mock_invoke.assert_called_once()
+        assert mock_invoke.call_args[1].get("item_logger") is mock_logger
+        mock_logger.log.assert_called_once()  # header was written
+
+    @patch('pokepoke.agents.cleanup_agents.terminal_ui')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    def test_run_agent_with_ui_none_logger_by_default(self, mock_invoke, mock_ui):
+        """Without item_logger, invoke_copilot should get None."""
+        from pokepoke.agents.cleanup_agents import _run_agent_with_ui
+
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="test-1", success=True, output="", attempt_count=1
+        )
+
+        item = BeadsWorkItem(
+            id="test-1", title="T", description="D",
+            status="in_progress", priority=1, issue_type="task"
+        )
+
+        with patch('pokepoke.agents.cleanup_agents.agent_type_context', create=True):
+            _run_agent_with_ui(
+                "test-1", "Test Agent", "cleanup",
+                item, "prompt", None, None,
+            )
+
+        mock_invoke.assert_called_once()
+        assert mock_invoke.call_args[1].get("item_logger") is None

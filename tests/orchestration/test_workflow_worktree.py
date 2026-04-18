@@ -303,7 +303,7 @@ class TestCheckAndMergeWorktree:
         result = check_and_merge_worktree(item, worktree_path)
 
         assert result is True
-        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path, repo_path=None)
+        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path, repo_path=None, item_logger=None)
 
     @patch('pokepoke.worktrees.worktree_finalization.merge_lock')
     @patch('pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev')
@@ -332,7 +332,7 @@ class TestCheckAndMergeWorktree:
 
         # Should attempt merge anyway
         assert result is True
-        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path, repo_path=None)
+        mock_merge.assert_called_once_with(item, parent_agent_id=None, worktree_path=worktree_path, repo_path=None, item_logger=None)
 
 
 class TestWorktreeLockTimeout:

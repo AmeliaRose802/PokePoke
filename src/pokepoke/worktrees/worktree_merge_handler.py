@@ -4,9 +4,12 @@ Both the task-finalization path (worktree_finalization.merge_worktree_to_dev) an
 the maintenance-agent path (handle_worktree_merge) delegate to perform_worktree_merge.
 """
 
+from __future__ import annotations
+
 import logging
 from dataclasses import dataclass
 from pathlib import Path
+from typing import TYPE_CHECKING
 
 from filelock import Timeout
 
@@ -15,6 +18,9 @@ from pokepoke.git.repo_state_guard import cleanup_lock
 from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.types_stats import AgentStats
 from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
+
+if TYPE_CHECKING:
+    from pokepoke.utils.logging_utils import ItemLogger
 from pokepoke.worktrees.coordination import merge_lock
 from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree
 from pokepoke.worktrees.worktrees import merge_worktree
@@ -32,6 +38,7 @@ class WorktreeMergeContext:
     repo_root: Path
     parent_agent_id: str | None = None
     repo_path: str | None = None
+    item_logger: 'ItemLogger | None' = None
 
 
 def handle_worktree_merge(
@@ -127,7 +134,8 @@ def perform_worktree_merge(  # noqa: C901
                 ctx.agent_item,
                 cwd=repo_cwd,
                 parent_agent_id=ctx.parent_agent_id,
-                wait_for_merge=False
+                wait_for_merge=False,
+                item_logger=ctx.item_logger,
             )
 
         if cleanup_success:
@@ -197,7 +205,8 @@ def perform_worktree_merge(  # noqa: C901
                 unmerged_files=unmerged_files,
                 cwd=repo_cwd,
                 parent_agent_id=ctx.parent_agent_id,
-                wait_for_merge=False
+                wait_for_merge=False,
+                item_logger=ctx.item_logger,
             )
 
         if success:

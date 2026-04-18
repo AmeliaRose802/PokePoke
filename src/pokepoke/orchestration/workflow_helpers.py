@@ -239,7 +239,7 @@ def _maybe_decompose(
 def run_cleanup_with_timeout(
     item: BeadsWorkItem, result: CopilotResult, repo_root: Path, start_time: float,
     timeout_seconds: float, timeout_hours: float, cwd: str | None = None,
-    parent_agent_id: str | None = None,
+    parent_agent_id: str | None = None, item_logger: 'ItemLogger | None' = None,
 ) -> tuple[bool, int]:
     """Run cleanup loop until no uncommitted changes remain or timeout is reached."""
     cleanup_agent_runs = 0
@@ -256,6 +256,7 @@ def run_cleanup_with_timeout(
         set_terminal_banner(format_work_item_banner(item.id, item.title, f"Cleanup #{cleanup_attempt}"))
         cleanup_success, cleanup_runs = run_cleanup_loop(
             item, result, cwd=cwd, parent_agent_id=parent_agent_id,
+            item_logger=item_logger,
         )
         cleanup_agent_runs += cleanup_runs
         if not cleanup_success:
