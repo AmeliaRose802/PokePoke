@@ -250,7 +250,7 @@ class ParallelLoop(Protocol):
     multiple work items concurrently with a ThreadPoolExecutor.
     """
 
-    def __call__(
+    def __call__(  # noqa: PLR0913
         self,
         effective_parallel: int,
         mode_name: str,
@@ -320,7 +320,7 @@ _Future = concurrent.futures.Future[WorkItemResult]
 
 class CollectFn(Protocol):
     """Protocol for collecting completed futures and recording results."""
-    def __call__(
+    def __call__(  # noqa: PLR0913
         self,
         futures: dict[_Future, BeadsWorkItem],
         failed_claim_ids: set[str],

@@ -349,7 +349,7 @@ class TestCustomAgentSchedulerRegistration:
     @patch("pokepoke.maintenance.maintenance_scheduler._run_special_agent")
     @patch("pokepoke.maintenance.maintenance_scheduler.set_terminal_banner")
     @patch("pokepoke.desktop.terminal_ui.ui")
-    def test_custom_agent_runs_at_frequency(
+    def test_custom_agent_runs_at_frequency(  # noqa: PLR0913
         self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock,
         mock_clean, mock_reconciler, mock_stop, mock_active,
     ):
@@ -391,7 +391,7 @@ class TestCustomAgentSchedulerRegistration:
     @patch("pokepoke.maintenance.maintenance_scheduler._run_special_agent")
     @patch("pokepoke.maintenance.maintenance_scheduler.set_terminal_banner")
     @patch("pokepoke.desktop.terminal_ui.ui")
-    def test_disabled_custom_agent_skipped(
+    def test_disabled_custom_agent_skipped(  # noqa: PLR0913
         self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock,
         mock_clean, mock_reconciler,
     ):
@@ -424,7 +424,7 @@ class TestCustomAgentSchedulerRegistration:
     @patch("pokepoke.maintenance.maintenance_scheduler._run_special_agent")
     @patch("pokepoke.maintenance.maintenance_scheduler.set_terminal_banner")
     @patch("pokepoke.desktop.terminal_ui.ui")
-    def test_custom_agent_model_override_passed(
+    def test_custom_agent_model_override_passed(  # noqa: PLR0913
         self, mock_ui, mock_banner, mock_special, mock_run, mock_config, mock_lock,
         mock_clean, mock_reconciler, mock_stop, mock_active,
     ):

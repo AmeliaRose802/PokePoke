@@ -166,7 +166,7 @@ def _parallel_process_item(
         semaphore.release()
 
 
-def _run_loop_iteration(
+def _run_loop_iteration(  # noqa: PLR0913
     state: _LoopState,
     futures: dict[_Future, BeadsWorkItem],
     failed_claim_ids: set[str],
@@ -280,7 +280,7 @@ def _run_loop_iteration(
     return None
 
 
-def run_parallel_loop(
+def run_parallel_loop(  # noqa: PLR0913
     effective_parallel: int,
     mode_name: str,
     main_repo_path: Any,

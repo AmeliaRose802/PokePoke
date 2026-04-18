@@ -28,7 +28,7 @@ from pokepoke.types import BeadsWorkItem
 _DECOMP = "pokepoke.agents.decomposition_agent"
 
 
-def _make_item(
+def _make_item(  # noqa: PLR0913
     item_id: str = "task-1",
     title: str = "Build authentication system",
     description: str | None = None,
@@ -527,7 +527,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_success_creates_children_and_updates_parent(
+    def test_success_creates_children_and_updates_parent(  # noqa: PLR0913
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -565,7 +565,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_creates_blocking_deps_between_siblings(
+    def test_creates_blocking_deps_between_siblings(  # noqa: PLR0913
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -601,7 +601,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_partial_creation_rolls_back_all_children(
+    def test_partial_creation_rolls_back_all_children(  # noqa: PLR0913
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -676,7 +676,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles")
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_dedup_drops_existing_children(
+    def test_dedup_drops_existing_children(  # noqa: PLR0913
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -725,7 +725,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_propagates_parent_labels(
+    def test_propagates_parent_labels(  # noqa: PLR0913
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -760,7 +760,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_comment_mentions_failure_count(
+    def test_comment_mentions_failure_count(  # noqa: PLR0913
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -794,7 +794,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_records_created_items_in_session_stats(
+    def test_records_created_items_in_session_stats(  # noqa: PLR0913
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -852,7 +852,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_records_only_successfully_created_items(
+    def test_records_only_successfully_created_items(  # noqa: PLR0913
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,

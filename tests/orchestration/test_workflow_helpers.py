@@ -397,7 +397,7 @@ class TestRunCleanupWithTimeout:
     @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", side_effect=[True, False])
-    def test_cleanup_succeeds(self, mock_has, mock_fmt, mock_banner, mock_loop, sample_item, sample_result):
+    def test_cleanup_succeeds(self, mock_has, mock_fmt, mock_banner, mock_loop, sample_item, sample_result):  # noqa: PLR0913
         success, runs = run_cleanup_with_timeout(
             sample_item, sample_result, Path("/repo"), time.time(),
             timeout_seconds=3600, timeout_hours=1.0,
@@ -409,7 +409,7 @@ class TestRunCleanupWithTimeout:
     @patch("pokepoke.orchestration.workflow_helpers.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=True)
-    def test_cleanup_fails_breaks_loop(self, mock_has, mock_fmt, mock_banner, mock_loop, sample_item, sample_result):
+    def test_cleanup_fails_breaks_loop(self, mock_has, mock_fmt, mock_banner, mock_loop, sample_item, sample_result):  # noqa: PLR0913
         success, runs = run_cleanup_with_timeout(
             sample_item, sample_result, Path("/repo"), time.time(),
             timeout_seconds=3600, timeout_hours=1.0,
@@ -511,7 +511,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.finalization.set_terminal_banner")
     @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
-    def test_success_path(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
+    def test_success_path(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):  # noqa: PLR0913
         wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=True),
             item=sample_item,
@@ -536,7 +536,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.finalization.set_terminal_banner")
     @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=False)
-    def test_success_but_finalize_fails(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
+    def test_success_but_finalize_fails(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):  # noqa: PLR0913
         wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=True),
             item=sample_item,
@@ -560,7 +560,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.finalization.set_terminal_banner")
     @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.finalization.reconcile_completed_item", return_value=(False, {}))
-    def test_failure_path_cleanup(self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, capsys):
+    def test_failure_path_cleanup(self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, capsys):  # noqa: PLR0913
         """On failure, worktree is preserved (not cleaned up)."""
         wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=False, error="something broke"),
@@ -585,7 +585,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.finalization.set_terminal_banner")
     @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.finalization.reconcile_completed_item")
-    def test_failure_reconciled_as_success(self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
+    def test_failure_reconciled_as_success(self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):  # noqa: PLR0913
         mock_recon.return_value = (True, {"beads_closed": True, "commits_on_default": True, "worktree_cleaned": True})
         wr, ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=False, error="oops"),
@@ -611,7 +611,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.finalization.run_beta_tester")
     @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
-    def test_success_with_beta_test(self, mock_fin, mock_beta, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):
+    def test_success_with_beta_test(self, mock_fin, mock_beta, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats):  # noqa: PLR0913
         beta_stats = AgentStats(input_tokens=10, output_tokens=5)
         mock_beta.return_value = beta_stats
         wr, ok = _finalize_item_result(ResultContext(
@@ -638,7 +638,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.finalization.set_terminal_banner")
     @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
-    def test_success_with_loggers(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, mock_run_logger, mock_item_logger):
+    def test_success_with_loggers(self, mock_fin, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats, mock_run_logger, mock_item_logger):  # noqa: PLR0913
         wr, _ok = _finalize_item_result(ResultContext(
             result=CopilotResult(work_item_id="item-42", success=True),
             item=sample_item,
@@ -664,7 +664,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.finalization.set_terminal_banner")
     @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.finalization.reconcile_completed_item", return_value=(False, {}))
-    def test_failure_path_skips_cleanup_during_shutdown(
+    def test_failure_path_skips_cleanup_during_shutdown(  # noqa: PLR0913
         self, mock_recon, mock_fmt, mock_banner, mock_tui, sample_item, sample_stats,
     ):
         """Worktree should be preserved on failure (always, not just shutdown)."""

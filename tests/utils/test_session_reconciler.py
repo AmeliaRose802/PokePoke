@@ -36,7 +36,7 @@ def sessions_dir(tmp_path: Path) -> Path:
     return d
 
 
-def _write_test_journal(
+def _write_test_journal(  # noqa: PLR0913
     sessions_dir: Path,
     item_id: str = "TEST-001",
     branch: str = "task/TEST-001",

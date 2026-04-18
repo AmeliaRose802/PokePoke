@@ -77,7 +77,7 @@ def _locked_get_skip_and_active(
         with lock:
             return failed_claim_ids | attempted_this_cycle, set(current_active)
     return failed_claim_ids | attempted_this_cycle, set(current_active)
-def _locked_register_dispatch(
+def _locked_register_dispatch(  # noqa: PLR0913
     lock: threading.Lock | None, futures: dict[_Future, BeadsWorkItem],
     current_active: set[str], fut: _Future, item: BeadsWorkItem,
     future_start_times: dict[_Future, float] | None = None,
@@ -129,7 +129,7 @@ def _drain_orphaned_futures(
         except Exception:
             pass
         _safe_unassign(item.id, run_logger, "orphaned")
-def _update_failed_ids(
+def _update_failed_ids(  # noqa: PLR0913
     lock: threading.Lock | None, failed_claim_ids: set[str],
     item_id: str, success: bool, was_exception: bool, request_count: int,
 ) -> None:
@@ -200,7 +200,7 @@ def _check_agent_health(
                 )
     return stalled_count
 
-def collect_done_futures(
+def collect_done_futures(  # noqa: PLR0913
     futures: dict[_Future, BeadsWorkItem], failed_claim_ids: set[str],
     total_requests: int, session_stats: SessionStats, run_logger: RunLogger,
     record_fn: RecordFn, lock: threading.Lock | None = None,
@@ -335,7 +335,7 @@ class ParallelWorkerPool:
         """Shut down the underlying ThreadPoolExecutor."""
         self._executor.shutdown(wait=wait, cancel_futures=cancel_futures)
 
-def update_circuit_breaker(
+def update_circuit_breaker(  # noqa: PLR0913
     batch_successes: int, batch_failures: int, consecutive_failures: int,
     max_consecutive_failures: int, futures: dict[_Future, BeadsWorkItem],
     run_logger: RunLogger, lock: threading.Lock | None = None,
@@ -353,7 +353,7 @@ def update_circuit_breaker(
             f"stopping dispatch, draining {futures_len} remaining agent(s)", level="ERROR")
     return consecutive_failures, tripped
 
-def update_memory_circuit_breaker(
+def update_memory_circuit_breaker(  # noqa: PLR0913
     available_mb: int,
     memory_floor_mb: int,
     threshold_polls: int,

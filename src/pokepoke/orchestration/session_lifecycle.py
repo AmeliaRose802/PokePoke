@@ -25,7 +25,7 @@ from pokepoke.utils.shutdown import is_shutting_down
 logger = logging.getLogger(__name__)
 
 
-def _finalize_session(session_stats: SessionStats, start_time: float, items_completed: int,
+def _finalize_session(session_stats: SessionStats, start_time: float, items_completed: int,  # noqa: PLR0913
                       total_requests: int, run_logger: RunLogger, run_post_mortem: bool = False) -> None:
     """Collect ending stats, print summary, and clean up UI."""
     if run_post_mortem:

@@ -211,7 +211,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=False)
-    def test_assign_failure(self, mock_assign, mock_agent_name,
+    def test_assign_failure(self, mock_assign, mock_agent_name,  # noqa: PLR0913
                             mock_banner_fmt, mock_set_banner, mock_ui,
                             mock_assignment, mock_model, mock_config,
                             mock_register, mock_unregister):
@@ -237,7 +237,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.setup_worktree", return_value=None)
-    def test_worktree_failure(self, mock_setup, mock_assign, mock_agent_name,
+    def test_worktree_failure(self, mock_setup, mock_assign, mock_agent_name,  # noqa: PLR0913
                               mock_banner_fmt, mock_set_banner, mock_ui,
                               mock_assignment, mock_model, mock_config,
                               mock_cleanup, mock_session_cleanup,
@@ -270,7 +270,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
-    def test_successful_processing_no_gate(
+    def test_successful_processing_no_gate(  # noqa: PLR0913
         self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
@@ -313,7 +313,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.workflow._maybe_decompose")
-    def test_copilot_failure(
+    def test_copilot_failure(  # noqa: PLR0913
         self, mock_decompose, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
@@ -357,7 +357,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
-    def test_gate_agent_pass(
+    def test_gate_agent_pass(  # noqa: PLR0913
         self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
@@ -402,7 +402,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down")
-    def test_gate_reject_then_pass(
+    def test_gate_reject_then_pass(  # noqa: PLR0913
         self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
@@ -446,7 +446,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=True)
-    def test_shutdown_before_copilot(
+    def test_shutdown_before_copilot(  # noqa: PLR0913
         self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_cleanup,
@@ -476,7 +476,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.create_worktree")
     @patch("builtins.input", return_value="n")
-    def test_interactive_user_skips(
+    def test_interactive_user_skips(  # noqa: PLR0913
         self, mock_input, mock_create, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_cleanup,
@@ -514,7 +514,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down")
-    def test_retry_routes_output_to_retry_card(
+    def test_retry_routes_output_to_retry_card(  # noqa: PLR0913
         self, mock_shutdown, mock_setup, mock_assign, mock_agent_name,
         mock_banner_fmt, mock_set_banner, mock_ui, mock_assignment,
         mock_model, mock_config, mock_prompt, mock_copilot,
@@ -691,7 +691,7 @@ class TestFinalizeItemResult:
     @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
     @patch("pokepoke.orchestration.finalization.set_terminal_banner")
     @patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="banner")
-    def test_beta_test_enabled(self, mock_banner, mock_set, mock_finalize,
+    def test_beta_test_enabled(self, mock_banner, mock_set, mock_finalize,  # noqa: PLR0913
                                mock_beta, mock_tui, tmp_path):
         beta_stats = AgentStats(input_tokens=50)
         mock_beta.return_value = beta_stats

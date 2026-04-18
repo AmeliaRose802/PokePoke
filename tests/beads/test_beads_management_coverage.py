@@ -101,7 +101,7 @@ class TestAssignAndSyncItem:
     @patch(f"{MODULE}._parse_beads_json")
     @patch(f"{MODULE}._run_bd")
     @patch(f"{MODULE}.get_agent_name", return_value="pokepoke_test_agent")
-    def test_success_full_flow(
+    def test_success_full_flow(  # noqa: PLR0913
         self, mock_agent, mock_run, mock_parse, mock_lock,
         mock_rollback, mock_sync,
     ):

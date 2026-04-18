@@ -226,7 +226,7 @@ class TestMergeQueueStatsCollection:
     @patch("pokepoke.git.merge_queue.is_high_conflict_risk", return_value=True)
     @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
-    def test_high_conflict_records_double_rebase(
+    def test_high_conflict_records_double_rebase(  # noqa: PLR0913
         self, mock_rebase, mock_branch, mock_conflict, mock_shutdown, mock_sleep, tmp_path
     ):
         with patch(
@@ -249,7 +249,7 @@ class TestMergeQueueStatsCollection:
     @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=False)
-    def test_rebase_failure_records_failed_rebase(
+    def test_rebase_failure_records_failed_rebase(  # noqa: PLR0913
         self, mock_rebase, mock_clean, mock_branch, mock_conflict, mock_shutdown, tmp_path
     ):
         with patch(

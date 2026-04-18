@@ -36,7 +36,7 @@ def _log_failure(
         )
 
 
-def _fail_result(
+def _fail_result(  # noqa: PLR0913
     request_count: int = 0,
     stats: AgentStats | None = None,
     cleanup_agent_runs: int = 0,
@@ -236,7 +236,7 @@ def _maybe_decompose(
                         item.id, len(decomp_result.child_ids))
 
 
-def run_cleanup_with_timeout(
+def run_cleanup_with_timeout(  # noqa: PLR0913
     item: BeadsWorkItem, result: CopilotResult, repo_root: Path, start_time: float,
     timeout_seconds: float, timeout_hours: float, cwd: str | None = None,
     parent_agent_id: str | None = None, item_logger: 'ItemLogger | None' = None,

@@ -65,7 +65,7 @@ def _make_ui():
 _SENTINEL = object()
 
 
-def _base_patches(
+def _base_patches(  # noqa: PLR0913
     *,
     config=None,
     setup_worktree_rv=_SENTINEL,

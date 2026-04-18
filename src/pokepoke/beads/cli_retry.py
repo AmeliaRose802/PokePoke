@@ -65,7 +65,7 @@ def _is_transient_cli_error(exc: Exception) -> bool:
 # ---------------------------------------------------------------------------
 
 
-def _run_bd_with_retry(
+def _run_bd_with_retry(  # noqa: PLR0913
     args: list[str],
     *,
     max_attempts: int = 3,

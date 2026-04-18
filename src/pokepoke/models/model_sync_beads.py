@@ -96,7 +96,7 @@ def _find_model_items(items: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
     return model_items
 
 
-def _sync_beads_items(
+def _sync_beads_items(  # noqa: PLR0913
     models: list[CopilotModelSnapshot],
     sync_cfg: Any,
     existing_items: dict[str, dict[str, Any]],

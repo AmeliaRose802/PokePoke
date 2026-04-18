@@ -193,7 +193,7 @@ class TestPerformWorktreeMergeIntegration:
     @patch('pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
     @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
-    def test_perform_merge_tracks_uncleaned_worktree_on_failure(
+    def test_perform_merge_tracks_uncleaned_worktree_on_failure(  # noqa: PLR0913
         self,
         mock_get_unmerged,
         mock_is_merge,

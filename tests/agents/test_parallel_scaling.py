@@ -71,7 +71,7 @@ class TestRunParallelLoopScaling:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=3)
-    def test_refills_all_slots_after_completions(
+    def test_refills_all_slots_after_completions(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_mem, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -84,7 +84,7 @@ class TestRunParallelLoopScaling:
         # Iteration 2: collect clears all 3 futures (simulates 3 completions).
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 2:
                 futures.clear()
@@ -123,7 +123,7 @@ class TestRunParallelLoopScaling:
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     @patch("pokepoke.agents.parallel._collect_done_futures", return_value=(0, False, 0, 0))
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
-    def test_cli_override_uses_effective_parallel_over_config(
+    def test_cli_override_uses_effective_parallel_over_config(  # noqa: PLR0913
         self, mock_dyn_max, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_set_exec, mock_mem, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -156,7 +156,7 @@ class TestRunParallelLoopScaling:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=1)
-    def test_does_not_resubmit_while_future_tracked(
+    def test_does_not_resubmit_while_future_tracked(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -200,7 +200,7 @@ class TestRunParallelLoopScaling:
     @patch("pokepoke.agents.parallel.get_ready_work_items")
     @patch("pokepoke.agents.parallel.select_multiple_items")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=1)
-    def test_submit_exception_releases_resources(
+    def test_submit_exception_releases_resources(  # noqa: PLR0913
         self, mock_dyn_max, mock_sel, mock_ready, mock_repo,
         mock_shut, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -240,7 +240,7 @@ class TestRunParallelLoopScaling:
     @patch("pokepoke.agents.parallel.select_multiple_items")
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
-    def test_dynamic_max_agents_change_respected(
+    def test_dynamic_max_agents_change_respected(  # noqa: PLR0913
         self, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep,
         mock_claimable, mock_mem,
@@ -252,7 +252,7 @@ class TestRunParallelLoopScaling:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 2:
                 futures.clear()
@@ -295,7 +295,7 @@ class TestDynamicParallelCeiling:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_pool_sized_above_default_when_effective_parallel_exceeds_ceiling(
+    def test_pool_sized_above_default_when_effective_parallel_exceeds_ceiling(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -326,7 +326,7 @@ class TestDynamicParallelCeiling:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_pool_uses_effective_parallel_when_smaller_than_ceiling(
+    def test_pool_uses_effective_parallel_when_smaller_than_ceiling(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -355,7 +355,7 @@ class TestDynamicParallelCeiling:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_warning_logged_when_exceeding_default_ceiling(
+    def test_warning_logged_when_exceeding_default_ceiling(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:

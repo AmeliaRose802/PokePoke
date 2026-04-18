@@ -73,7 +73,7 @@ class TestForceRemoveDirectory:
     @patch(f"{MODULE}._validate_within_worktrees_dir")
     @patch(f"{MODULE}._safe_rmtree")
     @patch(f"{MODULE}.run_git")
-    def test_git_remove_fails_fallback_rmtree_succeeds(
+    def test_git_remove_fails_fallback_rmtree_succeeds(  # noqa: PLR0913
         self, mock_run_git, mock_rmtree, mock_validate, mock_junction, mock_sleep, tmp_path
     ):
         """When git worktree remove fails, fallback to _safe_rmtree succeeds."""
@@ -95,7 +95,7 @@ class TestForceRemoveDirectory:
     @patch(f"{MODULE}._safe_rmtree", side_effect=PermissionError("Access is denied"))
     @patch(f"{MODULE}.run_git")
     @patch(f"{MODULE}._is_windows_lock_error", return_value=True)
-    def test_windows_lock_error_retry(
+    def test_windows_lock_error_retry(  # noqa: PLR0913
         self, mock_is_lock, mock_run_git, mock_rmtree, mock_validate,
         mock_junction, mock_sleep, tmp_path
     ):
@@ -117,7 +117,7 @@ class TestForceRemoveDirectory:
     @patch(f"{MODULE}._validate_within_worktrees_dir")
     @patch(f"{MODULE}._safe_rmtree", side_effect=OSError("nope"))
     @patch(f"{MODULE}.run_git", side_effect=subprocess.CalledProcessError(1, "git", stderr="fail"))
-    def test_all_attempts_fail_returns_false(
+    def test_all_attempts_fail_returns_false(  # noqa: PLR0913
         self, mock_run_git, mock_rmtree, mock_validate, mock_junction, mock_sleep, tmp_path
     ):
         """Returns False when all attempts are exhausted."""
@@ -134,7 +134,7 @@ class TestForceRemoveDirectory:
     @patch(f"{MODULE}._validate_within_worktrees_dir")
     @patch(f"{MODULE}._safe_rmtree")
     @patch(f"{MODULE}.run_git")
-    def test_timeout_on_git_worktree_remove(
+    def test_timeout_on_git_worktree_remove(  # noqa: PLR0913
         self, mock_run_git, mock_rmtree, mock_validate, mock_junction, mock_sleep, tmp_path
     ):
         """TimeoutExpired on git worktree remove triggers fallback."""

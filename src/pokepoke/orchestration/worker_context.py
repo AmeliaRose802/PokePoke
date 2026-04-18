@@ -16,7 +16,7 @@ WORKER_CONTEXT_TAG = "[WORKER_CONTEXT]"
 _MAX_CONTEXT_IN_PROMPT = 3
 
 
-def save_worker_context(
+def save_worker_context(  # noqa: PLR0913
     item_id: str,
     *,
     attempt_number: int,

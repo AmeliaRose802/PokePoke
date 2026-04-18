@@ -187,7 +187,7 @@ class MaintenanceScheduler:
         if repo_id is not None:
             record_maintenance_run(repo_id)
 
-    def _run_agent_batch(
+    def _run_agent_batch(  # noqa: PLR0913
         self,
         agents: list[MaintenanceAgentConfig],
         pokepoke_repo: Path,
@@ -243,7 +243,7 @@ class MaintenanceScheduler:
 
         self._run_agent_batch(exclusive_due, pokepoke_repo, session_stats, run_logger, repo_id)
 
-    def _maybe_run_agent(
+    def _maybe_run_agent(  # noqa: PLR0913
         self,
         agent_name: str,
         agent_cfg: MaintenanceAgentConfig,
@@ -294,7 +294,7 @@ class MaintenanceScheduler:
 
         self._run_with_singleton_guard(agent_name, agent_cfg, pokepoke_repo, session_stats, run_logger, repo_id=repo_id)
 
-    def _run_with_singleton_guard(
+    def _run_with_singleton_guard(  # noqa: PLR0913
         self, agent_name: str, agent_cfg: MaintenanceAgentConfig,
         pokepoke_repo: Path, session_stats: SessionStats,
         run_logger: RunLogger, repo_id: str | None = None,

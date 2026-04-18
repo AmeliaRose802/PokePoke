@@ -320,10 +320,9 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:  # noqa: C901
     ctx.finalize()
     return 0
 
-def run_orchestrator(  # noqa: PLR0913, RUF100
+def run_orchestrator(  # noqa: PLR0913
     # Entry point with 6 params representing distinct CLI options; all have defaults.
     # Config dataclass not used here as it would reduce clarity at the CLI boundary.
-    # PLR0913 currently globally ignored but will be re-enabled after all violations fixed.
     interactive: bool = True, continuous: bool = False,
     run_beta_first: bool = False, agent_name_override: str | None = None,
     max_parallel_agents: int = 1,

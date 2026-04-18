@@ -301,7 +301,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_continuous_mode_idle_uses_exponential_backoff(
+    def test_continuous_mode_idle_uses_exponential_backoff(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_loop_sleep, mock_support_sleep,
     ) -> None:
@@ -332,7 +332,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_continuous_mode_loops_back_when_no_items(
+    def test_continuous_mode_loops_back_when_no_items(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -370,7 +370,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_non_continuous_mode_exits_when_no_items(
+    def test_non_continuous_mode_exits_when_no_items(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -404,7 +404,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_record_fn_exception_does_not_crash_loop(
+    def test_record_fn_exception_does_not_crash_loop(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -500,7 +500,7 @@ class TestDynamicParallelCeiling:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_pool_sized_above_default_when_effective_parallel_exceeds_ceiling(
+    def test_pool_sized_above_default_when_effective_parallel_exceeds_ceiling(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -531,7 +531,7 @@ class TestDynamicParallelCeiling:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_pool_uses_effective_parallel_when_smaller_than_ceiling(
+    def test_pool_uses_effective_parallel_when_smaller_than_ceiling(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -560,7 +560,7 @@ class TestDynamicParallelCeiling:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_warning_logged_when_exceeding_default_ceiling(
+    def test_warning_logged_when_exceeding_default_ceiling(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -603,7 +603,7 @@ class TestParallelDrainFutureEdgeCases:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_no_items_continuous_mode_sleeps(
+    def test_no_items_continuous_mode_sleeps(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -627,7 +627,7 @@ class TestParallelDrainFutureEdgeCases:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_no_items_non_continuous_exits(
+    def test_no_items_non_continuous_exits(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -666,7 +666,7 @@ class TestParallelReplenishmentBug:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=10)
-    def test_all_agents_exit_replenishes_to_limit(
+    def test_all_agents_exit_replenishes_to_limit(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -680,7 +680,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # Simulate all 10 agents completing simultaneously.
@@ -724,7 +724,7 @@ class TestParallelReplenishmentBug:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=10)
-    def test_success_does_not_block_replenishment_continuous(
+    def test_success_does_not_block_replenishment_continuous(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -738,7 +738,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # 9 failures + 1 success; all slots freed.
@@ -779,7 +779,7 @@ class TestParallelReplenishmentBug:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
-    def test_single_shot_stops_replenishing_after_success(
+    def test_single_shot_stops_replenishing_after_success(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -794,7 +794,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 1:
                 # First iteration: no completions yet.
@@ -920,7 +920,7 @@ class TestCircuitBreaker:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
-    def test_circuit_breaker_resets_on_success(
+    def test_circuit_breaker_resets_on_success(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -930,7 +930,7 @@ class TestCircuitBreaker:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # 5 failures in one round → counts as 1 failure-round

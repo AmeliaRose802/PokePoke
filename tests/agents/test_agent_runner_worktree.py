@@ -27,7 +27,7 @@ class TestRunWorktreeAgent:
     @patch('os.getcwd')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_successful_worktree_agent(
+    def test_successful_worktree_agent(  # noqa: PLR0913
         self,
         mock_create: Mock,
         mock_invoke: Mock,
@@ -116,7 +116,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.create_worktree')
     @patch('os.getcwd')
     @patch('os.chdir')
-    def test_invoke_copilot_exception(
+    def test_invoke_copilot_exception(  # noqa: PLR0913
         self, mock_chdir: Mock, mock_getcwd: Mock,
         mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
         mock_cleanup: Mock, mock_branch_has_commits: Mock,
@@ -146,7 +146,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_worktree_agent_failure(
+    def test_worktree_agent_failure(  # noqa: PLR0913
         self,
         mock_create: Mock,
         mock_invoke: Mock,
@@ -200,7 +200,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_worktree_merge_failure(
+    def test_worktree_merge_failure(  # noqa: PLR0913
         self,
         mock_create: Mock,
         mock_invoke: Mock,
@@ -260,7 +260,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_merge_cleanup_success_then_retry_succeeds(
+    def test_merge_cleanup_success_then_retry_succeeds(  # noqa: PLR0913
         self,
         mock_create: Mock,
         mock_invoke: Mock,
@@ -322,7 +322,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_merge_still_in_progress_after_cleanup_aborts(
+    def test_merge_still_in_progress_after_cleanup_aborts(  # noqa: PLR0913
         self,
         mock_create: Mock,
         mock_invoke: Mock,
@@ -381,7 +381,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_main_repo_not_ready_cleanup_fails(
+    def test_main_repo_not_ready_cleanup_fails(  # noqa: PLR0913
         self,
         mock_create: Mock,
         mock_invoke: Mock,
@@ -433,7 +433,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_main_repo_not_ready_cleanup_succeeds_but_still_fails(
+    def test_main_repo_not_ready_cleanup_succeeds_but_still_fails(  # noqa: PLR0913
         self,
         mock_create: Mock,
         mock_invoke: Mock,
@@ -567,7 +567,7 @@ class TestWorktreeAgentFinallyCleanupException:
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_cleanup_raises_adds_uncleaned(
+    def test_cleanup_raises_adds_uncleaned(  # noqa: PLR0913
         self, mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
         mock_parse: Mock, mock_cleanup: Mock,
         mock_add_uncleaned: Mock
@@ -602,7 +602,7 @@ class TestWorktreeAgentCleanupFailureSetsResultFalse:
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
-    def test_cleanup_loop_failure_forces_result_false(
+    def test_cleanup_loop_failure_forces_result_false(  # noqa: PLR0913
         self, mock_create: Mock, mock_invoke: Mock, mock_cleanup_loop: Mock,
         mock_parse: Mock, mock_cleanup: Mock, mock_handle_merge: Mock,
         mock_branch_has_commits: Mock,

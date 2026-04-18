@@ -61,7 +61,7 @@ def _build_token_usage_callback() -> Callable[[int, int], None]:
 # Full output is already written to the item log file on disk.
 _MAX_RESULT_OUTPUT_BYTES = 512 * 1024
 
-def _build_copilot_result(
+def _build_copilot_result(  # noqa: PLR0913
     work_item: BeadsWorkItem,
     output_lines: Sequence[str],
     errors: list[str],
@@ -213,7 +213,7 @@ def _check_early_exit(
         return _fail_result(work_item_id, error)
     return None
 
-def _check_abort_result(
+def _check_abort_result(  # noqa: PLR0913
     work_item_id: str,
     inactivity_detected: bool, inactivity_timeout: float,
     tool_timed_out: bool, tool_call_timeout: float,

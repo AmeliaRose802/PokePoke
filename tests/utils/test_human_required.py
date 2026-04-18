@@ -16,7 +16,7 @@ from pokepoke.orchestration.work_item_selection import (
 from pokepoke.types import BeadsWorkItem
 
 
-def _make_item(
+def _make_item(  # noqa: PLR0913
     id: str = "task-1",
     title: str = "Task",
     status: str = "open",

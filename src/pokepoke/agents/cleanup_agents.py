@@ -199,7 +199,7 @@ def _build_work_item_context(item: BeadsWorkItem, heading: str, extra: str = "")
     return context
 
 
-def _run_agent_with_ui(
+def _run_agent_with_ui(  # noqa: PLR0913
     agent_id: str,
     agent_label: str,
     agent_type_key: str,
@@ -270,7 +270,7 @@ def _wait_for_merge_completion(agent_label: str, item_id: str) -> None:
         logger.info(f"{agent_label} agent for {item_id} proceeding after merge completion")
 
 
-def invoke_cleanup_agent(
+def invoke_cleanup_agent(  # noqa: PLR0913
     item: BeadsWorkItem,
     cwd: str | None = None,
     modified_files: list[str] | None = None,
@@ -327,7 +327,7 @@ def invoke_cleanup_agent(
     )
 
 
-def invoke_merge_conflict_cleanup_agent(
+def invoke_merge_conflict_cleanup_agent(  # noqa: PLR0913
     item: BeadsWorkItem,
     error_msg: str,
     unmerged_files: list[str] | None = None,

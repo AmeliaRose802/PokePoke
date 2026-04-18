@@ -35,7 +35,7 @@ class TestHandlePreflightChecks:
         cfg.preflight_health.max_repair_attempts = 3
         return cfg
 
-    def _mock_health_result(self, *, passed: bool = True, errors=None,
+    def _mock_health_result(self, *, passed: bool = True, errors=None,  # noqa: PLR0913
                             warnings=None, self_repair_attempted: bool = False,
                             self_repair_successful: bool = False,
                             critical: bool = False, environmental: bool = False):

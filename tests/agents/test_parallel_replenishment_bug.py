@@ -70,7 +70,7 @@ class TestParallelReplenishmentBug:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=10)
-    def test_all_agents_exit_replenishes_to_limit(
+    def test_all_agents_exit_replenishes_to_limit(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -84,7 +84,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # Simulate all 10 agents completing simultaneously.
@@ -128,7 +128,7 @@ class TestParallelReplenishmentBug:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=10)
-    def test_success_does_not_block_replenishment_continuous(
+    def test_success_does_not_block_replenishment_continuous(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -142,7 +142,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 2:
                 # 9 failures + 1 success; all slots freed.
@@ -183,7 +183,7 @@ class TestParallelReplenishmentBug:
     @patch("pokepoke.agents.parallel._collect_done_futures")
     @patch("pokepoke.agents.parallel.process_work_item")
     @patch("pokepoke.agents.parallel._get_dynamic_max_agents", return_value=2)
-    def test_single_shot_stops_replenishing_after_success(
+    def test_single_shot_stops_replenishing_after_success(  # noqa: PLR0913
         self, mock_dyn_max, mock_pwi, mock_collect, mock_sel, mock_ready,
         mock_repo, mock_shut, mock_stop, mock_set_exec, mock_ui, mock_sleep, mock_claimable,
     ) -> None:
@@ -198,7 +198,7 @@ class TestParallelReplenishmentBug:
 
         call_idx = [0]
 
-        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):
+        def collect_side(futures, failed, total, stats, logger, record_fn, lock=None, future_start_times=None):  # noqa: PLR0913
             call_idx[0] += 1
             if call_idx[0] == 1:
                 # First iteration: no completions yet.

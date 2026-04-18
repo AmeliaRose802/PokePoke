@@ -479,7 +479,7 @@ class TestContextManagerIntegration:
     @patch("pokepoke.beads.beads_manifest_utils.unassign_with_retry", return_value=True)
     @patch("pokepoke.worktrees.worktrees.create_worktree", return_value=Path("/wt/x"))
     @patch("pokepoke.beads.beads_management.assign_and_sync_item", return_value=True)
-    def test_with_exception_triggers_cleanup(
+    def test_with_exception_triggers_cleanup(  # noqa: PLR0913
         self, mock_assign, mock_wt, mock_unassign, mock_merge, mock_journal, mock_del_j
     ):
         s = _make_session()

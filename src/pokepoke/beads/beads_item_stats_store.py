@@ -306,7 +306,7 @@ def _empty_item_metrics() -> dict[str, Any]:
     }
 
 
-def record_item_attempt(
+def record_item_attempt(  # noqa: PLR0913
     item_id: str,
     *,
     success: bool,

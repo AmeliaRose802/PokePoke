@@ -99,7 +99,7 @@ class AgentRegistry:
             self._preview_limit = preview_limit
             self._detail_limit = detail_limit
 
-    def update_status(
+    def update_status(  # noqa: PLR0913
         self,
         agent_id: str,
         name: str,

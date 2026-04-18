@@ -31,7 +31,7 @@ JsonDict = dict[str, Any]
 class PersistentJsonStore:
     """A tiny JSON persistence wrapper with locking and atomic writes."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         default_path: Path,

@@ -36,7 +36,7 @@ class TestRunBetaTesterMcpRestart:
     @patch(f"{_BT}.terminal_ui")
     @patch(f"{_BT}.subprocess")
     @patch(f"{_BT}.get_config")
-    def test_mcp_restart_success(self, mock_config, mock_subprocess, mock_ui,
+    def test_mcp_restart_success(self, mock_config, mock_subprocess, mock_ui,  # noqa: PLR0913
                                   mock_prompts_dir, mock_gen_id, mock_run_agent,
                                   tmp_path):
         """MCP restart with returncode=0 logs success."""
@@ -73,7 +73,7 @@ class TestRunBetaTesterMcpRestart:
     @patch(f"{_BT}.terminal_ui")
     @patch(f"{_BT}.subprocess")
     @patch(f"{_BT}.get_config")
-    def test_mcp_restart_nonzero_exit_with_output(self, mock_config, mock_subprocess,
+    def test_mcp_restart_nonzero_exit_with_output(self, mock_config, mock_subprocess,  # noqa: PLR0913
                                                     mock_ui, mock_prompts_dir,
                                                     mock_gen_id, mock_run_agent,
                                                     tmp_path):
@@ -109,7 +109,7 @@ class TestRunBetaTesterMcpRestart:
     @patch(f"{_BT}.terminal_ui")
     @patch(f"{_BT}.subprocess")
     @patch(f"{_BT}.get_config")
-    def test_mcp_restart_timeout(self, mock_config, mock_subprocess,
+    def test_mcp_restart_timeout(self, mock_config, mock_subprocess,  # noqa: PLR0913
                                   mock_ui, mock_prompts_dir,
                                   mock_gen_id, mock_run_agent, tmp_path):
         """Timeout during restart logs warning and continues."""
@@ -144,7 +144,7 @@ class TestRunBetaTesterMcpRestart:
     @patch(f"{_BT}.terminal_ui")
     @patch(f"{_BT}.subprocess")
     @patch(f"{_BT}.get_config")
-    def test_mcp_restart_general_exception(self, mock_config, mock_subprocess,
+    def test_mcp_restart_general_exception(self, mock_config, mock_subprocess,  # noqa: PLR0913
                                             mock_ui, mock_prompts_dir,
                                             mock_gen_id, mock_run_agent, tmp_path):
         """General exception during restart logs warning and continues."""
@@ -179,7 +179,7 @@ class TestRunBetaTesterMcpRestart:
     @patch(f"{_BT}.terminal_ui")
     @patch(f"{_BT}.subprocess")
     @patch(f"{_BT}.get_config")
-    def test_mcp_restart_script_not_found(self, mock_config, mock_subprocess,
+    def test_mcp_restart_script_not_found(self, mock_config, mock_subprocess,  # noqa: PLR0913
                                            mock_ui, mock_prompts_dir,
                                            mock_gen_id, mock_run_agent, tmp_path):
         """Script not found logs warning (covers lines 41-42)."""
@@ -198,7 +198,7 @@ class TestRunBetaTesterMcpRestart:
     @patch(f"{_BT}.terminal_ui")
     @patch(f"{_BT}.subprocess")
     @patch(f"{_BT}.get_config")
-    def test_mcp_restart_rejects_path_traversal(self, mock_config, mock_subprocess,
+    def test_mcp_restart_rejects_path_traversal(self, mock_config, mock_subprocess,  # noqa: PLR0913
                                                 mock_ui, mock_prompts_dir,
                                                 mock_gen_id, mock_run_agent, tmp_path,
                                                 caplog):
@@ -231,7 +231,7 @@ class TestRunBetaTesterMcpDisabled:
     @patch(f"{_BT}.get_pokepoke_prompts_dir")
     @patch(f"{_BT}.terminal_ui")
     @patch(f"{_BT}.get_config")
-    def test_mcp_not_enabled(self, mock_config, mock_ui, mock_prompts_dir,
+    def test_mcp_not_enabled(self, mock_config, mock_ui, mock_prompts_dir,  # noqa: PLR0913
                               mock_gen_id, mock_run_agent, tmp_path):
         """When MCP server is disabled, logs info (covers line 61)."""
         cfg = _make_config(mcp_enabled=False)
@@ -289,7 +289,7 @@ class TestRunBetaTesterRepoRoot:
     @patch(f"{_BT}.get_pokepoke_prompts_dir")
     @patch(f"{_BT}.terminal_ui")
     @patch(f"{_BT}.get_config")
-    def test_repo_root_defaults_to_cwd(self, mock_config, mock_ui,
+    def test_repo_root_defaults_to_cwd(self, mock_config, mock_ui,  # noqa: PLR0913
                                         mock_prompts_dir, mock_gen_id,
                                         mock_run_agent, tmp_path):
         """repo_root=None uses Path.cwd() (covers line 89)."""

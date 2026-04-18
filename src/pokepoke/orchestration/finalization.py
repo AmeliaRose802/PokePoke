@@ -44,7 +44,7 @@ class ResultContext:
     repo_path: str | None = None
 
 
-def _build_completion_record(
+def _build_completion_record(  # noqa: PLR0913
     item_id: str, model: str, duration: float, success: bool,
     gate_passed: bool | None, stats: AgentStats | None, request_count: int,
 ) -> ModelCompletionRecord:

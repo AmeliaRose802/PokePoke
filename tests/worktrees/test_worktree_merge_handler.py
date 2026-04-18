@@ -25,7 +25,7 @@ def _make_agent_item(item_id: str = "maintenance-test") -> BeadsWorkItem:
     )
 
 
-def _make_merge_context(
+def _make_merge_context(  # noqa: PLR0913
     agent_id: str = "maintenance-test",
     agent_name: str = "Janitor",
     worktree_path: Path = Path("C:/worktrees/task-maintenance-test"),
@@ -115,7 +115,7 @@ def test_handle_worktree_merge_cleanup_retry_respects_second_failure(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
+def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(  # noqa: PLR0913
     mock_check_ready,
     mock_merge_worktree,
     mock_invoke_conflict_cleanup,
@@ -152,7 +152,7 @@ def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_handle_worktree_merge_conflict_cleanup_failure(
+def test_handle_worktree_merge_conflict_cleanup_failure(  # noqa: PLR0913
     mock_check_ready,
     mock_merge_worktree,
     mock_invoke_conflict_cleanup,
@@ -226,7 +226,7 @@ def test_perform_pre_merge_cleanup_fails(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_abort_merge_failure_returns_false(
+def test_perform_abort_merge_failure_returns_false(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort,
 ) -> None:
@@ -254,7 +254,7 @@ def test_perform_abort_merge_failure_returns_false(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_retry_merge_succeeds_after_cleanup(
+def test_perform_retry_merge_succeeds_after_cleanup(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort,
 ) -> None:
@@ -281,7 +281,7 @@ def test_perform_retry_merge_succeeds_after_cleanup(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_retry_merge_fails_aborts(
+def test_perform_retry_merge_fails_aborts(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort,
 ) -> None:
@@ -306,7 +306,7 @@ def test_perform_retry_merge_fails_aborts(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_cleanup_failure_no_abort_when_not_merging(
+def test_perform_cleanup_failure_no_abort_when_not_merging(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add,
     mock_is_merging, mock_abort,
 ) -> None:
@@ -329,7 +329,7 @@ def test_perform_cleanup_failure_no_abort_when_not_merging(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_conflict_details_in_cleanup_prompt(
+def test_perform_conflict_details_in_cleanup_prompt(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging,
 ) -> None:
@@ -358,7 +358,7 @@ def test_perform_conflict_details_in_cleanup_prompt(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_handles_many_conflict_files(
+def test_perform_handles_many_conflict_files(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging,
 ) -> None:
@@ -383,7 +383,7 @@ def test_perform_handles_many_conflict_files(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_fetches_fresh_unmerged_when_not_merging(
+def test_perform_fetches_fresh_unmerged_when_not_merging(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add,
     mock_get_unmerged, mock_is_merging,
 ) -> None:
@@ -405,7 +405,7 @@ def test_perform_fetches_fresh_unmerged_when_not_merging(
 @patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_first_merge_worktree_persists(
+def test_perform_first_merge_worktree_persists(  # noqa: PLR0913
     mock_check, mock_merge, mock_add,
     mock_get_unmerged, mock_is_merging, tmp_path,
 ) -> None:
@@ -433,7 +433,7 @@ def test_perform_first_merge_worktree_persists(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_retry_abort_failure_logs_error(
+def test_perform_retry_abort_failure_logs_error(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort,
 ) -> None:
@@ -458,7 +458,7 @@ def test_perform_retry_abort_failure_logs_error(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_cleanup_failure_abort_failure_logged(
+def test_perform_cleanup_failure_abort_failure_logged(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add,
     mock_is_merging, mock_abort,
 ) -> None:
@@ -484,7 +484,7 @@ def test_perform_cleanup_failure_abort_failure_logged(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_retry_merge_worktree_persists(
+def test_perform_retry_merge_worktree_persists(  # noqa: PLR0913
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
     mock_get_unmerged, mock_is_merging, mock_abort, tmp_path,
 ) -> None:

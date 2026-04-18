@@ -329,7 +329,7 @@ class TestRunGateAgentReturnsValidResult:
     @patch("pokepoke.agents.gate_agent_executor.get_config")
     @patch("pokepoke.agents.gate_agent_executor.record_gate_check")
     @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value="test-model")
-    def test_gate_success_result(
+    def test_gate_success_result(  # noqa: PLR0913
         self, mock_select_gate: MagicMock, mock_record: MagicMock,
         mock_config: MagicMock, mock_branch: MagicMock,
         mock_invoke: MagicMock, mock_ui: MagicMock,
@@ -370,7 +370,7 @@ class TestRunGateAgentReturnsValidResult:
     @patch("pokepoke.agents.gate_agent_executor.get_config")
     @patch("pokepoke.agents.gate_agent_executor.record_gate_check")
     @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value="test-model")
-    def test_gate_failure_result(
+    def test_gate_failure_result(  # noqa: PLR0913
         self, mock_select_gate: MagicMock, mock_record: MagicMock,
         mock_config: MagicMock, mock_branch: MagicMock,
         mock_invoke: MagicMock, mock_ui: MagicMock,
@@ -398,7 +398,7 @@ class TestRunGateAgentReturnsValidResult:
     @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
     @patch("pokepoke.agents.gate_agent_executor.get_config")
     @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
-    def test_gate_copilot_timeout_result(
+    def test_gate_copilot_timeout_result(  # noqa: PLR0913
         self, mock_select_gate: MagicMock,
         mock_config: MagicMock, mock_branch: MagicMock,
         mock_invoke: MagicMock, mock_ui: MagicMock,
@@ -431,7 +431,7 @@ class TestRunGateAgentReturnsValidResult:
     @patch("pokepoke.agents.gate_agent_executor.get_default_branch", return_value="main")
     @patch("pokepoke.agents.gate_agent_executor.get_config")
     @patch("pokepoke.agents.gate_agent_executor.select_gate_model", return_value=None)
-    def test_gate_crash_result(
+    def test_gate_crash_result(  # noqa: PLR0913
         self, mock_select_gate: MagicMock,
         mock_config: MagicMock, mock_branch: MagicMock,
         mock_invoke: MagicMock, mock_ui: MagicMock,

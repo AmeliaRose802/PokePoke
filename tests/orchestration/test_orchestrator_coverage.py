@@ -207,7 +207,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
-    def test_no_work_items_exits_zero(
+    def test_no_work_items_exits_zero(  # noqa: PLR0913
         self, mock_subprocess, mock_print, mock_shutdown, mock_select, mock_ready,
         mock_repo, mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
@@ -236,7 +236,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
-    def test_repo_check_failure_returns_one(
+    def test_repo_check_failure_returns_one(  # noqa: PLR0913
         self, mock_subprocess, mock_print, mock_shutdown, mock_repo,
         mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
@@ -271,7 +271,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.session_lifecycle.run_periodic_maintenance")
     @patch("pokepoke.orchestration.session_lifecycle.increment_items_completed", return_value=1)
     @patch("subprocess.run")
-    def test_single_item_success(
+    def test_single_item_success(  # noqa: PLR0913
         self, mock_subprocess, mock_increment, mock_maintenance, mock_print,
         mock_stop, mock_shutdown, mock_process, mock_select, mock_ready,
         mock_repo, mock_unassign_count, mock_beads_stats,
@@ -315,7 +315,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.should_stop_after_current", return_value=False)
     @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
-    def test_single_item_failure(
+    def test_single_item_failure(  # noqa: PLR0913
         self, mock_subprocess, mock_print, mock_stop, mock_shutdown, mock_process,
         mock_select, mock_ready, mock_repo,
         mock_unassign_count, mock_beads_stats,
@@ -354,7 +354,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.should_stop_after_current", return_value=False)
     @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
-    def test_claim_failure_adds_to_skip(
+    def test_claim_failure_adds_to_skip(  # noqa: PLR0913
         self, mock_subprocess, mock_print, mock_stop, mock_shutdown, mock_process,
         mock_select, mock_ready, mock_repo,
         mock_unassign_count, mock_beads_stats,
@@ -394,7 +394,7 @@ class TestRunOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.session_lifecycle.print_stats")
     @patch("subprocess.run")
-    def test_recovery_of_stuck_items(
+    def test_recovery_of_stuck_items(  # noqa: PLR0913
         self, mock_subprocess, mock_print, mock_shutdown, mock_select, mock_ready,
         mock_repo, mock_retry, mock_unassign_count, mock_beads_stats,
         mock_config, mock_agent, mock_init_agent,
@@ -423,7 +423,7 @@ class TestSetupOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.load_config")
     @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestration.orchestrator.get_failed_unassign_count", return_value=0)
-    def test_returns_context(
+    def test_returns_context(  # noqa: PLR0913
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
         mock_startup_plugins, mock_startup_cleanup,
@@ -458,7 +458,7 @@ class TestSetupOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.load_config")
     @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestration.orchestrator.get_failed_unassign_count", return_value=0)
-    def test_interactive_mode_name(
+    def test_interactive_mode_name(  # noqa: PLR0913
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
         mock_startup_plugins, mock_startup_cleanup,
@@ -487,7 +487,7 @@ class TestSetupOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.load_config")
     @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestration.orchestrator.get_failed_unassign_count", return_value=0)
-    def test_parallel_forced_to_one_in_interactive(
+    def test_parallel_forced_to_one_in_interactive(  # noqa: PLR0913
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
         mock_startup_plugins, mock_startup_cleanup,
@@ -516,7 +516,7 @@ class TestSetupOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestration.orchestrator.get_failed_unassign_count", return_value=0)
     @patch("pokepoke.models.model_sync.sync_copilot_models")
-    def test_syncs_models_at_startup(
+    def test_syncs_models_at_startup(  # noqa: PLR0913
         self, mock_sync, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,
         mock_startup_plugins, mock_startup_cleanup,
@@ -569,7 +569,7 @@ class TestRunPreflight:
     @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestration.orchestrator.is_shutting_down", return_value=False)
     @patch("pokepoke.orchestration.orchestrator.handle_preflight_checks", return_value=(False, True))
-    def test_returns_exit_code_on_critical_failure(
+    def test_returns_exit_code_on_critical_failure(  # noqa: PLR0913
         self, mock_preflight, mock_shutdown, mock_beads, mock_clear, mock_print, mock_ui,
     ):
         ctx = self._make_ctx()
@@ -602,7 +602,7 @@ class TestRunMainLoop:
     @patch("pokepoke.orchestration.orchestrator.get_ready_work_items", return_value=[])
     @patch("pokepoke.orchestration.orchestrator.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.orchestration.orchestrator.handle_preflight_checks", return_value=(True, False))
-    def test_no_items_returns_zero(
+    def test_no_items_returns_zero(  # noqa: PLR0913
         self, mock_preflight, mock_repo, mock_ready, mock_select,
         mock_shutdown, mock_beads, mock_clear, mock_print, mock_ui,
     ):

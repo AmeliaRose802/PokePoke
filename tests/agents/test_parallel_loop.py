@@ -57,7 +57,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_exits_with_no_items(
+    def test_exits_with_no_items(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -84,7 +84,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=False)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
-    def test_exits_on_repo_check_failure(
+    def test_exits_on_repo_check_failure(  # noqa: PLR0913
         self, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -111,7 +111,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_stop_after_current_with_no_futures(
+    def test_stop_after_current_with_no_futures(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_stop, mock_cancel, mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -139,7 +139,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items")
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_double_check_beads_finds_items(
+    def test_double_check_beads_finds_items(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -173,7 +173,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items")
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_double_check_beads_exception_handled(
+    def test_double_check_beads_exception_handled(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -207,7 +207,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_continuous_mode_idle_uses_exponential_backoff(
+    def test_continuous_mode_idle_uses_exponential_backoff(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -238,7 +238,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_continuous_mode_loops_back_when_no_items(
+    def test_continuous_mode_loops_back_when_no_items(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -276,7 +276,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_non_continuous_mode_exits_when_no_items(
+    def test_non_continuous_mode_exits_when_no_items(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -310,7 +310,7 @@ class TestContinuousModeLoopBack:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_record_fn_exception_does_not_crash_loop(
+    def test_record_fn_exception_does_not_crash_loop(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -358,7 +358,7 @@ class TestParallelDrainFutureEdgeCases:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_no_items_continuous_mode_sleeps(
+    def test_no_items_continuous_mode_sleeps(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:
@@ -382,7 +382,7 @@ class TestParallelDrainFutureEdgeCases:
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=True)
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
-    def test_no_items_non_continuous_exits(
+    def test_no_items_non_continuous_exits(  # noqa: PLR0913
         self, mock_sel, mock_ready, mock_repo, mock_shut,
         mock_set_exec, mock_ui, mock_sleep,
     ) -> None:

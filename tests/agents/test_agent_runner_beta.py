@@ -33,7 +33,7 @@ class TestRunBetaTester:
     @patch('pokepoke.agents.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
-    def test_beta_tester_success(
+    def test_beta_tester_success(  # noqa: PLR0913
         self,
         mock_read: Mock,
         mock_exists: Mock,
@@ -87,7 +87,7 @@ class TestRunBetaTester:
     @patch('pokepoke.agents.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
-    def test_beta_tester_restart_missing_keeps_going(
+    def test_beta_tester_restart_missing_keeps_going(  # noqa: PLR0913
         self,
         mock_read: Mock,
         mock_exists: Mock,
@@ -164,7 +164,7 @@ class TestRunBetaTester:
     @patch('pokepoke.agents.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
-    def test_beta_tester_invoke_failure(
+    def test_beta_tester_invoke_failure(  # noqa: PLR0913
         self,
         mock_read: Mock,
         mock_exists: Mock,
@@ -201,7 +201,7 @@ class TestRunBetaTester:
     @patch('pokepoke.agents.beta_tester.subprocess.run')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.read_text')
-    def test_beta_tester_restart_failure_keeps_going(
+    def test_beta_tester_restart_failure_keeps_going(  # noqa: PLR0913
         self,
         mock_read: Mock,
         mock_exists: Mock,

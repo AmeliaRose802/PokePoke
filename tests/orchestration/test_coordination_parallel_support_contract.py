@@ -512,7 +512,8 @@ class TestCrossModuleLockFlow:
         from pokepoke.agents.parallel_worker_pool import ParallelWorkerPool
 
         pool = ParallelWorkerPool(2)
-        assert isinstance(pool.lock, threading.Lock)
+        # threading.Lock() is a factory function; verify the result is a lock instance
+        assert hasattr(pool.lock, 'acquire') and hasattr(pool.lock, 'release')
         pool.shutdown(wait=False)
 
     def test_file_lock_is_used_for_cross_process_coordination(self, tmp_path, monkeypatch):

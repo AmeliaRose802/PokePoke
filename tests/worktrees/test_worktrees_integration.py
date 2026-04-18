@@ -29,7 +29,7 @@ class TestCreateWorktreeIntegration:
     @patch('pathlib.Path.mkdir')
     @patch('pokepoke.worktrees.worktrees.sanitize_branch_name', side_effect=lambda x: x)
     @patch('pokepoke.worktrees.worktrees._validate_worktree_integrity')
-    def test_create_new_worktree_success(
+    def test_create_new_worktree_success(  # noqa: PLR0913
         self, mock_validate, mock_sanitize, mock_mkdir, mock_run, mock_get_branch, mock_list
     ):
         """Test creating a new worktree executes real code path."""
@@ -210,7 +210,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
     @patch('subprocess.run')
-    def test_merge_worktree_full_success_path(
+    def test_merge_worktree_full_success_path(  # noqa: PLR0913
         self,
         mock_run,
         mock_cleanup,
@@ -298,7 +298,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('subprocess.run')
-    def test_merge_worktree_fails_on_push_error(
+    def test_merge_worktree_fails_on_push_error(  # noqa: PLR0913
         self,
         mock_run,
         mock_get_branch,
@@ -330,7 +330,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('subprocess.run')
-    def test_merge_worktree_succeeds_with_warning_if_not_merged_after_push(
+    def test_merge_worktree_succeeds_with_warning_if_not_merged_after_push(  # noqa: PLR0913
         self,
         mock_run,
         mock_get_branch,
@@ -363,7 +363,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
     @patch('subprocess.run')
-    def test_merge_worktree_with_cleanup_disabled(
+    def test_merge_worktree_with_cleanup_disabled(  # noqa: PLR0913
         self,
         mock_run,
         mock_cleanup,

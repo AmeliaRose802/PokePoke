@@ -43,7 +43,7 @@ def run_git(
     )
 
 
-def run_git_with_retry(
+def run_git_with_retry(  # noqa: PLR0913
     cmd: list[str],
     *,
     timeout: int = DEFAULT_GIT_TIMEOUT,

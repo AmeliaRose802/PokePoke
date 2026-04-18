@@ -44,7 +44,7 @@ from pokepoke.utils.shutdown import is_shutting_down
 logger = logging.getLogger(__name__)
 _Future = concurrent.futures.Future[WorkItemResult]
 
-def finalize_workers(
+def finalize_workers(  # noqa: PLR0913
     futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats, start_time: float,
     total_requests: int, run_logger: RunLogger, record_fn: RecordFn, lock: threading.Lock | None = None,
 ) -> tuple[int, bool]:
@@ -83,7 +83,7 @@ def finalize_workers(
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     return total_requests, timeout_occurred
 
-def _drain_orphaned_futures(
+def _drain_orphaned_futures(  # noqa: PLR0913
     futures: dict[_Future, BeadsWorkItem], session_stats: SessionStats, start_time: float,
     run_logger: RunLogger, record_fn: RecordFn, lock: threading.Lock | None = None,
 ) -> None:
@@ -123,7 +123,7 @@ def _drain_orphaned_futures(
             run_logger.log_orchestrator(f"Orphan {item.id} completed successfully — preserving finalized state")
         terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
 
-def drain_circuit_breaker(
+def drain_circuit_breaker(  # noqa: PLR0913
     futures: dict[_Future, BeadsWorkItem],
     failed_claim_ids: set[str],
     total_requests: int,
@@ -168,7 +168,7 @@ def drain_circuit_breaker(
             sleep_remaining -= 0.5
     return total_requests
 
-def _should_skip_item(
+def _should_skip_item(  # noqa: PLR0913
     item: BeadsWorkItem, futures: dict[_Future, BeadsWorkItem], dispatched: int,
     failed_claim_ids: set[str], run_logger: RunLogger, lock: threading.Lock | None = None,
 ) -> bool:
@@ -179,7 +179,7 @@ def _should_skip_item(
         return True
     return False
 
-def dispatch_items(
+def dispatch_items(  # noqa: PLR0913
     ready_items: list[BeadsWorkItem],
     slots: int,
     continuous: bool,
@@ -271,7 +271,7 @@ def dispatch_items(
             break
     return worker_counter
 
-def run_preflight_and_repo_checks(
+def run_preflight_and_repo_checks(  # noqa: PLR0913
     main_repo_path: Path, run_logger: RunLogger, consecutive_preflight_failures: int,
     max_preflight_failures: int, check_and_commit_main_repo_fn: CheckAndCommitMainRepoFn | None = None,
     get_ready_work_items_fn: GetReadyWorkItemsFn | None = None,
@@ -331,7 +331,7 @@ def run_preflight_and_repo_checks(
         run_logger.log_orchestrator(f"Failed to fetch in-progress items: {e}", level="WARNING")
     return True, consecutive_preflight_failures, ready_items
 
-def check_loop_exit(
+def check_loop_exit(  # noqa: PLR0913
     futures: dict[_Future, BeadsWorkItem],
     ready_items: list[BeadsWorkItem],
     continuous: bool,

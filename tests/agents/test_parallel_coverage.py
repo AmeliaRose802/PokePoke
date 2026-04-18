@@ -272,7 +272,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.get_ready_work_items", return_value=[])
     @patch("pokepoke.agents.parallel.select_multiple_items", return_value=[])
     @patch("pokepoke.agents.parallel.time.sleep")
-    def test_no_items_exits(self, mock_sleep, mock_select, mock_ready,
+    def test_no_items_exits(self, mock_sleep, mock_select, mock_ready,  # noqa: PLR0913
                             mock_repo, mock_shutdown, mock_ui,
                             mock_set_exec, mock_set_limits, mock_clear_limits):
         # No ready items and no futures -> exit
@@ -297,7 +297,7 @@ class TestRunParallelLoop:
     @patch("pokepoke.agents.parallel.terminal_ui")
     @patch("pokepoke.agents.parallel.check_and_commit_main_repo", return_value=False)
     @patch("pokepoke.agents.parallel.is_shutting_down", return_value=False)
-    def test_repo_check_failure(self, mock_shutdown, mock_repo, mock_ui,
+    def test_repo_check_failure(self, mock_shutdown, mock_repo, mock_ui,  # noqa: PLR0913
                                 mock_set_exec, mock_set_limits, mock_clear_limits):
         stats = SessionStats(agent_stats=AgentStats())
         logger = MagicMock()

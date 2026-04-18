@@ -146,7 +146,7 @@ class TestProcessWorkItem:
     @patch('pokepoke.orchestration.workflow.setup_worktree')
     @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
     @patch('pokepoke.orchestration.workflow.invoke_copilot')
-    def test_process_work_item_failure(
+    def test_process_work_item_failure(  # noqa: PLR0913
         self,
         mock_invoke: Mock,
         mock_assign: Mock,
@@ -215,7 +215,7 @@ class TestProcessWorkItem:
     @patch('pokepoke.orchestration.workflow.invoke_copilot')
     @patch('pokepoke.orchestration.workflow.assign_and_sync_item', return_value=True)
     @patch('pokepoke.orchestration.workflow.setup_worktree')
-    def test_process_work_item_preserves_worktree_on_unhandled_exception(
+    def test_process_work_item_preserves_worktree_on_unhandled_exception(  # noqa: PLR0913
         self,
         mock_create_wt: Mock,
         mock_assign: Mock,
@@ -812,7 +812,7 @@ class TestRunOrchestratorWorktreeCoverage:
     @patch('pokepoke.orchestration.orchestrator.select_work_item')
     @patch('pokepoke.orchestration.orchestrator.get_ready_work_items')
     @patch('pokepoke.orchestration.orchestrator.check_and_commit_main_repo')
-    def test_interactive_continuous_quit(
+    def test_interactive_continuous_quit(  # noqa: PLR0913
         self, mock_check_repo: Mock, mock_get_items: Mock,
         mock_select: Mock, mock_process: Mock,
         mock_stats: Mock, mock_input: Mock,

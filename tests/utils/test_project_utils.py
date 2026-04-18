@@ -171,7 +171,7 @@ class TestEnsureProjectReady:
     @patch("pokepoke.utils.project_utils.resolve_git_toplevel")
     @patch("pokepoke.git.repo_check.check_beads_available", return_value=False)
     @patch("builtins.input", return_value="n")
-    def test_cli_interactive_user_declines(
+    def test_cli_interactive_user_declines(  # noqa: PLR0913
         self, mock_input, mock_beads_cli, mock_toplevel, mock_git, mock_config, mock_beads
     ) -> None:
         mock_toplevel.return_value = Path.cwd()
@@ -184,7 +184,7 @@ class TestEnsureProjectReady:
     @patch("pokepoke.git.repo_check.check_beads_available")
     @patch("pokepoke.git.repo_check.initialize_beads_repo", return_value=True)
     @patch("builtins.input", return_value="y")
-    def test_cli_interactive_user_accepts(
+    def test_cli_interactive_user_accepts(  # noqa: PLR0913
         self, mock_input, mock_init, mock_beads_cli, mock_toplevel,
         mock_git, mock_config, mock_beads
     ) -> None:

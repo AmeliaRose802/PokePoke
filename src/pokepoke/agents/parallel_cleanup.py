@@ -56,7 +56,7 @@ class _LoopState:
     memory_circuit_breaker_tripped: bool = False
 
 
-def _handle_circuit_breaker_drain(
+def _handle_circuit_breaker_drain(  # noqa: PLR0913
     state: _LoopState,
     futures: dict[_Future, BeadsWorkItem],
     failed_claim_ids: set[str],
@@ -90,7 +90,7 @@ def _handle_circuit_breaker_drain(
     return False
 
 
-def _safe_cleanup(
+def _safe_cleanup(  # noqa: PLR0913
     state: _LoopState,
     pool: ParallelWorkerPool,
     session_stats: SessionStats,

@@ -313,7 +313,7 @@ class DesktopUI:
     def log_agent(self, message: str, style: str | None = None) -> None:
         self._api.push_log(message, "agent", style)
 
-    def push_agent_status(self, agent_id: str, name: str, iteration: int = 1,
+    def push_agent_status(self, agent_id: str, name: str, iteration: int = 1,  # noqa: PLR0913
                           status: str = "running", model: str | None = None,
                           parent_agent_id: str | None = None,
                           work_item_id: str | None = None,

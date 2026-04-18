@@ -119,7 +119,7 @@ def _try_parse_verdict_json(raw: str) -> tuple[bool, str, bool] | None:
     return None
 
 
-def run_gate_agent(
+def run_gate_agent(  # noqa: PLR0913
     item: BeadsWorkItem,
     cwd: str | None = None,
     work_model: str | None = None,

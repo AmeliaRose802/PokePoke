@@ -241,7 +241,7 @@ def _handle_worktree_removal_error(
         add_uncleaned_worktree(worktree_id, str(worktree_path), f"{reason_prefix} failed: {stderr}")
 
 
-def cleanup_worktree_and_branch(
+def cleanup_worktree_and_branch(  # noqa: PLR0913
     worktree_path: Path | None,
     branch_name: str,
     *,
@@ -298,7 +298,7 @@ def _run_git(cmd: list[str], cwd: str | None = None) -> subprocess.CompletedProc
     return run_git(cmd, cwd=cwd)
 
 
-def _delete_branch(
+def _delete_branch(  # noqa: PLR0913
     branch_name: str,
     fallback_branch_name: str | None,
     force: bool,

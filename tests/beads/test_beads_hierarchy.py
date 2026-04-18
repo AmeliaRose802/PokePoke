@@ -27,7 +27,7 @@ from pokepoke.beads.beads_hierarchy import (
 from pokepoke.types import BeadsWorkItem, Dependency, IssueWithDependencies
 
 
-def _wi(
+def _wi(  # noqa: PLR0913
     *,
     id: str,
     issue_type: str = "task",

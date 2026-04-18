@@ -61,7 +61,7 @@ def _journal_path(item_id: str, sessions_dir: Path | None = None) -> Path:
     return base / f"{item_id}.json"
 
 
-def write_journal(
+def write_journal(  # noqa: PLR0913
     item_id: str,
     branch: str,
     worktree_path: str,

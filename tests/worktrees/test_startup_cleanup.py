@@ -60,7 +60,7 @@ class TestStartupCleanup:
     @patch('pokepoke.worktrees.startup_cleanup.is_worktree_merged')
     @patch('pokepoke.worktrees.startup_cleanup.get_commits_behind')
     @patch('pokepoke.worktrees.startup_cleanup._cleanup_worktree_safe')
-    def test_cleanup_stale_worktrees(self, mock_cleanup, mock_commits_behind,
+    def test_cleanup_stale_worktrees(self, mock_cleanup, mock_commits_behind,  # noqa: PLR0913
                                    mock_is_merged, mock_list_worktrees,
                                    mock_config, mock_worktrees):
         """Test cleanup of stale worktrees that are far behind."""
@@ -93,7 +93,7 @@ class TestStartupCleanup:
     @patch('pokepoke.worktrees.startup_cleanup.is_worktree_merged')
     @patch('pokepoke.worktrees.startup_cleanup.get_commits_behind')
     @patch('pokepoke.worktrees.startup_cleanup._cleanup_worktree_safe')
-    def test_cleanup_merged_worktrees(self, mock_cleanup, mock_commits_behind,
+    def test_cleanup_merged_worktrees(self, mock_cleanup, mock_commits_behind,  # noqa: PLR0913
                                     mock_is_merged, mock_list_worktrees,
                                     mock_config, mock_worktrees):
         """Test cleanup of merged worktrees regardless of distance."""
@@ -161,7 +161,7 @@ class TestStartupCleanup:
     @patch('pokepoke.worktrees.startup_cleanup.is_worktree_merged')
     @patch('pokepoke.worktrees.startup_cleanup.get_commits_behind')
     @patch('pokepoke.worktrees.startup_cleanup._cleanup_worktree_safe')
-    def test_cleanup_handles_git_errors_gracefully(self, mock_cleanup, mock_commits_behind,
+    def test_cleanup_handles_git_errors_gracefully(self, mock_cleanup, mock_commits_behind,  # noqa: PLR0913
                                                   mock_is_merged, mock_list_worktrees,
                                                   mock_config, mock_worktrees):
         """Test that git command failures don't crash the cleanup."""

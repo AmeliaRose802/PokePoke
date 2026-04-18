@@ -64,7 +64,7 @@ def _print_preserved_worktree_debug(agent_id: str, worktree_path: Path, repo_roo
     logger.info("Worktree preserved at %s — logs: %s/.pokepoke/logs/ — cleanup: cleanup_worktree('%s', force=True)", worktree_path, repo_root, agent_id)
 
 
-def run_maintenance_agent(
+def run_maintenance_agent(  # noqa: PLR0913
     agent_name: str,
     prompt_file: str,
     *,

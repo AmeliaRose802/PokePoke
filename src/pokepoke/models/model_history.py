@@ -18,7 +18,7 @@ HISTORY_FILE = Path(".pokepoke") / "model_history.jsonl"
 _lock = threading.Lock()
 
 
-def build_model_history_record(
+def build_model_history_record(  # noqa: PLR0913
     *,
     item: BeadsWorkItem,
     model_completion: ModelCompletionRecord,
@@ -88,7 +88,7 @@ def build_model_history_record(
     return record
 
 
-def append_model_history_entry(
+def append_model_history_entry(  # noqa: PLR0913
     *,
     item: BeadsWorkItem,
     model_completion: ModelCompletionRecord,

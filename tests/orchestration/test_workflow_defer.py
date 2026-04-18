@@ -44,7 +44,7 @@ class TestPreLoopGateRejectionDefer:
     @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
-    def test_reads_gate_rejection_count_from_metadata(
+    def test_reads_gate_rejection_count_from_metadata(  # noqa: PLR0913
         self, mock_agent, mock_banner_fmt, mock_set_banner, mock_ui,
         mock_assignment, mock_model, mock_config,
         mock_register, mock_unregister,
@@ -78,7 +78,7 @@ class TestPreLoopGateRejectionDefer:
     @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
     @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
     @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
-    def test_no_metadata_defaults_to_zero(
+    def test_no_metadata_defaults_to_zero(  # noqa: PLR0913
         self, mock_agent, mock_banner_fmt, mock_set_banner, mock_ui,
         mock_assignment, mock_model, mock_config,
         mock_register, mock_unregister,
@@ -127,7 +127,7 @@ class TestInLoopGateRejectionDefer:
     @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.setup_worktree")
     @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
-    def test_defers_after_reaching_cap_in_loop(
+    def test_defers_after_reaching_cap_in_loop(  # noqa: PLR0913
         self, mock_shutdown, mock_setup, mock_assign, mock_agent,
         mock_banner_fmt, mock_set_banner, mock_ui,
         mock_assignment, mock_model, mock_config,

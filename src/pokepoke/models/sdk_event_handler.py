@@ -46,7 +46,7 @@ class _EventHandler:
 
     _MAX_STALE_IDLES = 2
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         done: asyncio.Event,
         output_lines: MutableSequence[str],
@@ -366,7 +366,7 @@ class _EventHandler:
         "user.message": _on_noop,
     }
 
-def create_event_handler(
+def create_event_handler(  # noqa: PLR0913
     done: asyncio.Event,
     output_lines: MutableSequence[str],
     errors: list[str],

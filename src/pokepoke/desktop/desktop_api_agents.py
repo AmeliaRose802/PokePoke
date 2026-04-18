@@ -14,7 +14,7 @@ if TYPE_CHECKING:
     from pokepoke.desktop.desktop_api import DesktopAPI
 
 
-def push_agent_status(
+def push_agent_status(  # noqa: PLR0913
     self: DesktopAPI,
     agent_id: str,
     name: str,

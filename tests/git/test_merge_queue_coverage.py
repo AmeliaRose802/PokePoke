@@ -78,7 +78,7 @@ class TestMergeQueueLifecycle:
     @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("subprocess.run")
-    def test_submit_and_process(self, mock_subproc, mock_clean,
+    def test_submit_and_process(self, mock_subproc, mock_clean,  # noqa: PLR0913
                                 mock_branch, mock_conflict, mock_shutdown,
                                 tmp_path):
         with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", return_value=True):
@@ -214,7 +214,7 @@ class TestProcessRequest:
     @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("subprocess.run")
-    def test_high_conflict_does_double_rebase(self, mock_run, mock_clean,
+    def test_high_conflict_does_double_rebase(self, mock_run, mock_clean,  # noqa: PLR0913
                                               mock_branch, mock_conflict,
                                               mock_shutdown, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
@@ -231,7 +231,7 @@ class TestProcessRequest:
     @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=False)
     @patch("subprocess.run")
-    def test_rebase_fail_dirty_worktree_marks_failed(self, mock_run, mock_clean,
+    def test_rebase_fail_dirty_worktree_marks_failed(self, mock_run, mock_clean,  # noqa: PLR0913
                                                      mock_branch, mock_conflict,
                                                      mock_shutdown, tmp_path):
         # Fetch OK, rebase fails
@@ -252,7 +252,7 @@ class TestProcessRequest:
     @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("subprocess.run")
-    def test_merge_exception_marks_failed(self, mock_run, mock_clean,
+    def test_merge_exception_marks_failed(self, mock_run, mock_clean,  # noqa: PLR0913
                                           mock_branch, mock_conflict,
                                           mock_shutdown, tmp_path):
         mock_run.return_value = MagicMock(returncode=0)
@@ -269,7 +269,7 @@ class TestProcessRequest:
     @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("subprocess.run")
-    def test_merge_returns_false(self, mock_run, mock_clean,
+    def test_merge_returns_false(self, mock_run, mock_clean,  # noqa: PLR0913
                                  mock_branch, mock_conflict, mock_shutdown,
                                  tmp_path):
         mock_run.return_value = MagicMock(returncode=0)

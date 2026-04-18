@@ -13,7 +13,7 @@ from pokepoke.orchestration.work_item_selection import autonomous_selection
 from pokepoke.types_beads import BeadsWorkItem
 
 
-def _make_item(
+def _make_item(  # noqa: PLR0913
     item_id: str,
     title: str = "Test Task",
     priority: int = 1,

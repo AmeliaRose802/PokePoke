@@ -45,7 +45,7 @@ class WorkItemSession:
         agent_name: Name of the agent owning this session.
     """
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         item_id: str,
         agent_name: str,

@@ -81,7 +81,7 @@ class TestCreateWorktree:
     @patch('pokepoke.worktrees.worktrees._run_git')
     @patch('pathlib.Path.mkdir')
     @patch('pokepoke.worktrees.worktrees._validate_worktree_integrity')
-    def test_create_worktree_new_success(
+    def test_create_worktree_new_success(  # noqa: PLR0913
         self,
         mock_validate,
         mock_mkdir,
@@ -363,7 +363,7 @@ class TestMergeWorktree:
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
-    def test_merge_worktree_success(
+    def test_merge_worktree_success(  # noqa: PLR0913
         self,
         mock_execute,
         mock_sync,
@@ -456,7 +456,7 @@ class TestMergeWorktree:
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
-    def test_merge_worktree_cleanup(
+    def test_merge_worktree_cleanup(  # noqa: PLR0913
         self,
         mock_execute,
         mock_sync,

@@ -98,7 +98,7 @@ class SDKWatchdog:
         return last_event_gap_log
 
     @staticmethod
-    async def _check_process_liveness(
+    async def _check_process_liveness(  # noqa: PLR0913
         client: Any, stats: SdkSessionStats, consecutive_ping_failures: int,
         max_ping_failures: int, process_output_timeout: float,
         gap: float, ping_ok: bool, session: Any, done: asyncio.Event,
@@ -222,7 +222,7 @@ class SDKWatchdog:
         return False
 
     @staticmethod
-    async def await_completion(
+    async def await_completion(  # noqa: PLR0913
         session: Any, client: Any, done: asyncio.Event,
         max_timeout: float,
         stats: SdkSessionStats | None = None,
@@ -271,7 +271,7 @@ class SDKWatchdog:
                     await diag_task
 
     @staticmethod
-    async def _poll_loop(  # noqa: C901
+    async def _poll_loop(  # noqa: C901, PLR0913
         session: Any, client: Any, done: asyncio.Event,
         deadline: float, max_timeout: float,
         stats: SdkSessionStats | None,

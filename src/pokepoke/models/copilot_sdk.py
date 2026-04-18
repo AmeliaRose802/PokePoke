@@ -117,7 +117,7 @@ class _AttemptResult:
     interrupted: bool = False
     elapsed: float = 0.0
 
-async def _send_and_wait(
+async def _send_and_wait(  # noqa: PLR0913
     session: CopilotSession, client: CopilotClient, handler: _EventHandler,
     final_prompt: str, done: asyncio.Event,
     max_timeout: float, stats: _SDKSessionStats | None, inactivity_timeout: float, **kw: Any,
@@ -135,7 +135,7 @@ async def _send_and_wait(
             raise RateLimitError()
         return abort_reason
 
-async def _run_attempt(
+async def _run_attempt(  # noqa: PLR0913
     session: CopilotSession, client: CopilotClient, handler: _EventHandler,
     final_prompt: str, done: asyncio.Event,
     max_timeout: float, stats: _SDKSessionStats | None, inactivity_timeout: float, **kw: Any,

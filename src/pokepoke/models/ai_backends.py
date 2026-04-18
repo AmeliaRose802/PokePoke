@@ -27,7 +27,7 @@ class AIBackend(Protocol):
 
     name: str
 
-    def invoke(
+    def invoke(  # noqa: PLR0913
         self,
         work_item: BeadsWorkItem,
         prompt: str | None = None,
@@ -51,7 +51,7 @@ class CopilotBackend:
 
     name: str = "copilot"
 
-    def invoke(
+    def invoke(  # noqa: PLR0913
         self,
         work_item: BeadsWorkItem,
         prompt: str | None = None,
@@ -96,7 +96,7 @@ class ClaudeCodeBackend:
     cli_path: str
     name: str = "claude-code"
 
-    def invoke(
+    def invoke(  # noqa: PLR0913
         self,
         work_item: BeadsWorkItem,
         prompt: str | None = None,
@@ -211,7 +211,7 @@ def get_backend(provider: str | None = None) -> AIBackend:
     return factory()
 
 
-def invoke_copilot(
+def invoke_copilot(  # noqa: PLR0913
     work_item: BeadsWorkItem,
     prompt: str | None = None,
     retry_config: RetryConfig | None = None,

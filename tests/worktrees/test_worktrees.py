@@ -1219,7 +1219,8 @@ class TestForceRemoveDirectory:
 
     def test_force_remove_git_worktree_force_succeeds(self):
         """Test that git worktree remove --force succeeds on first attempt."""
-        with patch('subprocess.run') as mock_run:
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.worktrees.worktree_cleanup._validate_within_worktrees_dir'):
             mock_run.return_value = Mock(returncode=0, stderr='', stdout='')
 
             result = force_remove_directory(Path("worktrees/task-test"))

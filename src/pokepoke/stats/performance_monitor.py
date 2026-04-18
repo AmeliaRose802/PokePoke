@@ -29,7 +29,7 @@ class PerformanceAlert:
 class PerformanceMonitor:
     """Thread-safe monitor that checks operational thresholds and records alerts."""
 
-    def __init__(
+    def __init__(  # noqa: PLR0913
         self,
         *,
         max_merge_queue_depth: int = 5,

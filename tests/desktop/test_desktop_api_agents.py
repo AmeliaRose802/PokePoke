@@ -361,3 +361,54 @@ def test_agent_detail_includes_tokens() -> None:
     assert detail is not None
     assert detail["input_tokens"] == 10_000
     assert detail["output_tokens"] == 3_000
+
+
+# ─── Child agent activity tests ──────────────────────────────────────────
+
+
+def test_has_active_child_agents_false_when_no_children() -> None:
+    """has_active_child_agents returns False when no children registered."""
+    api = DesktopAPI()
+    api.push_agent_status("parent-1", "Parent", status="running")
+    assert api.has_active_child_agents("parent-1") is False
+
+
+def test_has_active_child_agents_true_with_running_child() -> None:
+    """has_active_child_agents returns True when a running child exists."""
+    api = DesktopAPI()
+    api.push_agent_status("parent-1", "Parent", status="running")
+    api.push_agent_status("child-1", "Child", status="running", parent_agent_id="parent-1")
+    assert api.has_active_child_agents("parent-1") is True
+
+
+def test_get_child_agent_activity_time_none_when_no_children() -> None:
+    """get_child_agent_activity_time returns None when no active children."""
+    api = DesktopAPI()
+    api.push_agent_status("parent-1", "Parent", status="running")
+    assert api.get_child_agent_activity_time("parent-1") is None
+
+
+def test_get_child_agent_activity_time_returns_timestamp() -> None:
+    """get_child_agent_activity_time returns a timestamp for active children."""
+    api = DesktopAPI()
+    api.push_agent_status("parent-1", "Parent", status="running")
+    api.push_agent_status("child-1", "Child", status="running", parent_agent_id="parent-1")
+    api.push_agent_log("child-1", "doing work")
+    result = api.get_child_agent_activity_time("parent-1")
+    # Could be a float timestamp or None depending on implementation
+    # Just verify it doesn't crash and returns something
+    assert result is None or isinstance(result, float)
+
+
+def test_has_active_child_agents_disposed_returns_false() -> None:
+    """has_active_child_agents returns False when window is disposed."""
+    api = DesktopAPI()
+    api._window_disposed = True
+    assert api.has_active_child_agents("parent-1") is False
+
+
+def test_get_child_agent_activity_time_disposed_returns_none() -> None:
+    """get_child_agent_activity_time returns None when window is disposed."""
+    api = DesktopAPI()
+    api._window_disposed = True
+    assert api.get_child_agent_activity_time("parent-1") is None

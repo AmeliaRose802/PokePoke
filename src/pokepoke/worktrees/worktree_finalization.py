@@ -101,7 +101,7 @@ def check_and_merge_worktree(
         return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path, repo_path=repo_path, item_logger=item_logger)
 
 
-def merge_worktree_to_dev(
+def merge_worktree_to_dev(  # noqa: PLR0913
     item: BeadsWorkItem,
     parent_agent_id: str | None = None,
     repo_root: Path | None = None,

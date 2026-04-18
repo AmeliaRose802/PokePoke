@@ -9,7 +9,7 @@ if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
 
 
-def run_worktree_agent_compat(
+def run_worktree_agent_compat(  # noqa: PLR0913
     agent_name: str,
     agent_id: str,
     agent_item: BeadsWorkItem,

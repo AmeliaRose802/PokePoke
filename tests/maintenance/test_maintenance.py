@@ -112,7 +112,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_skips_when_items_completed_zero(
+    def test_skips_when_items_completed_zero(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -138,7 +138,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_runs_janitor_at_interval_2(
+    def test_runs_janitor_at_interval_2(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -169,7 +169,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_runs_beta_tester_at_interval_3(
+    def test_runs_beta_tester_at_interval_3(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -199,7 +199,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_runs_worktree_cleanup_at_interval_4(
+    def test_runs_worktree_cleanup_at_interval_4(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -229,7 +229,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_runs_tech_debt_at_interval_5(
+    def test_runs_tech_debt_at_interval_5(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -264,7 +264,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_runs_backlog_cleanup_at_interval_7(
+    def test_runs_backlog_cleanup_at_interval_7(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -295,7 +295,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_aggregates_stats_from_successful_agents(
+    def test_aggregates_stats_from_successful_agents(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -331,7 +331,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_handles_failed_agents_gracefully(
+    def test_handles_failed_agents_gracefully(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -363,7 +363,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_logs_maintenance_events(
+    def test_logs_maintenance_events(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -391,7 +391,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_multiple_agents_at_same_interval(
+    def test_multiple_agents_at_same_interval(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -425,7 +425,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_code_review_uses_specific_model(
+    def test_code_review_uses_specific_model(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -458,7 +458,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_backlog_cleanup_does_not_merge(
+    def test_backlog_cleanup_does_not_merge(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -491,7 +491,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_disabled_agent_is_skipped(
+    def test_disabled_agent_is_skipped(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,
@@ -524,7 +524,7 @@ class TestRunPeriodicMaintenance:
     @patch('pokepoke.maintenance.maintenance_scheduler._run_special_agent')
     @patch('pokepoke.maintenance.maintenance_scheduler.set_terminal_banner')
     @patch('pokepoke.desktop.terminal_ui.ui')
-    def test_custom_frequency_from_config(
+    def test_custom_frequency_from_config(  # noqa: PLR0913
         self,
         mock_ui: Mock,
         mock_banner: Mock,

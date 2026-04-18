@@ -158,7 +158,7 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
     return None
 
 
-def _handle_branch_already_exists(
+def _handle_branch_already_exists(  # noqa: PLR0913
     branch_name: str, base_branch: str, worktree_path: Path, item_id: str, creation_start: float, stderr: str,
     repo_path: str | None = None,
 ) -> Path | None:

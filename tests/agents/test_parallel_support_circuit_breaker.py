@@ -63,7 +63,7 @@ class TestDrainCircuitBreaker:
     @patch("pokepoke.agents.parallel_support.is_shutting_down", return_value=False)
     @patch("pokepoke.agents.parallel_support.terminal_ui")
     @patch("pokepoke.config.get_config")
-    def test_timeout_triggers_orphan_drain(self, mock_config, mock_tui, mock_shutdown,
+    def test_timeout_triggers_orphan_drain(self, mock_config, mock_tui, mock_shutdown,  # noqa: PLR0913
                                            mock_time, mock_sleep, mock_drain):
         """When drain timeout expires, _drain_orphaned_futures is called."""
         cfg = MagicMock()
@@ -127,7 +127,7 @@ class TestDrainCircuitBreaker:
     @patch("pokepoke.agents.parallel_support.is_shutting_down", return_value=False)
     @patch("pokepoke.agents.parallel_support.terminal_ui")
     @patch("pokepoke.config.get_config")
-    def test_zero_timeout_waits_indefinitely(self, mock_config, mock_tui, mock_shutdown,
+    def test_zero_timeout_waits_indefinitely(self, mock_config, mock_tui, mock_shutdown,  # noqa: PLR0913
                                               mock_time, mock_sleep, mock_drain):
         """When drain_timeout is 0, drain never forces termination (waits for completion)."""
         cfg = MagicMock()

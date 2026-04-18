@@ -116,7 +116,7 @@ _sentinel = object()
 
 
 @contextmanager
-def make_orchestrator_mocks(
+def make_orchestrator_mocks(  # noqa: PLR0913
     *,
     items: list[BeadsWorkItem] | None = None,
     selected: BeadsWorkItem | None = _sentinel,
@@ -198,7 +198,7 @@ def make_orchestrator_mocks(
 
 
 @contextmanager
-def make_process_item_mocks(
+def make_process_item_mocks(  # noqa: PLR0913
     *,
     copilot_success: bool = True,
     gate_success: bool = True,
@@ -430,7 +430,7 @@ def make_selection_mocks(selected_item: BeadsWorkItem | None = None):
 # ---------------------------------------------------------------------------
 
 
-def make_work_item(
+def make_work_item(  # noqa: PLR0913
     item_id: str = "task-1",
     title: str = "Test Task",
     status: str = "open",

@@ -645,7 +645,7 @@ class TestMergeWaitLogic:
     @patch('pokepoke.agents.cleanup_agents.terminal_ui')
     @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
     @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
-    def test_merge_conflict_agent_waits_for_merge(
+    def test_merge_conflict_agent_waits_for_merge(  # noqa: PLR0913
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
     ):
@@ -677,7 +677,7 @@ class TestMergeWaitLogic:
     @patch('pokepoke.agents.cleanup_agents.terminal_ui')
     @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
     @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
-    def test_merge_conflict_agent_timeout_proceeds(
+    def test_merge_conflict_agent_timeout_proceeds(  # noqa: PLR0913
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
     ):
@@ -708,7 +708,7 @@ class TestMergeWaitLogic:
     @patch('pokepoke.agents.cleanup_agents.terminal_ui')
     @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
     @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=["file1.py", "file2.py", "file3.py", "file4.py", "file5.py", "file6.py"])
-    def test_merge_conflict_agent_with_many_conflict_files(
+    def test_merge_conflict_agent_with_many_conflict_files(  # noqa: PLR0913
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
     ):
@@ -775,7 +775,7 @@ class TestCleanupAgentTimeout:
     @patch('pokepoke.agents.cleanup_agents.terminal_ui')
     @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
     @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
-    def test_merge_conflict_agent_passes_timeout(
+    def test_merge_conflict_agent_passes_timeout(  # noqa: PLR0913
         self, mock_get_unmerged, mock_is_merging,
         mock_ui, mock_invoke, mock_context, mock_load_prompt, mock_merge_active
     ):
