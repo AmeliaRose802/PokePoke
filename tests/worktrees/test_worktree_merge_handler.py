@@ -581,3 +581,82 @@ def test_handle_worktree_merge_unexpected_exception(monkeypatch) -> None:
         assert cleaned is False
         mock_add.assert_called_once()
         assert "unexpected disk error" in mock_add.call_args[0][2].lower()
+
+
+# ---------------------------------------------------------------------------
+# Regression: cleanup agent must target main repo, not worktree
+# ---------------------------------------------------------------------------
+
+
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
+def test_cleanup_agent_receives_main_repo_cwd(
+    mock_check_ready,
+    mock_add_manifest,
+    mock_invoke_cleanup,
+    mock_merge_worktree,
+    mock_remove_from_manifest,
+) -> None:
+    """Cleanup agent must be invoked with the main repo path, not the worktree.
+
+    Regression test for a bug where invoke_cleanup_agent was called without cwd,
+    causing the cleanup agent to run in the worktree (where everything was clean)
+    instead of the main repo (where untracked files blocked the merge).
+    """
+    mock_check_ready.side_effect = [(False, "untracked files"), (True, "")]
+    mock_invoke_cleanup.return_value = (True, None)
+    mock_merge_worktree.return_value = MergeResult(success=True)
+
+    repo_path = "C:/my-repo"
+    ctx = _make_merge_context(repo_path=repo_path)
+    handle_worktree_merge(ctx, agent_stats=None)
+
+    mock_invoke_cleanup.assert_called_once()
+    call_kwargs = mock_invoke_cleanup.call_args
+    assert call_kwargs[1].get("cwd") == repo_path, (
+        f"invoke_cleanup_agent must receive cwd={repo_path!r}, got {call_kwargs}"
+    )
+
+
+@patch("pokepoke.git.merge_conflict.abort_merge", return_value=(True, ""))
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress", return_value=True)
+@patch("pokepoke.git.merge_conflict.get_unmerged_files", return_value=["f.py"])
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
+def test_merge_conflict_cleanup_receives_main_repo_cwd(
+    mock_check_ready,
+    mock_merge_worktree,
+    mock_invoke_conflict_cleanup,
+    mock_add_manifest,
+    mock_remove_manifest,
+    _mock_get_unmerged,
+    _mock_is_merging,
+    _mock_abort,
+) -> None:
+    """Merge-conflict cleanup agent must target the main repo, not the worktree.
+
+    Regression test: merge conflicts occur on main (where `git merge` runs),
+    so the conflict cleanup agent must receive cwd pointing at the main repo.
+    """
+    mock_check_ready.return_value = (True, "")
+    mock_merge_worktree.side_effect = [
+        MergeResult(success=False, unmerged_files=["f.py"]),
+        MergeResult(success=True),
+    ]
+    mock_invoke_conflict_cleanup.return_value = (True, None)
+
+    repo_path = "C:/my-repo"
+    ctx = _make_merge_context(repo_path=repo_path)
+    handle_worktree_merge(ctx, agent_stats=None)
+
+    mock_invoke_conflict_cleanup.assert_called_once()
+    call_kwargs = mock_invoke_conflict_cleanup.call_args
+    assert call_kwargs[1].get("cwd") == repo_path, (
+        f"invoke_merge_conflict_cleanup_agent must receive cwd={repo_path!r}, got {call_kwargs}"
+    )

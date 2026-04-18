@@ -122,8 +122,10 @@ def perform_worktree_merge(  # noqa: C901
         logger.info("   Invoking cleanup agent to resolve uncommitted changes before merge...")
         with cleanup_lock():
             # Don't wait for merge lock since we already hold it
+            # Pass the main repo path so cleanup targets the right directory
             cleanup_success, _ = invoke_cleanup_agent(
                 ctx.agent_item,
+                cwd=repo_cwd,
                 parent_agent_id=ctx.parent_agent_id,
                 wait_for_merge=False
             )
@@ -188,10 +190,12 @@ def perform_worktree_merge(  # noqa: C901
         logger.info("   Invoking cleanup agent to resolve conflicts...")
         with cleanup_lock():
             # Don't wait for merge lock since we already hold it
+            # Merge conflicts are on the main repo, not the worktree
             success, _ = invoke_merge_conflict_cleanup_agent(
                 ctx.agent_item,
                 f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
                 unmerged_files=unmerged_files,
+                cwd=repo_cwd,
                 parent_agent_id=ctx.parent_agent_id,
                 wait_for_merge=False
             )

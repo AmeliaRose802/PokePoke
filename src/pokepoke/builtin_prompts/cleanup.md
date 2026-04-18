@@ -1,6 +1,6 @@
 # Cleanup Agent
 
-The previous agent failed to commit all files. Please get all files committed and all pre-commit validations passing.
+The main repository has uncommitted or untracked changes that are blocking a worktree merge. Your job is to get the main repo into a clean state so the merge can proceed.
 
 🤖 **AUTONOMOUS MODE: NEVER ASK FOR PERMISSION**
 
@@ -9,6 +9,7 @@ The previous agent failed to commit all files. Please get all files committed an
 - NEVER wait for confirmation before fixing validation failures
 - The validation errors are clear - FIX THEM IMMEDIATELY
 - If you see uncommitted changes, COMMIT THEM NOW
+- If you see untracked files that are scratch/temporary (e.g. `_*.py`, `_*.txt`, `_*.json`), DELETE THEM or add them to `.gitignore`
 - If tests fail, FIX THEM NOW
 - Only ask questions if truly stuck or requirements are unclear
 
@@ -90,10 +91,14 @@ Your ONLY job is to fix validation errors, get code committed, and push.
 
 ## Your Tasks
 
-1. **Check git status first** - Look for merge conflicts or unmerged paths
+1. **Check git status first** - Look for merge conflicts, uncommitted changes, AND untracked files
 2. **Resolve any merge conflicts** - Edit files to remove conflict markers
-3. **Identify validation failures** - Read pre-commit output carefully
-4. **Fix the actual issues**:
+3. **Handle untracked files** - These show as `??` in `git status --porcelain`:
+   - If they look like scratch/temp files (e.g. names starting with `_`, temp outputs, debug files), **delete them** with `Remove-Item` or `rm`
+   - If they are legitimate project files, either `git add` them or add them to `.gitignore`
+   - The goal is zero untracked non-beads files in `git status`
+4. **Identify validation failures** - Read pre-commit output carefully
+5. **Fix the actual issues**:
    - Write tests for untested code
    - Fix linting/quality warnings
    - Resolve build errors
