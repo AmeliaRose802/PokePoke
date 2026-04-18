@@ -38,7 +38,7 @@ class WorktreeMergeContext:
     repo_root: Path
     parent_agent_id: str | None = None
     repo_path: str | None = None
-    item_logger: 'ItemLogger | None' = None
+    item_logger: ItemLogger | None = None
 
 
 def handle_worktree_merge(
