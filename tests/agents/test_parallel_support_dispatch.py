@@ -504,3 +504,56 @@ class TestDispatchHighConflictItems:
         # The normal item behind the deferred high-conflict item MUST dispatch
         assert counter == 1
         assert executor.submit.call_count == 1
+
+
+class TestDispatchCleanupLockBlocking:
+    """Tests that dispatch pauses while cleanup agent holds the lock (PokePoke-w4hda)."""
+
+    @patch("pokepoke.agents.parallel_support.cleanup_lock_active", return_value=True)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
+    def test_cleanup_active_blocks_dispatch(self, _name, _stop, _cleanup):
+        """When cleanup lock is active, no items are dispatched."""
+        item = _make_item("blocked-1")
+        executor = MagicMock()
+        run_logger = MagicMock()
+        futures: dict = {}
+
+        counter = dispatch_items(
+            [item], 2, True, False, 0, 10, set(), set(), futures,
+            threading.Semaphore(2), executor, run_logger, 0, Mock(), Mock(),
+        )
+
+        assert counter == 0
+        executor.submit.assert_not_called()
+        # Verify a log message was emitted about cleanup blocking
+        run_logger.log_orchestrator.assert_called_once()
+        assert "cleanup" in run_logger.log_orchestrator.call_args[0][0].lower()
+
+    @patch("pokepoke.beads.beads_query.is_beads_item_closed", return_value=False)
+    @patch("pokepoke.agents.parallel_support.cleanup_lock_active", return_value=False)
+    @patch("pokepoke.agents.parallel.should_stop_after_current", return_value=False)
+    @patch("pokepoke.agents.parallel.select_multiple_items")
+    @patch("pokepoke.agents.parallel.is_item_claimable", return_value=True)
+    @patch("pokepoke.agents.parallel.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.agents.agent_context.get_agent_name", return_value="agent")
+    def test_cleanup_inactive_allows_dispatch(
+        self, _name, _assign, _claim, mock_select, _stop, _cleanup, _closed,
+    ):
+        """When cleanup lock is not active, items dispatch normally."""
+        item = _make_item("allowed-1")
+        mock_select.return_value = [item]
+        executor = MagicMock()
+        mock_fut = MagicMock()
+        executor.submit.return_value = mock_fut
+        run_logger = MagicMock()
+        futures: dict = {}
+
+        counter = dispatch_items(
+            [item], 1, True, False, 0, 10, set(), set(), futures,
+            threading.Semaphore(2), executor, run_logger, 0,
+            Mock(return_value="w"), Mock(),
+        )
+
+        assert counter == 1
+        assert mock_fut in futures
