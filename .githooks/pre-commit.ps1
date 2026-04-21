@@ -5,16 +5,18 @@
     Git pre-commit hook for PokePoke Python project
     
 .DESCRIPTION
-    Runs the following checks before allowing a commit:
+    Runs the following checks before allowing a commit, ordered cheapest-first
+    so fast-fail catches obvious issues before expensive pytest/coverage runs:
     1. Integrity check (verifies quality scripts haven't been tampered with)
-    2. Ruff lint check (syntax + style) [sequential]
-    3. Code quality check (mypy type checking) [sequential, after ruff]
-    4. Test coverage check (modified files must have 80%+ coverage) [sequential, after mypy]
-    5. Skipped tests check [sequential]
-    6. Desktop build check [sequential]
-    7. File length check [sequential]
-    8. Desktop lint check [sequential]
-    9. Pokepoke boot check [sequential]
+    2. File length check (trivial stat) [fast]
+    3. Skipped tests check (grep) [fast]
+    4. Test safety check (grep) [fast]
+    5. Ruff lint check (syntax + style) [fast]
+    6. Pokepoke boot check (import) [fast]
+    7. Code quality check (mypy type checking) [medium]
+    8. Test coverage check (modified files must have 80%+ coverage) [slow - runs pytest]
+    9. Desktop ESLint check [if applicable]
+    10. Desktop build check [if applicable]
 
 .NOTES
     ⚠️  CRITICAL: This file is protected by CODEOWNERS
@@ -70,28 +72,28 @@ $allPassed = $true
 $passed = @()
 $failed = @()
 
-# Static checks that don't depend on build artifacts - run sequentially
-$staticChecks = @(
-    @{ Name = "Pokepoke Boot"; Script = "check-pokepoke-import.ps1" }
-    @{ Name = "Test Safety"; Script = "check-test-safety.ps1" }
-    @{ Name = "Skipped Tests"; Script = "check-skipped-tests.ps1" }
-    @{ Name = "File Length"; Script = "check-file-length.ps1" }
+# Unified pipeline ordered cheapest-first (fast-fail: first failure exits).
+# Cheap checks (grep/stat) run before expensive ones (mypy, pytest/coverage).
+# Each entry can specify:
+#   - Isolated: $true  → run via Start-Process with per-check timeout (for checks that may hang)
+#   - Interpreter       → use a specific interpreter (e.g. "python") instead of pwsh
+$checks = @(
+    # --- Fast checks (grep, stat, import) ---
+    @{ Name = "File Length";    Script = "check-file-length.ps1" }
+    @{ Name = "Skipped Tests";  Script = "check-skipped-tests.ps1" }
+    @{ Name = "Test Safety";    Script = "check-test-safety.ps1" }
+    @{ Name = "Ruff Lint";      Script = "check-ruff.ps1" }
+    @{ Name = "Pokepoke Boot";  Script = "check-pokepoke-import.ps1" }
+    # --- Medium checks ---
+    @{ Name = "Code Quality";   Script = "check-code-quality.ps1"; Isolated = $true }
+    # --- Slow checks (runs full pytest suite) ---
+    @{ Name = "Test Coverage";  Script = "check-coverage.py"; Isolated = $true; Interpreter = "python" }
+    # --- Desktop checks (only run when desktop files are staged) ---
     @{ Name = "Desktop ESLint"; Script = "check-desktop-lint.ps1" }
-    @{ Name = "Desktop Build"; Script = "check-build.ps1" }
+    @{ Name = "Desktop Build";  Script = "check-build.ps1" }
 )
 
-# Sequential chain: ruff -> mypy -> coverage
-# Ruff catches syntax errors (E9xx) so py_compile is unnecessary.
-# If any step fails, remaining checks are skipped (early exit on first failure).
-$buildDependentChecks = @(
-    @{ Name = "Ruff Lint"; Script = "check-ruff.ps1" }
-    @{ Name = "Code Quality"; Script = "check-code-quality.ps1" }
-    @{ Name = "Test Coverage"; Script = "check-coverage.py"; Interpreter = "python" }
-)
-
-# Run build-dependent checks sequentially (abort on first failure)
-$buildFailed = $false
-foreach ($check in $buildDependentChecks) {
+foreach ($check in $checks) {
     # Overall timeout guard
     if ($overallStopwatch.Elapsed.TotalMinutes -ge $OverallTimeoutMinutes) {
         Write-Host ""
@@ -100,107 +102,93 @@ foreach ($check in $buildDependentChecks) {
         exit 1
     }
 
-    Write-Host "  • $($check.Name)... " -ForegroundColor Gray
-    $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    
-    try {
-        $checkScript = Join-Path $hooksDir $check.Script
-        # Run each check as a child process with a hard timeout to prevent hanging.
-        if ($check.Interpreter) {
-            $proc = Start-Process -FilePath $check.Interpreter -ArgumentList $checkScript `
-                -NoNewWindow -PassThru -WorkingDirectory $repoRoot
-        } else {
-            $proc = Start-Process -FilePath "pwsh" `
-                -ArgumentList "-NoProfile", "-NonInteractive", "-File", $checkScript `
-                -NoNewWindow -PassThru -WorkingDirectory $repoRoot
+    if ($check.Isolated) {
+        # Run via Start-Process with hard timeout (for checks that may hang)
+        Write-Host "  • $($check.Name)... " -ForegroundColor Gray
+        $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
+
+        try {
+            $checkScript = Join-Path $hooksDir $check.Script
+            if ($check.Interpreter) {
+                $proc = Start-Process -FilePath $check.Interpreter -ArgumentList $checkScript `
+                    -NoNewWindow -PassThru -WorkingDirectory $repoRoot
+            } else {
+                $proc = Start-Process -FilePath "pwsh" `
+                    -ArgumentList "-NoProfile", "-NonInteractive", "-File", $checkScript `
+                    -NoNewWindow -PassThru -WorkingDirectory $repoRoot
+            }
+
+            $exited = $proc.WaitForExit($PerCheckTimeoutSeconds * 1000)
+            $checkStopwatch.Stop()
+
+            if (-not $exited) {
+                try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
+                $elapsed = [math]::Round($checkStopwatch.Elapsed.TotalMinutes, 1)
+                Write-Host "    ⏱ $($check.Name): TIMED OUT after ${elapsed} min" -ForegroundColor Red
+                Write-Host ""
+                Write-Host "⏰ Pre-commit timed out after ${elapsed} minutes." -ForegroundColor Red
+                Write-Host $TimeoutDiagnostics -ForegroundColor Yellow
+                exit 1
+            }
+
+            if ($proc.ExitCode -eq 0) {
+                Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
+                $passed += $check.Name
+            }
+            else {
+                Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
+                $failed += $check.Name
+                $allPassed = $false
+                Write-Host "  ⚡ Check failed — skipping remaining checks" -ForegroundColor Yellow
+                break
+            }
         }
-
-        $exited = $proc.WaitForExit($PerCheckTimeoutSeconds * 1000)
-        $checkStopwatch.Stop()
-
-        if (-not $exited) {
-            # Timeout — kill the process tree and fail with diagnostics
-            try { Stop-Process -Id $proc.Id -Force -ErrorAction SilentlyContinue } catch {}
-            $elapsed = [math]::Round($checkStopwatch.Elapsed.TotalMinutes, 1)
-            Write-Host "    ⏱ $($check.Name): TIMED OUT after ${elapsed} min" -ForegroundColor Red
-            Write-Host ""
-            Write-Host "⏰ Pre-commit timed out after ${elapsed} minutes." -ForegroundColor Red
-            Write-Host $TimeoutDiagnostics -ForegroundColor Yellow
-            exit 1
-        }
-
-        if ($proc.ExitCode -eq 0) {
+        catch {
+            $checkStopwatch.Stop()
             Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
-            $passed += $check.Name
-        }
-        else {
-            Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
+            Write-Host "Error: $_" -ForegroundColor Red
             $failed += $check.Name
             $allPassed = $false
-            $buildFailed = $true
-            Write-Host "  ⚡ Build/syntax failure — skipping remaining build-dependent checks" -ForegroundColor Yellow
+            Write-Host "  ⚡ Check failed — skipping remaining checks" -ForegroundColor Yellow
             break
         }
     }
-    catch {
-        $checkStopwatch.Stop()
-        Write-Host "    ⏱ $($check.Name): $([math]::Round($checkStopwatch.Elapsed.TotalSeconds, 1))s" -ForegroundColor DarkGray
-        Write-Host "Error: $_" -ForegroundColor Red
-        $failed += $check.Name
-        $allPassed = $false
-        $buildFailed = $true
-        Write-Host "  ⚡ Build/syntax failure — skipping remaining build-dependent checks" -ForegroundColor Yellow
-        break
-    }
-}
+    else {
+        # Run inline (fast checks that won't hang)
+        Write-Host "  • $($check.Name)... " -NoNewline -ForegroundColor Gray
+        $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
 
-# If build failed, exit early
-if ($buildFailed) {
-    Write-Host ""
-    Write-Host "❌ Build failed: $($failed -join ', ') — downstream checks skipped" -ForegroundColor Red
-    exit 1
-}
+        try {
+            $checkScript = Join-Path $hooksDir $check.Script
+            $output = & $checkScript *>&1 | Out-String
+            $checkStopwatch.Stop()
 
-# Run static checks sequentially (no Start-Job overhead)
-foreach ($check in $staticChecks) {
-    # Overall timeout guard
-    if ($overallStopwatch.Elapsed.TotalMinutes -ge $OverallTimeoutMinutes) {
-        Write-Host ""
-        Write-Host "⏰ Pre-commit timed out after $([math]::Round($overallStopwatch.Elapsed.TotalMinutes, 1)) minutes." -ForegroundColor Red
-        Write-Host $TimeoutDiagnostics -ForegroundColor Yellow
-        exit 1
-    }
-
-    Write-Host "  • $($check.Name)... " -NoNewline -ForegroundColor Gray
-    $checkStopwatch = [System.Diagnostics.Stopwatch]::StartNew()
-    
-    try {
-        $checkScript = Join-Path $hooksDir $check.Script
-        # Capture output but don't stream (these checks are fast)
-        $output = & $checkScript *>&1 | Out-String
-        $checkStopwatch.Stop()
-        
-        if ($LASTEXITCODE -eq 0) {
-            Write-Host "✓" -ForegroundColor Green
-            $passed += $check.Name
-        }
-        else {
-            Write-Host "✗" -ForegroundColor Red
-            $failed += $check.Name
-            $allPassed = $false
-            if ($output.Trim()) {
-                Write-Host ""
-                Write-Host $output.Trim()
-                Write-Host ""
+            if ($LASTEXITCODE -eq 0) {
+                Write-Host "✓" -ForegroundColor Green
+                $passed += $check.Name
+            }
+            else {
+                Write-Host "✗" -ForegroundColor Red
+                $failed += $check.Name
+                $allPassed = $false
+                if ($output.Trim()) {
+                    Write-Host ""
+                    Write-Host $output.Trim()
+                    Write-Host ""
+                }
+                Write-Host "  ⚡ Check failed — skipping remaining checks" -ForegroundColor Yellow
+                break
             }
         }
-    }
-    catch {
-        $checkStopwatch.Stop()
-        Write-Host "✗" -ForegroundColor Red
-        Write-Host "Error: $_" -ForegroundColor Red
-        $failed += $check.Name
-        $allPassed = $false
+        catch {
+            $checkStopwatch.Stop()
+            Write-Host "✗" -ForegroundColor Red
+            Write-Host "Error: $_" -ForegroundColor Red
+            $failed += $check.Name
+            $allPassed = $false
+            Write-Host "  ⚡ Check failed — skipping remaining checks" -ForegroundColor Yellow
+            break
+        }
     }
 }
 
