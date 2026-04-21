@@ -249,24 +249,21 @@ class TestSyncAndEnsureCleanMainRepo:
     @patch("pokepoke.worktrees.worktree_helpers.categorize_git_changes")
     @patch("pokepoke.worktrees.worktree_helpers.run_git")
     @patch("pokepoke.worktrees.worktree_helpers.run_bd_sync_with_retry")
-    def test_worktree_changes_committed(self, mock_sync, mock_git, mock_cat) -> None:
-        """Worktree cleanup changes are committed (lines 128-135)."""
+    def test_no_worktree_category_in_changes(self, mock_sync, mock_git, mock_cat) -> None:
+        """No 'worktree' category exists — worktrees/ is gitignored.
+
+        categorize_git_changes only returns 'other', 'beads', 'untracked'.
+        If worktree files somehow appear they land in 'other'.
+        """
         mock_sync.return_value = Mock(returncode=0)
 
-        status_result = Mock(stdout=" D worktrees/task-old\n")
-        mock_git.side_effect = [status_result, None, None]
-        mock_cat.return_value = {
-            "other": [],
-            "beads": [],
-            "worktree": [" D worktrees/task-old"],
-        }
+        # Status is clean — nothing to do
+        mock_git.return_value = Mock(stdout="")
 
         result = sync_and_ensure_clean_main_repo("task/x")
         assert result is True
-
-        git_calls = mock_git.call_args_list
-        add_call = git_calls[1]
-        assert "worktrees/" in str(add_call)
+        # Only the status call, no add/commit for worktrees
+        assert mock_git.call_count == 1
 
     @patch("pokepoke.worktrees.worktree_helpers.run_git")
     @patch("pokepoke.worktrees.worktree_helpers.run_bd_sync_with_retry")
@@ -308,20 +305,20 @@ class TestSyncAndEnsureCleanMainRepo:
     @patch("pokepoke.worktrees.worktree_helpers.run_git")
     @patch("pokepoke.worktrees.worktree_helpers.run_bd_sync_with_retry")
     def test_all_change_types_committed(self, mock_sync, mock_git, mock_cat, mock_commit) -> None:
-        """All three types of changes committed in sequence."""
+        """Both 'other' and 'beads' changes committed in sequence.
+
+        worktrees/ is gitignored so no 'worktree' category exists.
+        """
         mock_sync.return_value = Mock(returncode=0)
 
         mock_git.side_effect = [
-            Mock(stdout=" M src/f.py\n M .beads/x\n D worktrees/t\n"),
+            Mock(stdout=" M src/f.py\n M .beads/x\n"),
             None,  # git add .beads/
             None,  # git commit beads
-            None,  # git add worktrees/
-            None,  # git commit worktrees
         ]
         mock_cat.return_value = {
             "other": [" M src/f.py"],
             "beads": [" M .beads/x"],
-            "worktree": [" D worktrees/t"],
         }
 
         result = sync_and_ensure_clean_main_repo("task/x")

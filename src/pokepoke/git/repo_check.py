@@ -7,10 +7,9 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import get_status_porcelain_and_changes
 from pokepoke.git.repo_state_guard import cleanup_lock
-from pokepoke.utils.constants import BEADS_DIR, CLEANUP_AGGREGATE_TIMEOUT, STATUS_IN_PROGRESS, WORKTREE_DIR
+from pokepoke.utils.constants import BEADS_DIR, CLEANUP_AGGREGATE_TIMEOUT, STATUS_IN_PROGRESS
 from pokepoke.worktrees.coordination import main_repo_git_lock, merge_lock_active
 
 logger = logging.getLogger(__name__)
@@ -394,21 +393,5 @@ def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool
         if changes['beads']:
             logger.info("ℹ️  Beads database changes detected - will be synced by beads daemon")
             logger.info("ℹ️  Run 'bd sync' to force immediate sync if needed")
-
-        # Auto-resolve worktree cleanup deletions
-        if changes['worktree']:
-            logger.info("🧹 Committing worktree cleanup changes...")
-            try:
-                with main_repo_git_lock():
-                    run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=str(repo_path))
-                    run_git(
-                        ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                        cwd=str(repo_path),
-                        timeout=60,
-                    )
-                logger.info("✅ Worktree cleanup committed")
-            except subprocess.CalledProcessError as e:
-                logger.warning(f"⚠️  Could not commit worktree cleanup: {e}")
-                logger.warning("   Continuing anyway — workers use isolated worktrees")
 
     return True

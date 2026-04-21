@@ -8,7 +8,7 @@ from pathlib import Path
 from pokepoke.beads.beads_management import run_bd_sync_with_retry
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import categorize_git_changes, commit_all_changes
-from pokepoke.utils.constants import BEADS_DIR, WORKTREE_DIR
+from pokepoke.utils.constants import BEADS_DIR
 
 logger = logging.getLogger(__name__)
 
@@ -126,14 +126,6 @@ def sync_and_ensure_clean_main_repo(branch_name: str, cwd: str | None = None) ->
                     timeout=60, cwd=cwd,
                 )
                 logger.info("✅ Beads changes committed")
-            if changes['worktree']:
-                logger.info("🧹 Committing worktree cleanup changes...")
-                run_git(["git", "add", f"{WORKTREE_DIR}/"], cwd=cwd)
-                run_git(
-                    ["git", "commit", "-m", "chore: cleanup deleted worktree directories"],
-                    timeout=60, cwd=cwd,
-                )
-                logger.info("✅ Worktree cleanup committed")
         return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
         logger.error(f"❌ Failed to check/clean main repo: {e}")
