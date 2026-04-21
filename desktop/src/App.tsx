@@ -18,6 +18,7 @@ import { LogPanel } from "./components/LogPanel";
 import { LogsLocationBox } from "./components/LogsLocationBox";
 import { PipelineView } from "./components/PipelineView";
 import { PromptEditor } from "./components/PromptEditor";
+import { SessionFlowchartView } from "./components/SessionFlowchartView";
 import { SettingsPage } from "./components/SettingsPage";
 import { SetupWizard } from "./components/SetupWizard";
 import { StatsBar } from "./components/StatsBar";
@@ -34,6 +35,7 @@ function App() {
   const [showPrompts, setShowPrompts] = useState(false);
   const [showSettings, setShowSettings] = useState(false);
   const [showStatsPage, setShowStatsPage] = useState(false);
+  const [viewMode, setViewMode] = useState<"logs" | "flowchart">("logs");
   const [selectedCardId, setSelectedCardId] = useState<string | null>(null);
   const [modelHistory, setModelHistory] = useState<ModelHistoryEntry[]>([]);
   const [processDiagnostics, setProcessDiagnostics] = useState<ProcessSnapshot[]>([]);
@@ -170,6 +172,13 @@ function App() {
             {bridge.workItem?.title && <span className="top-banner-compact-item-title">{bridge.workItem.title}</span>}
             <div className="top-banner-compact-controls">
               <ConnectionIndicator status={bridge.connectionStatus} />
+              <button
+                className={`prompt-editor-toggle${viewMode === "flowchart" ? " view-toggle-active" : ""}`}
+                onClick={() => setViewMode((v) => (v === "logs" ? "flowchart" : "logs"))}
+                title={viewMode === "flowchart" ? "Switch to log view" : "Switch to pipeline flowchart"}
+              >
+                🔀
+              </button>
               <button className="prompt-editor-toggle" onClick={() => setShowSettings(true)} title="Settings">
                 ⚙️
               </button>
@@ -221,6 +230,13 @@ function App() {
                   📊
                 </button>
                 <button
+                  className={`prompt-editor-toggle${viewMode === "flowchart" ? " view-toggle-active" : ""}`}
+                  onClick={() => setViewMode((v) => (v === "logs" ? "flowchart" : "logs"))}
+                  title={viewMode === "flowchart" ? "Switch to log view" : "Switch to pipeline flowchart"}
+                >
+                  🔀
+                </button>
+                <button
                   className="prompt-editor-toggle"
                   onClick={() => setShowPrompts(true)}
                   title="Edit prompt templates"
@@ -252,6 +268,17 @@ function App() {
       </div>
 
       {/* Main content area with logs and agents panel */}
+      {viewMode === "flowchart" ? (
+        <ErrorBoundary>
+          <SessionFlowchartView
+            agents={bridge.agents}
+            stats={bridge.stats}
+            agentName={bridge.agentName}
+            currentSessionId={bridge.currentSessionId}
+            activeModel={(selectedAgentDetail ?? autoFollowAgent)?.model ?? null}
+          />
+        </ErrorBoundary>
+      ) : (
       <div className={`main-content${isDragging ? " main-content--resizing" : ""}`} ref={containerRef}>
         {/* Primary log output + secondary (collapsible) orchestrator log */}
         <div className="log-container">
@@ -323,6 +350,7 @@ function App() {
           spawnAtLimit={spawnAtLimit}
         />
       </div>
+      )}
 
       {/* Stats footer */}
       <StatsBar

@@ -4772,3 +4772,290 @@
   transform: translateY(-50%);
   white-space: nowrap;
 }
+
+/* ── View toggle button active state ────────────────────────────────────── */
+
+.view-toggle-active {
+  background: var(--accent-primary) !important;
+  border-color: var(--accent-primary) !important;
+  color: var(--bg-primary) !important;
+  border-radius: 4px;
+}
+
+/* =============================================================================
+ * Session Flowchart View — full-page orchestration pipeline visualization
+ * ============================================================================= */
+
+.sf-shell {
+  display: flex;
+  flex-direction: column;
+  flex: 1;
+  overflow: hidden;
+  background: #0d1117;
+  color: #e6edf3;
+  font-family: -apple-system, "Segoe UI", Helvetica, Arial, sans-serif;
+  font-size: 13px;
+}
+
+/* ── Info bar ──────────────────────────────────────────────────────────── */
+
+.sf-info-bar {
+  display: flex;
+  gap: 24px;
+  padding: 6px 16px;
+  background: #0d1117;
+  border-bottom: 1px solid #30363d;
+  font-size: 11px;
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+/* ── Legend bar ─────────────────────────────────────────────────────────── */
+
+.sf-legend-bar {
+  display: flex;
+  align-items: center;
+  gap: 18px;
+  flex-wrap: wrap;
+  padding: 7px 16px;
+  background: #161b22;
+  border-bottom: 1px solid #30363d;
+  font-size: 10px;
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+.sf-legend-item {
+  display: flex;
+  align-items: center;
+  gap: 5px;
+}
+
+.sf-legend-sw {
+  width: 12px;
+  height: 12px;
+  border-radius: 3px;
+  border: 2px solid;
+}
+
+.sf-sw-done {
+  border-color: #2ea043;
+  background: rgba(46, 160, 67, 0.15);
+}
+
+.sf-sw-active {
+  border-color: #22c55e;
+  background: rgba(34, 197, 94, 0.15);
+  box-shadow: 0 0 4px rgba(34, 197, 94, 0.4);
+}
+
+.sf-sw-pending {
+  border-color: #30363d;
+  background: #161b22;
+  opacity: 0.5;
+}
+
+.sf-sw-failed {
+  border-color: #f85149;
+  background: rgba(248, 81, 73, 0.12);
+  border-radius: 7px;
+}
+
+.sf-sw-warn {
+  border-color: #d29922;
+  background: rgba(209, 153, 34, 0.15);
+}
+
+.sf-sw-decomposed {
+  border-color: #a371f7;
+  background: rgba(163, 113, 247, 0.12);
+}
+
+.sf-sw-maint {
+  border-color: #79c0ff;
+  background: rgba(121, 192, 255, 0.12);
+}
+
+/* ── Canvas ────────────────────────────────────────────────────────────── */
+
+.sf-canvas {
+  flex: 1;
+  overflow: auto;
+  cursor: grab;
+  position: relative;
+  background: radial-gradient(circle at 1px 1px, #21262d 1px, transparent 0) 0 0 / 24px 24px;
+}
+
+.sf-canvas--dragging {
+  cursor: grabbing;
+}
+
+.sf-canvas-inner {
+  display: inline-block;
+  padding: 32px 40px;
+  min-width: 100%;
+  min-height: 100%;
+}
+
+.sf-svg {
+  display: block;
+}
+
+/* ── SVG node interactivity ────────────────────────────────────────────── */
+
+.sf-shell svg [data-step] {
+  cursor: pointer;
+}
+
+.sf-shell svg [data-step]:hover rect {
+  filter: brightness(1.3);
+}
+
+/* ── Active node glow animation ────────────────────────────────────────── */
+
+.sf-node-glow {
+  animation: sf-glow 2s ease-in-out infinite;
+}
+
+@keyframes sf-glow {
+  0%,
+  100% {
+    filter: drop-shadow(0 0 3px rgba(34, 197, 94, 0.15));
+  }
+  50% {
+    filter: drop-shadow(0 0 8px rgba(34, 197, 94, 0.45));
+  }
+}
+
+/* ── Log panel (slide from right) ──────────────────────────────────────── */
+
+.sf-log-backdrop {
+  position: fixed;
+  inset: 0;
+  background: rgba(0, 0, 0, 0.4);
+  z-index: 99;
+  display: none;
+}
+
+.sf-log-backdrop.open {
+  display: block;
+}
+
+.sf-log-panel {
+  position: fixed;
+  top: 0;
+  right: 0;
+  width: 380px;
+  height: 100vh;
+  background: #161b22;
+  border-left: 1px solid #30363d;
+  z-index: 100;
+  transform: translateX(100%);
+  transition: transform 0.25s ease;
+  display: flex;
+  flex-direction: column;
+}
+
+.sf-log-panel.open {
+  transform: translateX(0);
+}
+
+.sf-log-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 12px 16px;
+  border-bottom: 1px solid #30363d;
+  flex-shrink: 0;
+}
+
+.sf-log-title {
+  font-size: 12px;
+  font-weight: 600;
+  color: #e6edf3;
+}
+
+.sf-log-step {
+  font-size: 11px;
+  color: #8b949e;
+  font-family: "Cascadia Code", "Consolas", monospace;
+}
+
+.sf-log-close {
+  margin-left: auto;
+  background: none;
+  border: 1px solid #30363d;
+  border-radius: 6px;
+  color: #8b949e;
+  font-size: 14px;
+  width: 28px;
+  height: 28px;
+  cursor: pointer;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+}
+
+.sf-log-close:hover {
+  background: #21262d;
+  color: #e6edf3;
+}
+
+.sf-log-body {
+  flex: 1;
+  overflow-y: auto;
+  padding: 16px;
+  font-size: 12px;
+  line-height: 1.7;
+  color: #8b949e;
+  font-family: "Cascadia Code", "Consolas", monospace;
+  white-space: pre-wrap;
+  word-break: break-word;
+}
+
+/* ── Footer ────────────────────────────────────────────────────────────── */
+
+.sf-footer {
+  display: flex;
+  gap: 28px;
+  padding: 8px 16px;
+  background: #161b22;
+  border-top: 1px solid #30363d;
+  font-size: 11px;
+  color: #8b949e;
+  flex-shrink: 0;
+}
+
+.sf-footer > div {
+  display: flex;
+  flex-direction: column;
+}
+
+.sf-footer-label {
+  text-transform: uppercase;
+  letter-spacing: 1px;
+}
+
+.sf-footer-value {
+  color: #e6edf3;
+  font-weight: 600;
+  font-size: 13px;
+}
+
+.sf-footer-mono {
+  font-family: "Cascadia Code", "Consolas", monospace;
+}
+
+.sf-node--clickable {
+  cursor: pointer;
+}
+
+.sf-log-empty-msg {
+  color: #8b949e;
+}
+
+.sf-legend-hint {
+  margin-left: auto;
+  font-size: 9px;
+  opacity: 0.4;
+}
