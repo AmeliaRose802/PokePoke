@@ -129,6 +129,32 @@ class DesktopAPI:
         from pokepoke.orchestration.gate_step_tracker import get_gate_step_tracker
         return get_gate_step_tracker().get_state()
 
+    def get_pipeline_state(self) -> dict[str, Any]:
+        """Return combined gate + merge flow states for the unified pipeline view."""
+        from pokepoke.orchestration.gate_step_tracker import get_gate_step_tracker
+        from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
+
+        gate = get_gate_step_tracker().get_state()
+        merge = get_merge_step_tracker().get_state()
+
+        gate_run = gate.get("current_run") or gate.get("last_completed_run")
+        merge_run = merge.get("current_run") or merge.get("last_completed_run")
+
+        if gate.get("current_run"):
+            active_phase = "gate"
+        elif merge.get("current_run") or merge_run:
+            active_phase = "merge"
+        elif gate_run:
+            active_phase = "gate"
+        else:
+            active_phase = "idle"
+
+        return {
+            "gate": gate,
+            "merge": merge,
+            "active_phase": active_phase,
+        }
+
     def get_state(self) -> dict[str, Any]:
         """State snapshot + new log entries since last poll (single IPC call)."""
         from pokepoke.config import get_config

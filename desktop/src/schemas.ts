@@ -322,6 +322,13 @@ export const MergeFlowStateSchema = z.object({
   edges: z.array(MergeEdgeSchema),
 });
 
+/** Combined pipeline state (gate + merge) */
+export const PipelineStateSchema = z.object({
+  gate: MergeFlowStateSchema,
+  merge: MergeFlowStateSchema,
+  active_phase: z.enum(["idle", "gate", "merge"]),
+});
+
 /**
  * Helper to validate and provide detailed error messages
  */

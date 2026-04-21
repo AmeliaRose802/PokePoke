@@ -4582,3 +4582,193 @@
   color: var(--text-primary);
   font-size: 12px;
 }
+
+/* ── Pipeline View (unified gate → merge) ─────────────────────────────── */
+
+.pipeline-view {
+  display: flex;
+  flex-direction: column;
+  gap: 4px;
+  padding: 8px 12px;
+  margin: 4px 0;
+  border-radius: 8px;
+  background: var(--bg-secondary, #161b22);
+  border: 1px solid var(--border-default, #30363d);
+}
+
+.pipeline-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding-bottom: 4px;
+}
+
+.pipeline-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.pipeline-context {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.pipeline-phases {
+  display: flex;
+  flex-direction: column;
+  align-items: stretch;
+}
+
+.pipeline-phase {
+  border-radius: 6px;
+  overflow: hidden;
+  border: 1px solid var(--border-default, #30363d);
+}
+
+.pipeline-phase-header {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  width: 100%;
+  padding: 8px 12px;
+  background: transparent;
+  border: none;
+  color: var(--text-primary);
+  cursor: pointer;
+  font-size: 13px;
+  text-align: left;
+  transition: background 0.15s;
+}
+
+.pipeline-phase-header:hover {
+  background: var(--bg-hover, rgba(255, 255, 255, 0.04));
+}
+
+.pipeline-phase-header--expanded {
+  border-bottom: 1px solid var(--border-default, #30363d);
+}
+
+.pipeline-phase-indicator {
+  display: flex;
+  align-items: center;
+  flex-shrink: 0;
+}
+
+.pipeline-phase-dot {
+  width: 10px;
+  height: 10px;
+  border-radius: 50%;
+  border: 2px solid var(--border-default, #30363d);
+  background: transparent;
+  transition: all 0.2s;
+}
+
+.pipeline-phase-dot--active {
+  border-color: var(--accent-warning, #ffa500);
+  background: var(--accent-warning, #ffa500);
+  animation: pipeline-dot-pulse 2s ease-in-out infinite;
+}
+
+.pipeline-phase-dot--done {
+  border-color: var(--accent-success, #2ea043);
+  background: var(--accent-success, #2ea043);
+}
+
+.pipeline-phase-dot--failed {
+  border-color: var(--accent-danger, #f85149);
+  background: var(--accent-danger, #f85149);
+}
+
+@keyframes pipeline-dot-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.5; }
+}
+
+.pipeline-phase-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+}
+
+.pipeline-phase-label {
+  font-weight: 600;
+  flex: 1;
+}
+
+.pipeline-phase-status {
+  font-size: 11px;
+  padding: 1px 6px;
+  border-radius: 8px;
+  white-space: nowrap;
+}
+
+.pipeline-phase-status--active {
+  color: var(--accent-warning, #ffa500);
+  background: rgba(255, 165, 0, 0.12);
+}
+
+.pipeline-phase-status--done {
+  color: var(--accent-success, #2ea043);
+  background: rgba(46, 160, 67, 0.12);
+}
+
+.pipeline-phase-status--failed {
+  color: var(--accent-danger, #f85149);
+  background: rgba(248, 81, 73, 0.12);
+}
+
+.pipeline-phase-status--pending {
+  color: var(--text-muted);
+  background: rgba(255, 255, 255, 0.04);
+}
+
+.pipeline-phase-chevron {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+.pipeline-phase-content {
+  padding: 4px 8px 8px;
+}
+
+/* Connector between phases */
+.pipeline-connector {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  padding: 2px 0;
+  position: relative;
+}
+
+.pipeline-connector-line {
+  display: block;
+  width: 2px;
+  height: 12px;
+  background: var(--border-default, #30363d);
+  transition: background 0.2s;
+}
+
+.pipeline-connector--active .pipeline-connector-line {
+  background: var(--accent-success, #2ea043);
+}
+
+.pipeline-connector-arrow {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.pipeline-connector--active .pipeline-connector-arrow {
+  color: var(--accent-success, #2ea043);
+}
+
+.pipeline-connector-label {
+  font-size: 10px;
+  color: var(--accent-success, #2ea043);
+  position: absolute;
+  left: calc(50% + 10px);
+  top: 50%;
+  transform: translateY(-50%);
+  white-space: nowrap;
+}

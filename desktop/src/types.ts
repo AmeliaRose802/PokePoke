@@ -385,3 +385,13 @@ export interface MergeFlowState {
   steps_definition: MergeStepDef[];
   edges: MergeEdge[];
 }
+
+/** Which pipeline phase is currently active */
+export type PipelinePhase = "idle" | "gate" | "merge";
+
+/** Combined gate + merge pipeline state for the unified view */
+export interface PipelineState {
+  gate: MergeFlowState;
+  merge: MergeFlowState;
+  active_phase: PipelinePhase;
+}

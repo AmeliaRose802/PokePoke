@@ -16,7 +16,7 @@ import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LogPanel } from "./components/LogPanel";
 import { LogsLocationBox } from "./components/LogsLocationBox";
-import { MergeFlowchartView } from "./components/MergeFlowchartView";
+import { PipelineView } from "./components/PipelineView";
 import { PromptEditor } from "./components/PromptEditor";
 import { SettingsPage } from "./components/SettingsPage";
 import { SetupWizard } from "./components/SetupWizard";
@@ -90,7 +90,7 @@ function App() {
     setShowSettings(false);
   }, []);
 
-  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats, getMergeFlowState, getGateFlowState } = bridge;
+  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats, getMergeFlowState, getGateFlowState, getPipelineState } = bridge;
 
   const handleSpawnAgent = useCallback(async () => {
     const result = await bridge.spawnAgent();
@@ -297,34 +297,13 @@ function App() {
           ) : null}
           </ErrorBoundary>
 
-          {/* Merge workflow visualization */}
+          {/* Unified pipeline visualization (gate → merge) */}
           <ErrorBoundary>
-            <details className="orchestrator-collapsible">
-              <summary className="orchestrator-collapsible-summary">
-                <span className="orchestrator-collapsible-title">🔀 Merge Workflow</span>
-              </summary>
-              <div className="orchestrator-collapsible-content">
-                <MergeFlowchartView getMergeFlowState={getMergeFlowState} />
-              </div>
-            </details>
-          </ErrorBoundary>
-
-          {/* Quality gate workflow visualization */}
-          <ErrorBoundary>
-            <details className="orchestrator-collapsible">
-              <summary className="orchestrator-collapsible-summary">
-                <span className="orchestrator-collapsible-title">🔍 Quality Gate</span>
-              </summary>
-              <div className="orchestrator-collapsible-content">
-                <MergeFlowchartView
-                  getMergeFlowState={getGateFlowState}
-                  title="Quality Gate"
-                  icon="🔍"
-                  testIdPrefix="gate"
-                  emptyLabel="No gate activity yet."
-                />
-              </div>
-            </details>
+            <PipelineView
+              getPipelineState={getPipelineState}
+              getMergeFlowState={getMergeFlowState}
+              getGateFlowState={getGateFlowState}
+            />
           </ErrorBoundary>
         </div>
 
