@@ -41,6 +41,15 @@ if TYPE_CHECKING:
 __all__ = ['aggregate_cleanup_stats', 'invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent', 'run_beta_tester', 'run_cleanup_loop', 'run_gate_agent', 'run_maintenance_agent', 'run_worktree_cleanup']
 
 
+def _extract_stats(result: CopilotResult) -> AgentStats | None:
+    """Extract stats from a CopilotResult, preferring SDK-captured stats."""
+    if result.stats:
+        return result.stats
+    if result.output:
+        return parse_agent_stats(result.output)
+    return None
+
+
 @dataclass
 class AgentRunnerConfig:
     """Configuration for agent runner operations.
@@ -147,7 +156,7 @@ def _run_simple_agent(
         result = invoke_copilot(config.agent_item, prompt=agent_prompt, deny_write=deny_write, model=config.model, cwd=cwd, item_logger=config.item_logger, add_parent_dir=add_parent_dir)
     if result.success:
         logger.info("%s completed", config.agent_name)
-        return (parse_agent_stats(result.output) if result.output else None) or AgentStats()
+        return _extract_stats(result) or AgentStats()
     logger.error("%s failed: %s", config.agent_name, result.error)
     return None
 
@@ -257,7 +266,7 @@ def _reconcile_worktree_branch(
         "attempting merge of partial work",
         config.agent_name,
     )
-    agent_stats = parse_agent_stats(result.output) if result.output else None
+    agent_stats = _extract_stats(result)
     merge_success, _worktree_cleaned = handle_worktree_merge(
         WorktreeMergeContext(
             agent_id=config.agent_id,
@@ -291,8 +300,7 @@ def _handle_successful_agent(
         logger.info("Discarding worktree (merge_changes=False)")
         try:
             cleanup_worktree(config.agent_id, force=True)
-            stats = parse_agent_stats(result.output) if result.output else None
-            return stats, False, True
+            return _extract_stats(result) or AgentStats(), False, True
         except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as cleanup_error:
             logger.warning("Explicit cleanup failed: %s", cleanup_error)
             add_uncleaned_worktree(
@@ -302,7 +310,7 @@ def _handle_successful_agent(
             return None, True, False
 
     logger.info("All changes committed and validated")
-    agent_stats = parse_agent_stats(result.output) if result.output else None
+    agent_stats = _extract_stats(result) or AgentStats()
     merge_success, worktree_cleaned = handle_worktree_merge(
         WorktreeMergeContext(
             agent_id=config.agent_id,

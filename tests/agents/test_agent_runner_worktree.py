@@ -555,7 +555,7 @@ class TestWorktreeAgentMergeChangeFalse:
             "Test", "maint-test", agent_item, "Prompt",
             Path("/fake/repo"), merge_changes=False, model="gpt-4"
         )
-        assert stats is None  # parse returns None
+        assert stats == AgentStats()  # no parsed stats → empty default
 
 
 class TestWorktreeAgentFinallyCleanupException:
