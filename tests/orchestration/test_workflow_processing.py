@@ -316,6 +316,58 @@ class TestProcessWorkItem:
             # Description must NOT be mutated — feedback goes via prompt
             assert item.description == ""
 
+    def test_gate_agent_retry_reuses_previous_session_when_enabled(self) -> None:
+        """Gate retries should resume the previous session when the feature flag is enabled."""
+        item = make_work_item()
+
+        with make_process_item_mocks(
+            uncommitted=True,
+            include_handoff=True, include_cleanup_worktree=True,
+            include_config=True,
+        ) as mocks:
+            mocks['config'].return_value.gate_reverify_resume_enabled = True
+            mocks['config'].return_value.max_gate_rejections_per_item = 3
+
+            mocks['gate'].side_effect = [
+                GateAgentResult(
+                    success=False,
+                    reason="Tests failed",
+                    session_id="gate-session-1",
+                    last_output_summary="gate output 1",
+                ),
+                GateAgentResult(
+                    success=True,
+                    reason="All tests pass",
+                    session_id="gate-session-1",
+                    last_output_summary="gate output 2",
+                ),
+            ]
+            mocks['invoke'].side_effect = [
+                CopilotResult(
+                    work_item_id="task-1", success=True, output="Try 1", attempt_count=1,
+                    session_id="work-session-1",
+                ),
+                CopilotResult(
+                    work_item_id="task-1", success=True, output="Try 2", attempt_count=1,
+                    session_id="work-session-2",
+                ),
+            ]
+
+            with patch(PATCH_WF_ADD_COMMENT):
+                result = process_work_item(item, interactive=True)
+
+            assert result.success is True
+            assert mocks['gate'].call_count == 2
+            first_call = mocks['gate'].call_args_list[0].kwargs
+            second_call = mocks['gate'].call_args_list[1].kwargs
+            assert first_call.get("is_resume") is False
+            assert first_call.get("session_id") is None
+            assert second_call.get("is_resume") is True
+            assert second_call.get("session_id") == "gate-session-1"
+            assert second_call.get("resume_reason") == "reverify"
+            assert second_call.get("previous_output_summary") == "gate output 1"
+            assert second_call.get("resume_feedback") == "Tests failed"
+
     def test_gate_agent_stats_aggregation(self) -> None:
         """Test gate agent stats are aggregated into totals."""
         item = make_work_item()

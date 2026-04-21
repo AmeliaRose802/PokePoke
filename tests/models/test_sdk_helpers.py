@@ -17,6 +17,7 @@ from pokepoke.models.sdk_helpers import (
     _check_tool_watchdog,
     _summarize_output,
     build_gate_resume_prompt,
+    build_gate_reverify_prompt,
     build_resume_prompt,
 )
 from pokepoke.types import BeadsWorkItem
@@ -212,6 +213,28 @@ class TestBuildGateResumePrompt:
         assert "Previous Progress" in result
         assert "`develop`" in result
         assert work_item.description in result
+
+
+class TestBuildGateReverifyPrompt:
+    def test_mentions_reverification(self, work_item):
+        result = build_gate_reverify_prompt(
+            work_item,
+            previous_rejection="Fix the missing tests",
+            previous_output_summary="Previous gate output",
+        )
+        assert "Reverification Resume" in result
+        assert "re-verifying the specific issues" in result
+        assert "Fix the missing tests" in result
+        assert "Previous gate output" in result
+
+    def test_includes_handoff_context(self, work_item):
+        result = build_gate_reverify_prompt(work_item, handoff_context="diff summary")
+        assert "Handoff Context" in result
+        assert "diff summary" in result
+
+    def test_no_previous_feedback_omits_section(self, work_item):
+        result = build_gate_reverify_prompt(work_item)
+        assert "Previous Gate Feedback" not in result
 
 
 # ── build_resume_prompt ──────────────────────────────────────────────────────

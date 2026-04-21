@@ -133,6 +133,9 @@ def process_work_item(  # noqa: C901
         backoff_delay = _BACKOFF_BASE_SECONDS
         work_agent_iteration = 1
         gate_rejection_count = int((item.metadata or {}).get('gate_rejection_count', 0))
+        gate_resume_session_id: str | None = None
+        gate_resume_output_summary: str | None = None
+        gate_resume_feedback: str | None = None
         last_retry_was_gate_feedback = False
         current_work_agent_id = base_agent_id
         resume_session_id: str | None = None
@@ -145,6 +148,7 @@ def process_work_item(  # noqa: C901
         prior_contexts = get_worker_contexts(item.id, get_comments_fn=_get_comments)
         previous_worker_context = format_worker_context_for_prompt(prior_contexts)
         _gt = get_gate_step_tracker()
+        gate_resume_enabled = global_config.gate_reverify_resume_enabled
 
         while not is_shutting_down():
             elapsed = time.time() - start_time
@@ -326,6 +330,10 @@ def process_work_item(  # noqa: C901
                 base_agent_id=base_agent_id, max_gate_rejections=max_gate_rejections,
                 gate_rejection_count=gate_rejection_count, gate_agent_runs=gate_agent_runs,
                 item_logger=item_logger, comment_fn=_comment, defer_fn=_defer,
+                resume_session_id=gate_resume_session_id if gate_resume_enabled else None,
+                resume_reason="reverify" if gate_resume_enabled and last_retry_was_gate_feedback else None,
+                resume_output_summary=gate_resume_output_summary if gate_resume_enabled else None,
+                resume_feedback=gate_resume_feedback if gate_resume_enabled else None,
             ), _gt)
             gate_agent_runs = gate_loop_result.gate_agent_runs
             gate_rejection_count = gate_loop_result.gate_rejection_count
@@ -344,6 +352,9 @@ def process_work_item(  # noqa: C901
                 resume_output_summary = None
                 last_feedback = gate_loop_result.feedback
                 last_retry_was_gate_feedback = True
+                gate_resume_session_id = gate_loop_result.session_id
+                gate_resume_output_summary = gate_loop_result.last_output_summary
+                gate_resume_feedback = gate_loop_result.feedback
             else:
                 break  # Gate infra failure with no fallback
 

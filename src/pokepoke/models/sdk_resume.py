@@ -62,6 +62,54 @@ def build_gate_resume_prompt(
     return "\n".join(lines)
 
 
+def build_gate_reverify_prompt(
+    work_item: BeadsWorkItem,
+    handoff_context: str | None = None,
+    previous_output_summary: str | None = None,
+    previous_rejection: str | None = None,
+    default_branch: str = "master",
+) -> str:
+    """Build a prompt for resuming a gate session after a rejected review.
+
+    The resumed session should focus on whether the work agent addressed the
+    prior gate feedback instead of re-reviewing the entire change set from
+    scratch.
+    """
+    lines = [
+        f"## Gate Agent Reverification Resume - {work_item.id}: {work_item.title}",
+        "",
+        "Your previous gate verification session rejected this work.",
+        "The work agent has now addressed that feedback.",
+        "Resume the same SDK session and focus on re-verifying the specific issues you raised.",
+        "",
+        f"**Item:** {work_item.id} - {work_item.title}",
+        f"**Type:** {work_item.issue_type} | **Priority:** {work_item.priority}",
+    ]
+    if work_item.description:
+        lines.extend(["", "**Description:**", work_item.description])
+    if handoff_context:
+        lines.extend(["", "### Handoff Context", "", handoff_context])
+    if previous_rejection:
+        lines.extend(["", "### Previous Gate Feedback", "", previous_rejection])
+    if previous_output_summary:
+        lines.extend([
+            "", "### Previous Progress", "",
+            "Here is the tail of your previous gate session output:",
+            "", "```", previous_output_summary, "```",
+        ])
+    lines.extend([
+        "", "### Your Task", "",
+        "You are the **Gate Agent** - a read-only verification agent.",
+        f"Review the changes on this branch compared to `{default_branch}`.",
+        "Confirm whether the work agent fixed the issues you previously rejected.",
+        "Do not re-explain the whole change set; focus on the repaired items and any regressions.",
+        "", "Respond with a JSON verdict:",
+        '```json', '{{"status": "success", "message": "...", "reason": "..."}}', '```',
+        "or", '```json', '{{"status": "failure", "reason": "...", "details": "..."}}', '```',
+    ])
+    return "\n".join(lines)
+
+
 def build_resume_prompt(
     work_item: BeadsWorkItem,
     previous_output_summary: str | None = None,

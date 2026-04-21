@@ -297,6 +297,7 @@ class ProjectConfig:
     max_parallel_agents: int = _c.DEFAULT_MAX_PARALLEL_AGENTS
     command_timeout: int = _c.DEFAULT_COMMAND_TIMEOUT
     gate_agent_enabled: bool = True
+    gate_reverify_resume_enabled: bool = False
     max_gate_rejections_per_item: int = 3  # Max gate rejections before abandoning item
     max_copilot_failure_retries: int = _c.DEFAULT_MAX_COPILOT_FAILURE_RETRIES
     idle_timeout_seconds: int = _c.DEFAULT_IDLE_TIMEOUT_SECONDS

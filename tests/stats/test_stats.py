@@ -223,6 +223,26 @@ class TestSerializeSessionStats:
 
         assert "merge_queue" not in data
 
+    @patch("pokepoke.stats.gate_session_tracker.get_gate_session_stats")
+    def test_gate_session_summary_serialized(self, mock_gate_sessions):
+        mock_gate_sessions.return_value = {
+            "fresh": {
+                "total_runs": 1,
+                "total_passed": 1,
+                "total_failed": 0,
+                "total_input_tokens": 100,
+                "total_output_tokens": 50,
+                "average_input_tokens": 100.0,
+                "average_output_tokens": 50.0,
+                "pass_rate": 1.0,
+                "last_used": "2025-01-01T00:00:00",
+            }
+        }
+        ss = self._make_session_stats()
+        data = serialize_session_stats(ss, elapsed_seconds=10.0, items_completed=0, total_requests=0)
+
+        assert data["gate_session_summary"]["fresh"]["pass_rate"] == 1.0
+
     def test_completed_and_created_items_serialized(self):
         from pokepoke.types import BeadsCreatedItem
         item = BeadsWorkItem(id="item-1", title="Done", status="closed", priority=1, issue_type="task")
