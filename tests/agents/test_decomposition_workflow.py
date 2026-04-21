@@ -225,6 +225,21 @@ class TestConfigDefaults:
         with pytest.raises(ConfigError, match="negative value"):
             ProjectConfig(decomposition_failure_threshold=-5)
 
+    def test_decomposition_timeout_default_is_600(self) -> None:
+        from pokepoke.config import ProjectConfig
+        config = ProjectConfig()
+        assert config.decomposition_timeout_seconds == 600
+
+    def test_decomposition_timeout_clamped_to_minimum_of_300(self) -> None:
+        from pokepoke.config import ProjectConfig
+        config = ProjectConfig(decomposition_timeout_seconds=120)
+        assert config.decomposition_timeout_seconds == 300
+
+    def test_decomposition_timeout_negative_raises(self) -> None:
+        from pokepoke.config import ConfigError, ProjectConfig
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig(decomposition_timeout_seconds=-1)
+
 
 class TestAgentTypeRegistered:
     """Verify the decomposition agent type is registered."""

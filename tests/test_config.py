@@ -251,6 +251,7 @@ class TestProjectConfig:
         assert config.mcp_server.enabled is False
         assert config.test_data == {}
         assert config.work_artifacts_dir is None
+        assert config.decomposition_timeout_seconds == 600
 
     def test_from_dict_empty(self):
         config = ProjectConfig.from_dict({})
@@ -307,6 +308,7 @@ class TestProjectConfig:
                 "priority": 1,
                 "labels": ["model", "beta", "copilot", "preview"],
             },
+            "decomposition_timeout_seconds": 900,
         }
 
         config = ProjectConfig.from_dict(data)
@@ -326,6 +328,7 @@ class TestProjectConfig:
         assert config.model_sync.interval_minutes == 30
         assert config.model_sync.prune_unavailable is True
         assert config.model_sync.issue_type == "feature"
+        assert config.decomposition_timeout_seconds == 900
         assert len(config.maintenance.agents) == 1
         assert config.maintenance.agents[0].name == "Custom Agent"
         assert config.maintenance.agents[0].frequency == 10
@@ -769,6 +772,29 @@ class TestMaxCopilotFailureRetries:
             ProjectConfig.from_dict({"max_copilot_failure_retries": -3})
 
 
+class TestDecompositionTimeoutSeconds:
+    """Tests for decomposition_timeout_seconds configuration."""
+
+    def test_from_dict_default(self):
+        config = ProjectConfig.from_dict({})
+        assert config.decomposition_timeout_seconds == 600
+
+    def test_from_dict_custom_value(self):
+        config = ProjectConfig.from_dict({"decomposition_timeout_seconds": 900})
+        assert config.decomposition_timeout_seconds == 900
+
+    def test_below_minimum_clamps(self, caplog):
+        with caplog.at_level(logging.WARNING, logger="pokepoke.config"):
+            config = ProjectConfig.from_dict({"decomposition_timeout_seconds": 120})
+        assert config.decomposition_timeout_seconds == 300
+        assert "decomposition_timeout_seconds" in caplog.text
+        assert "coercing" in caplog.text
+
+    def test_negative_raises_config_error(self):
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig.from_dict({"decomposition_timeout_seconds": -1})
+
+
 class TestQualityGateOverrides:
     """Tests for QualityGateOverrides dataclass."""
 
@@ -1192,6 +1218,8 @@ class TestConfigValidationWarnings:
             ProjectConfig(idle_timeout_seconds=-5)
         with pytest.raises(ConfigError, match="negative value"):
             ProjectConfig(decomposition_failure_threshold=-1)
+        with pytest.raises(ConfigError, match="negative value"):
+            ProjectConfig(decomposition_timeout_seconds=-1)
         with pytest.raises(ConfigError, match="negative value"):
             ProjectConfig(stale_worktree_commit_threshold=-1)
         with pytest.raises(ConfigError, match="negative value"):

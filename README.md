@@ -56,13 +56,14 @@ python -m pokepoke --autonomous --continuous --max-agents 4  # Parallel agents
 
 ## AI backend configuration
 
-Configure `.pokepoke/config.yaml`:
+Configure `.pokepoke/config.yaml` or `pokepoke.config.json`:
 
 ```yaml
 ai_backend:
   provider: copilot        # or claude-code
   copilot_cli_path: copilot.cmd
   claude_code_cli_path: claude
+decomposition_timeout_seconds: 600  # 10 minutes for decomposition analysis
 ```
 
 ## Task tracker backend

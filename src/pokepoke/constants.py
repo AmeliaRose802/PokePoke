@@ -55,6 +55,7 @@ DEFAULT_TOOL_CALL_TIMEOUT = 1800  # Default max single tool invocation (seconds)
 DEFAULT_PROCESS_OUTPUT_TIMEOUT = 600  # Default no-output timeout (seconds)
 DEFAULT_MAX_PING_FAILURES = 3  # Default consecutive ping failures before dead
 DEFAULT_CIRCUIT_BREAKER_DRAIN_TIMEOUT = 1800  # Default max wait for agents after circuit breaker trips (seconds, 0 = wait forever)
+DEFAULT_DECOMPOSITION_TIMEOUT_SECONDS = 600  # Default timeout for decomposition analysis (seconds)
 
 # Minimum floor values for orchestration settings.
 MIN_MAX_PARALLEL_AGENTS = 1  # Must have at least one agent
@@ -65,6 +66,7 @@ MIN_TOOL_CALL_TIMEOUT = 60  # Minimum tool call timeout (seconds)
 MIN_PROCESS_OUTPUT_TIMEOUT = 30  # Minimum process output timeout (seconds)
 MIN_MAX_PING_FAILURES = 1  # Must allow at least one ping failure
 MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT = 0  # Minimum drain timeout (0 = wait forever)
+MIN_DECOMPOSITION_TIMEOUT_SECONDS = 300  # Minimum decomposition timeout (seconds)
 
 # ---------------------------------------------------------------------------
 # Git state branch constants
