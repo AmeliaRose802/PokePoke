@@ -23,7 +23,6 @@ from pokepoke.git.multi_repo_aggregator import (
     aggregate_ready_work_items,
     get_aggregated_stats,
 )
-from pokepoke.git.repo_worker_pool import RepoWorkerPool
 from pokepoke.maintenance.maintenance_state import (
     MaintenanceState,
     RepoMaintenanceState,
@@ -326,129 +325,7 @@ class TestAggregationEdgeCases:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# 3. WORKER ALLOCATION AND REBALANCING
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-class TestWorkerExhaustionAndFailover:
-    """Test exhaustion scenarios and failover during rebalancing."""
-
-    def test_all_repos_exhausted_then_one_recovers(self) -> None:
-        """When all repos exhaust items, then one gets work, slots redistribute."""
-        pool = RepoWorkerPool(
-            total_workers=6,
-            repos=[_make_repo(path="/a", priority_weight=1), _make_repo(path="/b", priority_weight=1)],
-        )
-        # All repos have no items
-        result = pool.rebalance({"/a": 0, "/b": 0})
-        assert result["/a"] == 3  # base restored
-        assert result["/b"] == 3
-
-        # Now /a gets items, /b still empty
-        result = pool.rebalance({"/a": 5, "/b": 0})
-        assert result["/a"] > 3  # /a gets /b's idle slots
-        assert result["/b"] < 3
-
-    def test_sequential_rebalances_converge(self) -> None:
-        """Multiple sequential rebalances produce consistent results."""
-        pool = RepoWorkerPool(
-            total_workers=8,
-            repos=[
-                _make_repo(path="/a", priority_weight=2),
-                _make_repo(path="/b", priority_weight=1),
-                _make_repo(path="/c", priority_weight=1),
-            ],
-        )
-        counts = {"/a": 10, "/b": 0, "/c": 5}
-        result1 = pool.rebalance(counts)
-        result2 = pool.rebalance(counts)
-        # Same inputs → same outputs after first rebalance stabilizes
-        assert result1 == result2
-
-    def test_cap_overflow_distributed_to_others(self) -> None:
-        """When a capped repo can't take all donated slots, they go elsewhere."""
-        pool = RepoWorkerPool(
-            total_workers=10,
-            repos=[
-                _make_repo(path="/a", priority_weight=5, max_workers=3),
-                _make_repo(path="/b", priority_weight=1),
-                _make_repo(path="/c", priority_weight=1),
-            ],
-        )
-        # /b and /c empty, donate to /a (capped at 3) — overflow should go to any needy repo
-        result = pool.rebalance({"/a": 20, "/b": 0, "/c": 0})
-        assert result["/a"] <= 3  # Cap respected
-
-    def test_failover_high_to_low_priority(self) -> None:
-        """High-priority repo exhausted, workers failover to low-priority."""
-        pool = RepoWorkerPool(
-            total_workers=6,
-            repos=[
-                _make_repo(path="/high", priority_weight=5),
-                _make_repo(path="/low", priority_weight=1),
-            ],
-        )
-        # Initially /high has 5 workers, /low has 1
-        a_alloc = pool.get_allocation("/high")
-        b_alloc = pool.get_allocation("/low")
-        assert a_alloc is not None and b_alloc is not None
-        assert a_alloc.allocated_workers >= b_alloc.allocated_workers
-
-        # /high exhausted, /low has work
-        result = pool.rebalance({"/high": 0, "/low": 10})
-        assert result["/low"] > b_alloc.allocated_workers  # /low gained workers
-        assert result["/high"] < a_alloc.allocated_workers  # /high donated workers
-
-    def test_rebalance_does_not_exceed_total_workers(self) -> None:
-        """Total allocated workers never exceeds the global budget."""
-        pool = RepoWorkerPool(
-            total_workers=10,
-            repos=[
-                _make_repo(path="/a", priority_weight=3),
-                _make_repo(path="/b", priority_weight=2),
-                _make_repo(path="/c", priority_weight=1),
-            ],
-        )
-        for counts in [
-            {"/a": 10, "/b": 0, "/c": 0},
-            {"/a": 0, "/b": 10, "/c": 10},
-            {"/a": 5, "/b": 5, "/c": 5},
-            {"/a": 0, "/b": 0, "/c": 10},
-        ]:
-            result = pool.rebalance(counts)
-            total = sum(result.values())
-            assert total <= 10, f"Total {total} exceeds budget for counts={counts}"
-
-    def test_single_worker_budget(self) -> None:
-        """With only 1 worker, one repo gets it; rebalance can move it."""
-        pool = RepoWorkerPool(
-            total_workers=1,
-            repos=[_make_repo(path="/a"), _make_repo(path="/b")],
-        )
-        total = sum(
-            a.allocated_workers for a in pool.get_all_allocations().values()
-        )
-        assert total == 1
-
-        result = pool.rebalance({"/a": 0, "/b": 5})
-        assert result["/b"] >= 1
-
-    def test_rebalance_with_all_workers_active(self) -> None:
-        """Active workers in idle repos cannot be donated."""
-        pool = RepoWorkerPool(
-            total_workers=4,
-            repos=[_make_repo(path="/a"), _make_repo(path="/b")],
-        )
-        # Start all workers in /b
-        pool.record_worker_start("/b")
-        pool.record_worker_start("/b")
-        # /b has no ready items but 2 active workers — can't donate
-        result = pool.rebalance({"/a": 5, "/b": 0})
-        assert result["/b"] >= 2  # Active workers retained
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# 4. WORKTREE ISOLATION PER REPO
+# 3. WORKTREE ISOLATION PER REPO
 # ═══════════════════════════════════════════════════════════════════════════
 
 
@@ -710,32 +587,6 @@ class TestMultiRepoIntegration:
         assert len(fe_items) == 1
         assert fe_items[0].repo_path == str(tmp_path / "frontend")
 
-    def test_end_to_end_worker_allocation_and_rebalance(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """Full flow: allocate workers, simulate exhaustion, rebalance."""
-        repos = []
-        for name, weight in [("primary", 3), ("secondary", 1)]:
-            d = tmp_path / name
-            d.mkdir()
-            repos.append(_make_repo(path=str(d), priority_weight=weight))
-
-        pool = RepoWorkerPool(total_workers=8, repos=repos)
-
-        # Initial allocation proportional to weight
-        primary = pool.get_allocation(str(tmp_path / "primary"))
-        secondary = pool.get_allocation(str(tmp_path / "secondary"))
-        assert primary is not None and secondary is not None
-        assert primary.allocated_workers > secondary.allocated_workers
-
-        # Simulate primary exhausting all items
-        result = pool.rebalance({
-            str(tmp_path / "primary"): 0,
-            str(tmp_path / "secondary"): 10,
-        })
-        # Secondary should get primary's idle workers
-        assert result[str(tmp_path / "secondary")] > secondary.allocated_workers
-
     def test_end_to_end_repo_context_with_aggregated_items(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -767,23 +618,6 @@ class TestMultiRepoIntegration:
         assert ("a1", "repo-alpha") in processed_contexts
         assert ("b1", "repo-beta") in processed_contexts
 
-    def test_worker_pool_with_real_repo_paths(self, tmp_path: Path) -> None:
-        """Worker pool uses real path strings for allocation tracking."""
-        repos = []
-        for name in ["alpha", "beta", "gamma"]:
-            d = tmp_path / name
-            d.mkdir()
-            repos.append(_make_repo(path=str(d), priority_weight=2))
-
-        pool = RepoWorkerPool(total_workers=9, repos=repos)
-        allocs = pool.get_all_allocations()
-
-        # Each real path is tracked
-        for repo_name in ["alpha", "beta", "gamma"]:
-            path = str(tmp_path / repo_name)
-            assert path in allocs
-            assert allocs[path].allocated_workers == 3  # Equal split
-
     def test_maintenance_state_with_real_paths(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -801,57 +635,3 @@ class TestMultiRepoIntegration:
         from pokepoke.maintenance.maintenance_state import get_items_completed_for_repo
         assert get_items_completed_for_repo(repo_a) == 2
         assert get_items_completed_for_repo(repo_b) == 1
-
-    def test_full_multi_repo_cycle(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """End-to-end: config → aggregate → allocate → process → rebalance."""
-        # Step 1: Config with multiple repos
-        config_data = {
-            "project_name": "multi-repo-e2e",
-            "repos": [
-                {"path": str(tmp_path / "app"), "priority_weight": 3},
-                {"path": str(tmp_path / "lib"), "priority_weight": 1},
-            ],
-        }
-        (tmp_path / "app").mkdir()
-        (tmp_path / "lib").mkdir()
-        config = ProjectConfig.from_dict(config_data)
-        assert len(config.repos) == 2
-
-        # Step 2: Aggregate work items
-        call_map = {
-            str(tmp_path / "app"): [
-                {"id": "app-1", "title": "App task", "status": "open", "priority": 1, "issue_type": "task"},
-            ],
-            str(tmp_path / "lib"): [
-                {"id": "lib-1", "title": "Lib task", "status": "open", "priority": 1, "issue_type": "task"},
-                {"id": "lib-2", "title": "Lib task 2", "status": "open", "priority": 2, "issue_type": "task"},
-            ],
-        }
-
-        def mock_bd(*args, **kwargs):
-            return _bd_stdout(call_map.get(kwargs.get("cwd", ""), []))
-
-        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
-        items = aggregate_ready_work_items(config.repos)
-        assert len(items) == 3
-
-        # Step 3: Allocate workers
-        pool = RepoWorkerPool(total_workers=4, repos=config.repos)
-        app_alloc = pool.get_allocation(str(tmp_path / "app"))
-        lib_alloc = pool.get_allocation(str(tmp_path / "lib"))
-        assert app_alloc is not None and lib_alloc is not None
-        assert app_alloc.allocated_workers >= lib_alloc.allocated_workers  # Higher weight
-
-        # Step 4: Simulate processing - app exhausts items
-        pool.record_worker_start(str(tmp_path / "app"))
-        pool.record_worker_done(str(tmp_path / "app"))
-
-        # Step 5: Rebalance after app exhaustion
-        result = pool.rebalance({
-            str(tmp_path / "app"): 0,
-            str(tmp_path / "lib"): 2,
-        })
-        # lib gets app's idle workers
-        assert result[str(tmp_path / "lib")] > lib_alloc.allocated_workers
