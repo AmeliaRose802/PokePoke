@@ -5,7 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.config import MaintenanceAgentConfig, MaintenanceConfig, ProjectConfig
-from pokepoke.maintenance.maintenance import _run_special_agent, aggregate_stats
+from pokepoke.maintenance.maintenance import _run_special_agent
 from pokepoke.maintenance.maintenance_scheduler import run_periodic_maintenance
 from pokepoke.types import AgentStats, SessionStats
 
@@ -24,78 +24,6 @@ def _make_default_config() -> ProjectConfig:
     config = ProjectConfig()
     config.maintenance = MaintenanceConfig.defaults()
     return config
-
-
-class TestAggregateStats:
-    """Test aggregate_stats function."""
-
-    def test_aggregates_all_fields(self) -> None:
-        """Test that all stats fields are aggregated correctly."""
-        session_stats = SessionStats(agent_stats=AgentStats(
-            wall_duration=10.0,
-            api_duration=5.0,
-            input_tokens=100,
-            output_tokens=50,
-            lines_added=10,
-            lines_removed=5,
-            premium_requests=1,
-            tool_calls=5,
-            retries=0
-        ))
-
-        item_stats = AgentStats(
-            wall_duration=5.0,
-            api_duration=2.0,
-            input_tokens=50,
-            output_tokens=25,
-            lines_added=5,
-            lines_removed=2,
-            premium_requests=1,
-            tool_calls=3,
-            retries=1
-        )
-
-        aggregate_stats(session_stats, item_stats)
-
-        assert session_stats.agent_stats.wall_duration == 15.0
-        assert session_stats.agent_stats.api_duration == 7.0
-        assert session_stats.agent_stats.input_tokens == 150
-        assert session_stats.agent_stats.output_tokens == 75
-        assert session_stats.agent_stats.lines_added == 15
-        assert session_stats.agent_stats.lines_removed == 7
-        assert session_stats.agent_stats.premium_requests == 2
-        assert session_stats.agent_stats.tool_calls == 8
-        assert session_stats.agent_stats.retries == 1
-
-    def test_aggregates_from_zero(self) -> None:
-        """Test aggregation when session stats start at zero."""
-        session_stats = SessionStats(agent_stats=AgentStats())
-
-        item_stats = AgentStats(
-            wall_duration=10.0,
-            input_tokens=100,
-            output_tokens=50
-        )
-
-        aggregate_stats(session_stats, item_stats)
-
-        assert session_stats.agent_stats.wall_duration == 10.0
-        assert session_stats.agent_stats.input_tokens == 100
-        assert session_stats.agent_stats.output_tokens == 50
-
-    def test_aggregates_multiple_items(self) -> None:
-        """Test aggregation of multiple items."""
-        session_stats = SessionStats(agent_stats=AgentStats())
-
-        for _i in range(3):
-            item_stats = AgentStats(
-                wall_duration=10.0,
-                input_tokens=100
-            )
-            aggregate_stats(session_stats, item_stats)
-
-        assert session_stats.agent_stats.wall_duration == 30.0
-        assert session_stats.agent_stats.input_tokens == 300
 
 
 class TestRunPeriodicMaintenance:

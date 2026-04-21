@@ -9,45 +9,6 @@ from pokepoke.types_stats import AgentStats, ModelCompletionRecord
 from tests.orchestration.conftest import make_orchestrator_mocks, make_work_item
 
 
-class TestAggregateStats:
-    """Test aggregate_stats function."""
-
-    def test_aggregate_stats(self) -> None:
-        """Test aggregate_stats function."""
-        from pokepoke.maintenance.maintenance import aggregate_stats
-        from pokepoke.types_stats import AgentStats, SessionStats
-
-        session_stats = SessionStats(agent_stats=AgentStats(
-            wall_duration=10.0,
-            api_duration=5.0,
-            input_tokens=100,
-            output_tokens=50,
-            lines_added=10,
-            lines_removed=5,
-            premium_requests=1
-        ))
-
-        item_stats = AgentStats(
-            wall_duration=5.0,
-            api_duration=2.0,
-            input_tokens=50,
-            output_tokens=25,
-            lines_added=5,
-            lines_removed=2,
-            premium_requests=1
-        )
-
-        aggregate_stats(session_stats, item_stats)
-
-        assert session_stats.agent_stats.wall_duration == 15.0
-        assert session_stats.agent_stats.api_duration == 7.0
-        assert session_stats.agent_stats.input_tokens == 150
-        assert session_stats.agent_stats.output_tokens == 75
-        assert session_stats.agent_stats.lines_added == 15
-        assert session_stats.agent_stats.lines_removed == 7
-        assert session_stats.agent_stats.premium_requests == 2
-
-
 class TestRunOrchestratorStatsTracking:
     """Test statistics tracking in run_orchestrator."""
 
