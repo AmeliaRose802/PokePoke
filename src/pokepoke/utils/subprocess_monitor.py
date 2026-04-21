@@ -33,6 +33,16 @@ if TYPE_CHECKING:
 
 logger = logging.getLogger(__name__)
 
+# Shell infrastructure processes that produce no useful output.
+# Monitoring these just wastes threads and floods logs.
+_SKIP_PROCESS_NAMES: frozenset[str] = frozenset({
+    'conhost.exe', 'pwsh.exe', 'powershell.exe', 'cmd.exe',
+    'bash', 'sh', 'wsl.exe', 'openssh.exe',
+})
+
+# Hard cap on per-agent monitored processes to prevent thread explosion.
+_MAX_MONITORED_PROCESSES = 20
+
 
 class SubprocessMonitor:
     """Monitors child processes and streams their output to logs and UI.
@@ -132,6 +142,14 @@ class SubprocessMonitor:
                 e,
             )
 
+    @staticmethod
+    def _extract_name(command: str) -> str:
+        """Return the bare executable name from a command string."""
+        name = command.split()[0] if command else "unknown"
+        if os.path.sep in name:
+            name = os.path.basename(name)
+        return name
+
     def _check_for_children(self) -> None:
         """Check for new child processes and start monitoring them."""
         try:
@@ -139,16 +157,32 @@ class SubprocessMonitor:
             children = self._find_child_processes()
 
             for pid, command in children:
-                if pid not in self._monitored_pids:
-                    self._monitored_pids.add(pid)
-                    # Use DEBUG to avoid stdout contamination (PokePoke-urg3h fix)
+                if pid in self._monitored_pids:
+                    continue
+
+                # Skip shell infrastructure (conhost, pwsh, cmd, etc.)
+                cmd_name = self._extract_name(command)
+                if cmd_name.lower() in _SKIP_PROCESS_NAMES:
+                    self._monitored_pids.add(pid)  # remember so we don't re-check
+                    continue
+
+                # Cap the number of actively-monitored threads
+                if len(self._process_threads) >= _MAX_MONITORED_PROCESSES:
                     logger.debug(
-                        "[ProcessMonitor] Detected child process: PID %d (%s)",
-                        pid,
-                        command,
+                        "[ProcessMonitor] Skipping PID %d (%s) — at %d thread cap",
+                        pid, cmd_name, _MAX_MONITORED_PROCESSES,
                     )
-                    # Start a thread to monitor this process's output
-                    self._start_process_monitor(pid, command)
+                    continue
+
+                self._monitored_pids.add(pid)
+                # Use DEBUG to avoid stdout contamination (PokePoke-urg3h fix)
+                logger.debug(
+                    "[ProcessMonitor] Detected child process: PID %d (%s)",
+                    pid,
+                    command,
+                )
+                # Start a thread to monitor this process's output
+                self._start_process_monitor(pid, command)
 
         except Exception as e:
             logger.debug(
@@ -282,15 +316,13 @@ class SubprocessMonitor:
             status_count = 0
 
             # Emit initial detection message
-            cmd_name = command.split()[0] if command else "unknown"
-            if os.path.sep in cmd_name:
-                cmd_name = os.path.basename(cmd_name)
-            self._emit_output("monitor", f"[ProcessMonitor] Started monitoring PID {pid} ({cmd_name})\n")
+            cmd_name = self._extract_name(command)
+            logger.debug("[ProcessMonitor] Started monitoring PID %d (%s)", pid, cmd_name)
 
             while self._monitoring:
                 try:
                     if not process.is_running():
-                        self._emit_output("monitor", f"[ProcessMonitor] PID {pid} ({cmd_name}) completed\n")
+                        logger.debug("[ProcessMonitor] PID %d (%s) completed", pid, cmd_name)
                         break
 
                     now = time.monotonic()
@@ -307,7 +339,7 @@ class SubprocessMonitor:
                         # If I/O bytes increased, the process is writing output
                         if current_io_bytes > last_io_bytes:
                             bytes_written = current_io_bytes - last_io_bytes
-                            if now - last_io_time >= 1.0:
+                            if now - last_io_time >= 10.0:
                                 self._emit_output(
                                     "monitor",
                                     f"[ProcessMonitor] PID {pid} ({cmd_name}) active - wrote {bytes_written} bytes\n"
@@ -317,13 +349,15 @@ class SubprocessMonitor:
                     except (psutil.AccessDenied, AttributeError):
                         pass
 
-                    # Emit periodic status updates (every 10 seconds) to show liveness
-                    if now - last_status_time >= 10.0:
+                    # Emit periodic status updates (every 30s) only for active processes
+                    if now - last_status_time >= 30.0:
                         status_count += 1
-                        status_msg = self._format_process_status(
-                            pid, command, status, cpu_percent, status_count
-                        )
-                        self._emit_output("monitor", status_msg)
+                        # Only emit if the process is actually doing something
+                        if cpu_percent > 0.5 or current_io_bytes > last_io_bytes:
+                            status_msg = self._format_process_status(
+                                pid, command, status, cpu_percent, status_count
+                            )
+                            self._emit_output("monitor", status_msg)
                         last_status_time = now
 
                     time.sleep(self._poll_interval)
@@ -354,9 +388,7 @@ class SubprocessMonitor:
             Formatted status string
         """
         # Extract command name from full command line
-        cmd_name = command.split()[0] if command else "unknown"
-        if os.path.sep in cmd_name:
-            cmd_name = os.path.basename(cmd_name)
+        cmd_name = self._extract_name(command)
 
         return (
             f"[PID {pid}] {cmd_name} is {status} "

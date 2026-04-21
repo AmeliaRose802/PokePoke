@@ -347,7 +347,13 @@ def test_subprocess_monitor_start_process_monitor_no_psutil():
 
 
 def test_subprocess_monitor_process_output_monitoring():
-    """Test the process output monitoring loop."""
+    """Test the process output monitoring loop.
+
+    After the noise-reduction refactor, start/completion messages go to
+    logger.debug (not _emit_output).  I/O activity messages still go through
+    _emit_output but only every 10 s, and periodic status updates only fire
+    when cpu > 0.5% or I/O increased.
+    """
 
     monitor = SubprocessMonitor(copilot_pid=12345, poll_interval=0.05)
 
@@ -383,11 +389,8 @@ def test_subprocess_monitor_process_output_monitoring():
 
     def mock_monotonic():
         call_count[0] += 1
-        # First calls: fast forward to trigger I/O messages
-        if call_count[0] <= 10:
-            start_time[0] += 1.5  # Fast forward to trigger I/O checks
-        else:
-            start_time[0] += 11.0  # Fast forward to trigger status update
+        # Jump > 10s each call so the I/O rate-limit fires
+        start_time[0] += 11.0
         return start_time[0]
 
     # Run monitoring with mocked process
@@ -397,25 +400,12 @@ def test_subprocess_monitor_process_output_monitoring():
     ):
         monitor._monitor_process_output(67890, "pytest --verbose")
 
-    # Should have captured multiple types of output
-    assert len(output_captured) >= 3, f"Expected at least 3 outputs, got {len(output_captured)}"
-
-    # Check for start message
-    start_messages = [(src, msg) for src, msg in output_captured if "Started monitoring" in msg]
-    assert len(start_messages) >= 1, "Should emit start monitoring message"
-    assert start_messages[0][0] == "monitor", "Monitor messages should use 'monitor' source"
-
-    # Check for I/O activity messages
+    # I/O activity messages should be emitted (bytes increase across iterations)
     io_messages = [(src, msg) for src, msg in output_captured if "active - wrote" in msg]
-    assert len(io_messages) >= 1, "Should emit I/O activity messages"
+    assert len(io_messages) >= 1, f"Should emit I/O activity messages, got {output_captured}"
     assert io_messages[0][0] == "monitor", "I/O messages should use 'monitor' source"
 
-    # Check for completion message
-    completion_messages = [(src, msg) for src, msg in output_captured if "completed" in msg]
-    assert len(completion_messages) >= 1, "Should emit completion message"
-    assert completion_messages[0][0] == "monitor", "Completion messages should use 'monitor' source"
-
-    # ALL messages from _monitor_process_output should use 'monitor' source
+    # ALL messages from _emit_output should use 'monitor' source
     for src, msg in output_captured:
         assert src == "monitor", f"Expected 'monitor' source but got '{src}' for: {msg}"
 
