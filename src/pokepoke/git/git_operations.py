@@ -17,7 +17,6 @@ logger = logging.getLogger(__name__)
 from .git_helpers import (
     _run_git_status_with_retry,
     list_worktrees,
-    restore_beads_stash,
     run_git,
     validate_post_merge,
 )
@@ -346,7 +345,7 @@ def execute_merge_sequence(
     target_branch: str,
     cwd: str | None = None,
 ) -> tuple[bool, str, list[str]]:
-    """Execute the checkout, pull, and merge sequence.
+    """Execute the checkout and merge sequence (local only, no push/pull).
 
     Args:
         branch_name: Branch to merge from.
@@ -365,46 +364,6 @@ def execute_merge_sequence(
         return False, f"Failed to checkout {target_branch}: {e.stderr or str(e)}", []
     except subprocess.TimeoutExpired:
         return False, f"Checkout of {target_branch} timed out after 30s", []
-
-    # Stash beads daemon changes to avoid "unstaged changes" error during pull
-    stashed = False
-    try:
-        status = run_git(
-            ["git", "status", "--porcelain", f"{BEADS_DIR}/"],
-            timeout=30, cwd=cwd,
-        ).stdout.strip()
-        if status:
-            run_git(
-                ["git", "stash", "push", "-m", "beads-daemon-changes-during-merge", "--", f"{BEADS_DIR}/"],
-                timeout=30, cwd=cwd,
-            )
-            stashed = True
-    except subprocess.CalledProcessError:
-        logger.debug("Git stash failed, will try pull anyway")
-
-    try:
-        run_git(["git", "pull", "--rebase", "origin", target_branch],
-                     timeout=120, cwd=cwd)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
-        # Rollback: abort the failed rebase to leave repo in a clean state
-        from .merge_conflict import abort_rebase
-        repo_path_obj = Path(cwd) if cwd else None
-        success, abort_msg = abort_rebase(repo_path=repo_path_obj)
-        if success:
-            logger.info("Rolled back failed rebase with git rebase --abort")
-        else:
-            logger.warning("Could not abort rebase during rollback: %s", abort_msg)
-
-        if stashed:
-            restore_beads_stash("git pull --rebase failure")
-
-        if isinstance(e, subprocess.TimeoutExpired):
-            return False, "Pull --rebase timed out after 120s", []
-        return False, f"Failed to pull with rebase: {e.stderr or str(e)}", []
-
-    # Restore stashed beads changes after successful pull
-    if stashed:
-        restore_beads_stash("git pull --rebase")
 
     try:
         run_git(["git", "merge", "--no-ff", branch_name, "-m", f"Merge {branch_name}"],

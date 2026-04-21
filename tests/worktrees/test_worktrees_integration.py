@@ -292,86 +292,18 @@ class TestMergeWorktreeIntegration:
         assert conflicts == ['file1.py', 'file2.py']
 
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
-    @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
-    @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
-    @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
-    @patch('pokepoke.worktrees.worktrees.get_default_branch')
-    @patch('subprocess.run')
-    def test_merge_worktree_fails_on_push_error(
-        self,
-        mock_run,
-        mock_get_branch,
-        mock_is_clean,
-        mock_validate,
-        mock_execute,
-        mock_is_merged,
-        mock_sync
-    ):
-        """Test that merge fails if push to remote fails."""
-        mock_get_branch.return_value = 'dev'
-        mock_is_clean.return_value = True
-        mock_sync.return_value = True
-        mock_execute.return_value = (True, '', [])
-        mock_validate.return_value = True
-        mock_run.side_effect = subprocess.CalledProcessError(
-            1, ['git'], stderr='Push failed'
-        )
-
-        success, conflicts = merge_worktree('test-123')
-
-        assert success is False
-        assert conflicts == []
-
-    @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
-    @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
-    @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
-    @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
-    @patch('pokepoke.worktrees.worktrees.get_default_branch')
-    @patch('subprocess.run')
-    def test_merge_worktree_succeeds_with_warning_if_not_merged_after_push(
-        self,
-        mock_run,
-        mock_get_branch,
-        mock_is_clean,
-        mock_validate,
-        mock_execute,
-        mock_is_merged,
-        mock_sync
-    ):
-        """Test that merge succeeds with warning if branch doesn't show as merged after push."""
-        mock_get_branch.return_value = 'dev'
-        mock_is_clean.return_value = True
-        mock_sync.return_value = True
-        mock_execute.return_value = (True, '', [])
-        mock_validate.return_value = True
-        mock_run.return_value = Mock(returncode=0)
-        mock_is_merged.return_value = False  # Verification fails, but push succeeded
-
-        success, conflicts = merge_worktree('test-123')
-
-        # After fix: should succeed with warning, not fail
-        assert success is True, "Merge should succeed even when verification fails after successful push"
-        assert conflicts == []
-
-    @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
-    @patch('subprocess.run')
     def test_merge_worktree_with_cleanup_disabled(
         self,
-        mock_run,
         mock_cleanup,
         mock_get_branch,
         mock_is_clean,
         mock_validate,
         mock_execute,
-        mock_is_merged,
         mock_sync
     ):
         """Test merge without cleanup when cleanup=False."""
@@ -380,8 +312,6 @@ class TestMergeWorktreeIntegration:
         mock_sync.return_value = True
         mock_execute.return_value = (True, '', [])
         mock_validate.return_value = True
-        mock_run.return_value = Mock(returncode=0)
-        mock_is_merged.return_value = True
 
         success, _conflicts = merge_worktree('test-123', cleanup=False)
 

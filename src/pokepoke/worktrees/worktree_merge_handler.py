@@ -179,8 +179,8 @@ def perform_worktree_merge(  # noqa: C901
 
     # --- worktree cleanliness (step 4) and merge ---
     tracker.begin_step("4", "Checking worktree cleanliness…")
-    # merge_worktree validates worktree is clean, runs checkout/pull/merge/push/cleanup
-    tracker.begin_step("11", f"Merging worktree for {ctx.agent_id}")
+    # merge_worktree validates worktree is clean, runs checkout/merge/validate/cleanup
+    tracker.begin_step("8", f"Merging worktree for {ctx.agent_id}")
     logger.info(f"\n🔀 Merging worktree for {ctx.agent_id}...")
     merge_result = merge_worktree(ctx.agent_id, cleanup=True, repo_path=repo_cwd)
     merge_success = merge_result.success
@@ -189,13 +189,13 @@ def perform_worktree_merge(  # noqa: C901
     if merge_result.rollback_failed:
         logger.critical(
             "🚨 REPO CORRUPTION: Rollback failed for %s — "
-            "local repo has an unpushed merge commit that could not be undone. "
+            "local repo has a merge commit that could not be undone. "
             "Manual intervention required (git reset --hard HEAD~1).",
             ctx.agent_id,
         )
 
     if not merge_success:
-        tracker.fail_step("11", "Merge failed")
+        tracker.fail_step("8", "Merge failed")
         repo_root_path = Path(repo_cwd) if repo_cwd else None
         if is_merge_in_progress(repo_path=repo_root_path):
             logger.error("\n❌ Worktree merge has conflicts!")
@@ -255,7 +255,7 @@ def perform_worktree_merge(  # noqa: C901
             if retry_result.rollback_failed:
                 logger.critical(
                     "🚨 REPO CORRUPTION: Rollback failed during retry merge for %s — "
-                    "local repo has an unpushed merge commit. Manual intervention required.",
+                    "local repo has a merge commit that could not be undone. Manual intervention required.",
                     ctx.agent_id,
                 )
             if merge_success:
@@ -288,8 +288,8 @@ def perform_worktree_merge(  # noqa: C901
 
     # Mark remaining merge steps as done for the success path
     tracker.complete_step("4", "Worktree is clean")
-    tracker.complete_step("11", "Merge succeeded")
-    for sid in ("5", "6", "7", "8", "9", "10", "12", "13", "14"):
+    tracker.complete_step("8", "Merge succeeded")
+    for sid in ("5", "6", "7", "9"):
         if tracker._current_run and tracker._current_run.steps[sid].status.value == "pending":
             tracker.complete_step(sid)
 
@@ -299,8 +299,8 @@ def perform_worktree_merge(  # noqa: C901
         logger.error("Worktree directory persists after merge: %s", ctx.worktree_path)
         add_uncleaned_worktree(ctx.agent_id, str(ctx.worktree_path), "Worktree persists after successful merge")
     else:
-        tracker.complete_step("15", "Worktree removed")
-    tracker.complete_step("16", "Merge lock released")
+        tracker.complete_step("10", "Worktree removed")
+    tracker.complete_step("11", "Merge lock released")
     logger.info("   Merged worktree" + (" and cleaned up" if worktree_cleaned else " (cleanup incomplete)"))
 
     # Invalidate warm sessions after successful merge (codebase may have changed)

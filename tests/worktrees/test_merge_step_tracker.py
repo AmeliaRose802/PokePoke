@@ -73,11 +73,11 @@ class TestMergeStepTracker:
     def test_log_to_step(self) -> None:
         tracker = MergeStepTracker()
         tracker.begin_run("a1", "i1")
-        tracker.begin_step("11")
-        tracker.log_to_step("11", "line 1")
-        tracker.log_to_step("11", "line 2")
+        tracker.begin_step("8")
+        tracker.log_to_step("8", "line 1")
+        tracker.log_to_step("8", "line 2")
         state = tracker.get_state()
-        assert state["current_run"]["steps"]["11"]["logs"] == ["line 1", "line 2"]
+        assert state["current_run"]["steps"]["8"]["logs"] == ["line 1", "line 2"]
 
     def test_finish_run_archives_to_last_completed(self) -> None:
         tracker = MergeStepTracker()
@@ -122,11 +122,11 @@ class TestMergeStepTracker:
     def test_step_log_capped_at_50(self) -> None:
         tracker = MergeStepTracker()
         tracker.begin_run("a1", "i1")
-        tracker.begin_step("11")
+        tracker.begin_step("8")
         for i in range(60):
-            tracker.log_to_step("11", f"line {i}")
+            tracker.log_to_step("8", f"line {i}")
         state = tracker.get_state()
-        logs = state["current_run"]["steps"]["11"]["logs"]
+        logs = state["current_run"]["steps"]["8"]["logs"]
         assert len(logs) == 50
         # Should be the last 50 lines
         assert logs[0] == "line 10"
@@ -167,8 +167,8 @@ class TestMergeStepDefinitions:
             assert edge["from"] in valid_ids, f"Edge 'from' {edge['from']} not in steps"
             assert edge["to"] in valid_ids, f"Edge 'to' {edge['to']} not in steps"
 
-    def test_step_0_and_16_exist(self) -> None:
+    def test_step_0_and_11_exist(self) -> None:
         """Start and end steps must be present."""
         ids = {s["id"] for s in MERGE_STEPS}
         assert "0" in ids
-        assert "16" in ids
+        assert "11" in ids

@@ -486,76 +486,20 @@ class TestExecuteMergeSequenceTimeoutPaths:
         assert "timed out" in msg.lower()
         assert unmerged == []
 
-    @patch("pokepoke.git.merge_conflict.abort_rebase", return_value=(True, ""))
-    @patch("pokepoke.git.git_operations.restore_beads_stash")
-    @patch("pokepoke.git.git_helpers.subprocess.run")
-    def test_pull_timeout_aborts_rebase_and_restores_stash(
-        self, mock_run: Mock, mock_restore: Mock, mock_abort: Mock
-    ) -> None:
-        """Pull timeout → abort rebase, restore stash, return failure."""
-
-        def side_effect(cmd, **kwargs):
-            if cmd[:2] == ["git", "checkout"]:
-                return Mock(returncode=0, stdout="", stderr="")
-            if cmd[:3] == ["git", "status", "--porcelain"]:
-                return Mock(stdout=" M .beads/issues.jsonl", returncode=0, stderr="")
-            if cmd[:2] == ["git", "stash"] and "push" in cmd:
-                return Mock(returncode=0, stdout="", stderr="")
-            if cmd[:3] == ["git", "pull", "--rebase"]:
-                raise subprocess.TimeoutExpired(cmd, 120)
-            raise AssertionError(f"Unexpected: {cmd}")
-
-        mock_run.side_effect = side_effect
-        success, msg, _ = execute_merge_sequence("feat", "main")
-        assert success is False
-        assert "timed out" in msg.lower()
-        mock_restore.assert_called_once_with("git pull --rebase failure")
-
-    @patch("pokepoke.git.merge_conflict.abort_rebase", return_value=(True, ""))
-    @patch("pokepoke.git.git_helpers.subprocess.run")
-    def test_pull_failure_restores_stash(
-        self, mock_run: Mock, mock_abort: Mock
-    ) -> None:
-        """Pull CalledProcessError with stash → stash restored on failure."""
-        def side_effect(cmd, **kwargs):
-            if cmd[:2] == ["git", "checkout"]:
-                return Mock(returncode=0, stdout="", stderr="")
-            if cmd[:3] == ["git", "status", "--porcelain"]:
-                return Mock(stdout=" M .beads/data.jsonl", returncode=0, stderr="")
-            if cmd[:2] == ["git", "stash"] and "push" in cmd:
-                return Mock(returncode=0, stdout="", stderr="")
-            if cmd[:3] == ["git", "pull", "--rebase"]:
-                raise subprocess.CalledProcessError(1, cmd, stderr="conflict")
-            if cmd[:2] == ["git", "stash"] and "pop" in cmd:
-                return Mock(returncode=0, stdout="", stderr="")
-            raise AssertionError(f"Unexpected: {cmd}")
-
-        mock_run.side_effect = side_effect
-
-        with patch("pokepoke.git.git_operations.restore_beads_stash") as mock_restore:
-            success, _, _ = execute_merge_sequence("feat", "main")
-            assert success is False
-            mock_restore.assert_called_once_with("git pull --rebase failure")
-
     @patch("pokepoke.git.merge_conflict.is_merge_in_progress", return_value=True)
     @patch(
         "pokepoke.git.merge_conflict.get_unmerged_files",
         return_value=[".pokepoke/state.json"],
     )
-    @patch("pokepoke.git.git_operations.restore_beads_stash")
     @patch("pokepoke.git.git_helpers.subprocess.run")
     def test_merge_timeout_handles_failure(
-        self, mock_run: Mock, mock_restore: Mock,
+        self, mock_run: Mock,
         mock_unmerged: Mock, mock_merging: Mock
     ) -> None:
         """Merge timeout → _handle_merge_failure called."""
 
         def side_effect(cmd, **kwargs):
             if cmd[:2] == ["git", "checkout"]:
-                return Mock(returncode=0, stdout="", stderr="")
-            if cmd[:3] == ["git", "status", "--porcelain"]:
-                return Mock(stdout="", returncode=0, stderr="")
-            if cmd[:3] == ["git", "pull", "--rebase"]:
                 return Mock(returncode=0, stdout="", stderr="")
             if cmd[:3] == ["git", "merge", "--no-ff"]:
                 raise subprocess.TimeoutExpired(cmd, 60)
@@ -573,19 +517,14 @@ class TestExecuteMergeSequenceTimeoutPaths:
         # Auto-resolve of .pokepoke/ should succeed even after timeout
         assert success is True
 
-    @patch("pokepoke.git.git_operations.restore_beads_stash")
     @patch("pokepoke.git.git_helpers.subprocess.run")
-    def test_no_stash_when_beads_clean(
-        self, mock_run: Mock, mock_restore: Mock
+    def test_merge_success_simple(
+        self, mock_run: Mock,
     ) -> None:
-        """No beads changes → no stash, no restore."""
+        """Checkout + merge succeeds with no stash or pull."""
 
         def side_effect(cmd, **kwargs):
             if cmd[:2] == ["git", "checkout"]:
-                return Mock(returncode=0, stdout="", stderr="")
-            if cmd[:3] == ["git", "status", "--porcelain"]:
-                return Mock(stdout="", returncode=0, stderr="")
-            if cmd[:3] == ["git", "pull", "--rebase"]:
                 return Mock(returncode=0, stdout="", stderr="")
             if cmd[:2] == ["git", "merge"]:
                 return Mock(returncode=0, stdout="", stderr="")
@@ -594,4 +533,3 @@ class TestExecuteMergeSequenceTimeoutPaths:
         mock_run.side_effect = side_effect
         success, _, _ = execute_merge_sequence("feat", "main")
         assert success is True
-        mock_restore.assert_not_called()

@@ -1,6 +1,6 @@
 """Live merge step tracking for desktop UI visualization.
 
-Tracks the progression of merge workflow steps (0–16) as defined in
+Tracks the progression of merge workflow steps (0–11) as defined in
 docs/merge-workflow.md. Each step has a status (pending/active/done/failed/skipped)
 and a log buffer for drill-down in the UI.
 
@@ -38,16 +38,10 @@ MERGE_STEPS: list[dict[str, str]] = [
     {"id": "5a", "label": "Skip merge — cleanup worktree"},
     {"id": "6", "label": "Sync & prepare main"},
     {"id": "7", "label": "Checkout target branch"},
-    {"id": "8", "label": ".beads/ modified?"},
-    {"id": "8a", "label": "Stash .beads/"},
-    {"id": "9", "label": "Pull --rebase origin"},
-    {"id": "10", "label": "Restore .beads/ stash"},
-    {"id": "11", "label": "Merge --no-ff branch"},
-    {"id": "12", "label": "Post-merge validation"},
-    {"id": "13", "label": "Push (3 retries)"},
-    {"id": "14", "label": "Post-push verification"},
-    {"id": "15", "label": "Worktree remove + branch delete"},
-    {"id": "16", "label": "Release merge lock — DONE"},
+    {"id": "8", "label": "Merge --no-ff branch"},
+    {"id": "9", "label": "Post-merge validation"},
+    {"id": "10", "label": "Worktree remove + branch delete"},
+    {"id": "11", "label": "Release merge lock — DONE"},
 ]
 
 
@@ -65,19 +59,12 @@ MERGE_EDGES: list[dict[str, str]] = [
     {"from": "4", "to": "5", "label": "Clean"},
     {"from": "5", "to": "5a", "label": "0 commits"},
     {"from": "5", "to": "6", "label": "≥1 commit"},
-    {"from": "5a", "to": "16"},
+    {"from": "5a", "to": "11"},
     {"from": "6", "to": "7"},
     {"from": "7", "to": "8"},
-    {"from": "8", "to": "8a", "label": "Yes"},
-    {"from": "8", "to": "9", "label": "No"},
-    {"from": "8a", "to": "9"},
-    {"from": "9", "to": "10"},
+    {"from": "8", "to": "9", "label": "Success"},
+    {"from": "9", "to": "10", "label": "Pass"},
     {"from": "10", "to": "11"},
-    {"from": "11", "to": "12", "label": "Success"},
-    {"from": "12", "to": "13", "label": "Pass"},
-    {"from": "13", "to": "14", "label": "Success"},
-    {"from": "14", "to": "15"},
-    {"from": "15", "to": "16"},
 ]
 
 

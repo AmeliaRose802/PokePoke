@@ -22,7 +22,6 @@ from pokepoke.worktrees.merge_helpers import (
 )
 from pokepoke.worktrees.merge_helpers import (
     log_merge_failure,
-    push_or_rollback,
     validate_post_merge_or_rollback,
 )
 from pokepoke.worktrees.merge_result import MergeResult as MergeResult  # re-export
@@ -330,17 +329,6 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
         return validation_failure
 
     logger.info(f"✅ Post-merge validation passed: {target_branch} is clean")
-
-    push_failure = push_or_rollback(target_branch, cwd=repo_cwd)
-    if push_failure is not None:
-        return push_failure
-
-    # Verify branch is actually merged (warnings only - push already succeeded)
-    if not is_worktree_merged(item_id, target_branch, repo_path=repo_cwd):
-        logger.error(f"\u26a0\ufe0f  Post-push merge verification failed for {branch_name}, but push succeeded")
-        logger.warning(f"Post-push merge verification failed for {branch_name}, but push to {target_branch} succeeded")
-    else:
-        logger.info(f"✅ Merge confirmed: {branch_name} is merged into {target_branch}")
 
     if cleanup:
         cleanup_after_merge(worktree_path, branch_name, cwd=repo_cwd)
