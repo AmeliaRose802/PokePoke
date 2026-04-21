@@ -126,6 +126,9 @@ def print_stats(items_completed: int, total_requests: int, elapsed_seconds: floa
     from pokepoke.stats.gate_rejection_tracker import print_gate_rejection_leaderboard
     print_gate_rejection_leaderboard()
 
+    from pokepoke.stats.gate_session_tracker import print_gate_session_leaderboard
+    print_gate_session_leaderboard()
+
     # Print performance monitor summary if any alerts were recorded
     from pokepoke.stats.performance_monitor import get_performance_monitor
     _print_performance_summary(get_performance_monitor())
@@ -376,6 +379,11 @@ def serialize_session_stats(
     per_item_gate = get_per_item_rejection_stats()
     if per_item_gate:
         data["gate_rejections_per_item"] = per_item_gate
+
+    from pokepoke.stats.gate_session_tracker import get_gate_session_stats
+    gate_session_summary = get_gate_session_stats()
+    if gate_session_summary:
+        data["gate_session_summary"] = gate_session_summary
 
     return data
 

@@ -255,6 +255,9 @@ from pokepoke.models.sdk_resume import (
     build_gate_resume_prompt as build_gate_resume_prompt,
 )
 from pokepoke.models.sdk_resume import (
+    build_gate_reverify_prompt as build_gate_reverify_prompt,
+)
+from pokepoke.models.sdk_resume import (
     build_resume_prompt as build_resume_prompt,
 )
 

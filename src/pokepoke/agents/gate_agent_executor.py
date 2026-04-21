@@ -9,9 +9,10 @@ from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_operations import get_default_branch
 from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.models.model_selection import select_gate_model
-from pokepoke.models.sdk_helpers import build_gate_resume_prompt
+from pokepoke.models.sdk_helpers import build_gate_resume_prompt, build_gate_reverify_prompt
 from pokepoke.prompts.prompts import PromptService
 from pokepoke.stats.gate_rejection_tracker import record_gate_check
+from pokepoke.stats.gate_session_tracker import GateSessionCheck, record_gate_session_check
 from pokepoke.stats.metrics_context import agent_type_context
 from pokepoke.stats.stats import parse_agent_stats
 from pokepoke.types import BeadsWorkItem
@@ -142,12 +143,15 @@ def run_gate_agent(
     cwd: str | None = None,
     work_model: str | None = None,
     handoff_context: str | None = None,
+    previous_output_summary: str | None = None,
     agent_id: str | None = None,
     agent_iteration: int = 1,
     parent_agent_id: str | None = None,
     item_logger: 'ItemLogger | None' = None,
     session_id: str | None = None,
     is_resume: bool = False,
+    resume_reason: str | None = None,
+    resume_feedback: str | None = None,
 ) -> 'GateAgentResult':
     """Run the Gate Agent to verify a fixed work item."""
     terminal_ui.ui.set_current_agent("Gate Agent")
@@ -157,12 +161,21 @@ def run_gate_agent(
         gate_model = select_gate_model(work_model, item.id)
     # Build prompt: use resume prompt if continuing a timed-out session
     if is_resume and session_id:
-        final_prompt = build_gate_resume_prompt(
-            item,
-            handoff_context=handoff_context,
-            previous_output_summary=None,
-            default_branch=get_default_branch(),
-        )
+        if resume_reason == "reverify":
+            final_prompt = build_gate_reverify_prompt(
+                item,
+                handoff_context=handoff_context,
+                previous_output_summary=previous_output_summary,
+                previous_rejection=resume_feedback,
+                default_branch=get_default_branch(),
+            )
+        else:
+            final_prompt = build_gate_resume_prompt(
+                item,
+                handoff_context=handoff_context,
+                previous_output_summary=previous_output_summary,
+                default_branch=get_default_branch(),
+            )
     else:
         service = PromptService()
         try:
@@ -201,6 +214,17 @@ def run_gate_agent(
                 is_timeout: bool = False) -> 'GateAgentResult':
         if gate_model and not crashed:
             record_gate_check(gate_model, item.id, success, reason=reason if not success else "")
+            record_gate_session_check(
+                GateSessionCheck(
+                    gate_model=gate_model,
+                    item_id=item.id,
+                    passed=success,
+                    resumed=is_resume,
+                    input_tokens=stats.input_tokens if stats else 0,
+                    output_tokens=stats.output_tokens if stats else 0,
+                    reason=reason if not success else "",
+                ),
+            )
         return GateAgentResult(
             success=success, reason=reason, stats=stats, crashed=crashed,
             is_timeout=is_timeout,

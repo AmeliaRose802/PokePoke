@@ -41,6 +41,10 @@ class GateLoopContext:
     item_logger: Any | None
     comment_fn: Callable[[str, str], Any]
     defer_fn: Callable[[str, str], Any]
+    resume_session_id: str | None = None
+    resume_reason: str | None = None
+    resume_output_summary: str | None = None
+    resume_feedback: str | None = None
 
 
 @dataclass
@@ -52,6 +56,17 @@ class GateLoopResult:
     gate_agent_runs: int
     feedback: str | None = None
     exceeded_max: bool = False
+    session_id: str | None = None
+    last_output_summary: str | None = None
+
+
+@dataclass
+class GateOutcomeDetails:
+    gate_agent_runs: int
+    session_id: str | None
+    last_output_summary: str | None
+    gate_reason: str = ""
+    timed_out: bool = False
 
 
 def run_gate_loop(ctx: GateLoopContext, gt: GateStepTracker) -> GateLoopResult:
@@ -61,7 +76,10 @@ def run_gate_loop(ctx: GateLoopContext, gt: GateStepTracker) -> GateLoopResult:
     whether to break or retry the work agent.
     """
     gate_crash_attempts = gate_timeout_attempts = 0
-    gate_resume_session_id: str | None = None
+    gate_resume_session_id: str | None = ctx.resume_session_id
+    gate_resume_reason: str | None = ctx.resume_reason
+    gate_resume_output_summary: str | None = ctx.resume_output_summary
+    gate_resume_feedback: str | None = ctx.resume_feedback
     gate_success = False
     gate_reason = ""
     gate_crashed = gate_timed_out = False
@@ -92,11 +110,14 @@ def run_gate_loop(ctx: GateLoopContext, gt: GateStepTracker) -> GateLoopResult:
                 gate_result = run_gate_agent(
                     ctx.item, cwd=ctx.worktree_cwd, work_model=ctx.selected_model,
                     handoff_context=handoff_ctx,
+                    previous_output_summary=gate_resume_output_summary,
                     agent_id=gate_agent_id, agent_iteration=gate_iteration,
                     parent_agent_id=ctx.base_agent_id,
                     item_logger=ctx.item_logger,
                     session_id=gate_resume_session_id,
                     is_resume=gate_is_resume,
+                    resume_reason=gate_resume_reason,
+                    resume_feedback=gate_resume_feedback,
                 )
             gate_success = gate_result.success
             gate_reason = gate_result.reason
@@ -134,6 +155,8 @@ def run_gate_loop(ctx: GateLoopContext, gt: GateStepTracker) -> GateLoopResult:
             gate_timeout_attempts += 1
             if gate_timeout_attempts < _MAX_GATE_TIMEOUT_RETRIES:
                 gate_resume_session_id = gate_result.session_id
+                gate_resume_reason = "timeout"
+                gate_resume_output_summary = gate_result.last_output_summary
                 gt.begin_step("5T", f"Timeout {gate_timeout_attempts}/{_MAX_GATE_TIMEOUT_RETRIES}")
                 logger.info(
                     f"\n⏱️  Gate timed out ({gate_timeout_attempts}/{_MAX_GATE_TIMEOUT_RETRIES}), "
@@ -159,37 +182,66 @@ def run_gate_loop(ctx: GateLoopContext, gt: GateStepTracker) -> GateLoopResult:
         break  # Not a crash/timeout — exit the retry loop
 
     # ── Post-loop: evaluate outcome ──────────────────────────────────
-
     if gate_success:
         logger.info("\n✅ Gate Agent signed off!")
         gt.mark_success("5", "6")
-        return GateLoopResult(gate_success=True, gate_rejection_count=ctx.gate_rejection_count, gate_agent_runs=gate_agent_runs)
+        return GateLoopResult(
+            gate_success=True, gate_rejection_count=ctx.gate_rejection_count,
+            gate_agent_runs=gate_agent_runs, session_id=gate_result.session_id,
+            last_output_summary=gate_result.last_output_summary,
+        )
 
     if gate_crashed or gate_timed_out:
-        return _handle_gate_infra_failure(ctx, gt, gate_timed_out, gate_agent_runs)
+        return _handle_gate_infra_failure(
+            ctx,
+            gt,
+            GateOutcomeDetails(
+                gate_agent_runs=gate_agent_runs,
+                session_id=gate_result.session_id,
+                last_output_summary=gate_result.last_output_summary,
+                timed_out=gate_timed_out,
+            ),
+        )
 
-    return _handle_gate_verdict(ctx, gt, gate_reason, gate_agent_runs)
+    return _handle_gate_verdict(
+        ctx,
+        gt,
+        GateOutcomeDetails(
+            gate_agent_runs=gate_agent_runs,
+            session_id=gate_result.session_id,
+            last_output_summary=gate_result.last_output_summary,
+            gate_reason=gate_reason,
+        ),
+    )
 
 
 def _handle_gate_infra_failure(
-    ctx: GateLoopContext, gt: GateStepTracker, timed_out: bool, gate_agent_runs: int,
+    ctx: GateLoopContext, gt: GateStepTracker, details: GateOutcomeDetails,
 ) -> GateLoopResult:
     """Handle gate crash/timeout — fallback accept if worktree has commits."""
     from pokepoke.beads.reconciliation import worktree_branch_has_commits
 
     if worktree_branch_has_commits(ctx.item.id, ctx.pokepoke_root):
-        fail_mode = "timed out" if timed_out else "crashed"
+        fail_mode = "timed out" if details.timed_out else "crashed"
         logger.warning("\n⚠️  Gate Agent %s but worktree has valid commits — fallback accept", fail_mode)
         ctx.comment_fn(ctx.item.id, f"Gate Agent {fail_mode} but worktree has valid commits. Accepting via fallback.")
         gt.mark_success("5", "6")
-        return GateLoopResult(gate_success=True, gate_rejection_count=ctx.gate_rejection_count, gate_agent_runs=gate_agent_runs)
+        return GateLoopResult(
+            gate_success=True, gate_rejection_count=ctx.gate_rejection_count,
+            gate_agent_runs=details.gate_agent_runs, session_id=details.session_id,
+            last_output_summary=details.last_output_summary,
+        )
 
     gt.mark_failure("5")
-    return GateLoopResult(gate_success=False, gate_rejection_count=ctx.gate_rejection_count, gate_agent_runs=gate_agent_runs)
+    return GateLoopResult(
+        gate_success=False, gate_rejection_count=ctx.gate_rejection_count,
+        gate_agent_runs=details.gate_agent_runs, session_id=details.session_id,
+        last_output_summary=details.last_output_summary,
+    )
 
 
 def _handle_gate_verdict(
-    ctx: GateLoopContext, gt: GateStepTracker, gate_reason: str, gate_agent_runs: int,
+    ctx: GateLoopContext, gt: GateStepTracker, details: GateOutcomeDetails,
 ) -> GateLoopResult:
     """Handle a definite gate verdict (approval, unclear, or rejection).
 
@@ -202,28 +254,32 @@ def _handle_gate_verdict(
     from pokepoke.beads.reconciliation import worktree_branch_has_commits
 
     # Unclear verdict — fallback accept if there are commits
-    if ("Gate Agent did not explicitly approve" in gate_reason or "could not be parsed" in gate_reason) and \
+    if ("Gate Agent did not explicitly approve" in details.gate_reason or "could not be parsed" in details.gate_reason) and \
             worktree_branch_has_commits(ctx.item.id, ctx.pokepoke_root):
         logger.warning("\n⚠️  Gate verdict unclear but worktree has valid commits — fallback accept")
         ctx.comment_fn(
             ctx.item.id,
-            f"Gate Agent verdict unclear: {gate_reason}\n"
+            f"Gate Agent verdict unclear: {details.gate_reason}\n"
             "However, worktree has valid commits that passed pre-commit hooks. Accepting via fallback.",
         )
         gt.mark_success("5", "6")
-        return GateLoopResult(gate_success=True, gate_rejection_count=ctx.gate_rejection_count, gate_agent_runs=gate_agent_runs)
+        return GateLoopResult(
+            gate_success=True, gate_rejection_count=ctx.gate_rejection_count,
+            gate_agent_runs=details.gate_agent_runs, session_id=details.session_id,
+            last_output_summary=details.last_output_summary,
+        )
 
     # Genuine rejection
     gt.complete_step("5")
-    gt.fail_step("6", f"Rejected: {gate_reason[:100]}")
+    gt.fail_step("6", f"Rejected: {details.gate_reason[:100]}")
 
     from pokepoke.beads.beads_management import increment_gate_rejection_count
 
     new_count = increment_gate_rejection_count(ctx.item.id)
     rejection_count = new_count if new_count >= 0 else ctx.gate_rejection_count + 1
 
-    logger.error(f"\n❌ Gate Agent rejected ({rejection_count}/{ctx.max_gate_rejections}): {gate_reason}")
-    ctx.comment_fn(ctx.item.id, f"Gate Agent Rejection ({rejection_count}/{ctx.max_gate_rejections}):\n{gate_reason}")
+    logger.error(f"\n❌ Gate Agent rejected ({rejection_count}/{ctx.max_gate_rejections}): {details.gate_reason}")
+    ctx.comment_fn(ctx.item.id, f"Gate Agent Rejection ({rejection_count}/{ctx.max_gate_rejections}):\n{details.gate_reason}")
 
     # If the gate explicitly signalled the item is too large, trigger
     # immediate decomposition using the gate agent's analysis as context.
@@ -251,15 +307,17 @@ def _handle_gate_verdict(
         ctx.defer_fn(
             ctx.item.id,
             f"Auto-deferred after {rejection_count} gate rejections (cap: {ctx.max_gate_rejections}). "
-            f"Item likely too complex for a single agent session. Last rejection:\n{gate_reason}",
+            f"Item likely too complex for a single agent session. Last rejection:\n{details.gate_reason}",
         )
         return GateLoopResult(
             gate_success=False, gate_rejection_count=rejection_count,
-            gate_agent_runs=gate_agent_runs, exceeded_max=True,
+            gate_agent_runs=details.gate_agent_runs, exceeded_max=True,
+            session_id=details.session_id, last_output_summary=details.last_output_summary,
         )
 
-    gt.gate_rejected_retry(rejection_count, gate_reason)
+    gt.gate_rejected_retry(rejection_count, details.gate_reason)
     return GateLoopResult(
         gate_success=False, gate_rejection_count=rejection_count,
-        gate_agent_runs=gate_agent_runs, feedback=gate_reason,
+        gate_agent_runs=details.gate_agent_runs, feedback=details.gate_reason,
+        session_id=details.session_id, last_output_summary=details.last_output_summary,
     )
