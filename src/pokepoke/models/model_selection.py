@@ -53,6 +53,23 @@ def get_assignment_for_item(item: BeadsWorkItem) -> tuple[str | None, str | None
     return None, None
 
 
+def _get_registry_candidates() -> list[str]:
+    """Get candidate models from the registry when no explicit candidates configured.
+
+    Returns:
+        List of available model names from the registry, or empty list if
+        no registry data is available.
+    """
+    from pokepoke.models.model_sync import get_available_model_names
+
+    available = get_available_model_names()
+    if available:
+        logger.info(
+            f"   [Selection] Using {len(available)} models from registry as candidates"
+        )
+    return available
+
+
 def _filter_available_models(candidates: list[str]) -> list[str]:
     """Filter candidate models to only those currently available in the registry.
 
@@ -143,10 +160,12 @@ def select_model_for_item(item: BeadsWorkItem) -> str:
     candidates = config.models.candidate_models
 
     if not candidates:
-        # Synthesize from default + fallback so weighted selection still runs
-        candidates = list(dict.fromkeys(
-            [config.models.default, config.models.fallback]
-        ))
+        # Try registry-discovered models first, then fall back to default+fallback
+        candidates = _get_registry_candidates()
+        if not candidates:
+            candidates = list(dict.fromkeys(
+                [config.models.default, config.models.fallback]
+            ))
 
     # Filter to only available models
     candidates = _filter_available_models(candidates)
@@ -186,10 +205,12 @@ def select_gate_model(work_model: str, item_id: str) -> str:
     candidates = config.models.candidate_models
 
     if not candidates:
-        # Synthesize from default + fallback so weighted selection still runs
-        candidates = list(dict.fromkeys(
-            [config.models.default, config.models.fallback]
-        ))
+        # Try registry-discovered models first, then fall back to default+fallback
+        candidates = _get_registry_candidates()
+        if not candidates:
+            candidates = list(dict.fromkeys(
+                [config.models.default, config.models.fallback]
+            ))
 
     # Filter to only available models
     candidates = _filter_available_models(candidates)
