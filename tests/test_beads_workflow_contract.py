@@ -212,7 +212,7 @@ class TestBeadsClientReturnsMatchWorkflow:
         assert isinstance(result, BeadsWorkItem)
 
     def test_process_work_item_signature_accepts_beads_types(self):
-        """process_work_item accepts BeadsWorkItem and BeadsClient arguments.
+        """process_work_item accepts BeadsWorkItem as its first positional arg.
 
         We only verify the signature is compatible — actually calling
         process_work_item requires heavy mocking of worktree/copilot
@@ -230,8 +230,8 @@ class TestBeadsClientReturnsMatchWorkflow:
         ann = params["item"].annotation
         assert ann is BeadsWorkItem or (isinstance(ann, str) and "BeadsWorkItem" in ann)
 
-        # beads_client keyword accepts BeadsClient | None
-        assert "beads_client" in params
+        # interactive bool parameter is required
+        assert "interactive" in params
 
 
 # ---------------------------------------------------------------------------
