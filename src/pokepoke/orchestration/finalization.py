@@ -74,6 +74,8 @@ def _finalize_item_result(
 def _handle_success(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
     """Handle the success branch of finalization."""
     set_terminal_banner(format_work_item_banner(ctx.item.id, ctx.item.title, "Finalizing"))
+    if ctx.item_logger:
+        ctx.item_logger.log("🎯 ORCHESTRATOR: Entering finalization phase after successful agent completion")
     assert ctx.worktree_path is not None, "worktree_path must be set when result is successful"
     success = finalize_work_item(
         ctx.item, ctx.worktree_path, parent_agent_id=ctx.base_agent_id,
@@ -85,6 +87,8 @@ def _handle_success(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
     set_terminal_banner(format_work_item_banner(
         ctx.item.id, ctx.item.title, "Completed" if success else "Failed",
     ))
+    if not success and ctx.item_logger:
+        ctx.item_logger.log_error("❌ ORCHESTRATOR: Finalization failed (merge or close failed)")
     if success and ctx.run_beta_test:
         set_terminal_banner(format_work_item_banner(ctx.item.id, ctx.item.title, "Beta Testing"))
         beta_stats = run_beta_tester()
@@ -113,10 +117,14 @@ def _handle_success(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
 
 def _handle_failure(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
     """Handle the failure branch — reconcile or record failure."""
+    if ctx.item_logger:
+        ctx.item_logger.log("⚠️  ORCHESTRATOR: Agent reported failure — checking if work was actually completed (reconciliation)")
     try:
         reconciled, evidence = reconcile_completed_item(ctx.item, ctx.worktree_path, ctx.run_logger)
     except Exception as exc:  # pragma: no cover - best-effort
         logger.debug("Reconciliation check failed (non-fatal): %s", exc)
+        if ctx.item_logger:
+            ctx.item_logger.log_debug(f"Reconciliation check failed (non-fatal): {exc}")
         reconciled, evidence = False, {}
 
     if reconciled:
@@ -125,11 +133,15 @@ def _handle_failure(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
     set_terminal_banner(format_work_item_banner(ctx.item.id, ctx.item.title, "Failed"))
     failure_reason = ctx.result.error or "Unknown failure"
     logger.error("\n❌ Failed to complete work item: %s", failure_reason)
+    if ctx.item_logger:
+        ctx.item_logger.log_error(f"❌ ORCHESTRATOR: Work item failed — {failure_reason}")
 
     from pokepoke.beads.beads_management import fail_task
     fail_task(ctx.item.id, failure_reason)
 
     logger.warning("\n⚠️  Preserving worktree for %s (work may be recoverable)", ctx.item.id)
+    if ctx.item_logger:
+        ctx.item_logger.log(f"⚠️  ORCHESTRATOR: Preserving worktree for {ctx.item.id} (work may be recoverable)")
     _log_failure(ctx.run_logger, ctx.item_logger, ctx.request_count)
     terminal_ui.ui.set_current_agent(None)
     dur = time.time() - ctx.start_time
@@ -155,6 +167,11 @@ def _reconcile_as_success(
         evidence.get("beads_closed"), evidence.get("commits_on_default"),
         evidence.get("commits_on_worktree_branch"), evidence.get("worktree_cleaned"),
     )
+    if ctx.item_logger:
+        ctx.item_logger.log(
+            "⚠️  ORCHESTRATOR: Session reported FAILURE but reconciliation shows work completed. "
+            f"Evidence: {evidence}. Treating as SUCCESS."
+        )
     if ctx.run_logger and ctx.item_logger:
         ctx.item_logger.log_summary(True, ctx.request_count)
         ctx.run_logger.log_orchestrator(

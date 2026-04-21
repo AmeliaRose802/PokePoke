@@ -708,7 +708,7 @@ def test_cleanup_agent_receives_item_logger(
     mock_invoke_cleanup.return_value = (True, None)
     mock_merge_worktree.return_value = MergeResult(success=True)
 
-    sentinel_logger = object()  # stand-in for an ItemLogger
+    sentinel_logger = Mock()  # stand-in for an ItemLogger
     ctx = _make_merge_context()
     ctx.item_logger = sentinel_logger  # type: ignore[assignment]
     handle_worktree_merge(ctx, agent_stats=None)
@@ -743,10 +743,28 @@ def test_merge_conflict_cleanup_receives_item_logger(
     ]
     mock_invoke_conflict_cleanup.return_value = (True, None)
 
-    sentinel_logger = object()
-    ctx = _make_merge_context()
-    ctx.item_logger = sentinel_logger  # type: ignore[assignment]
-    handle_worktree_merge(ctx, agent_stats=None)
-
+    sentinel_logger = Mock()  # stand-in for an ItemLogger
+    test_item = BeadsWorkItem(
+        id="task-1",
+        title="Test",
+        status="in_progress",
+        priority=1,
+        issue_type="task",
+        description=""
+    )
+    ctx = WorktreeMergeContext(
+        agent_id="task-1",
+        agent_item=test_item,
+        agent_name="test",
+        worktree_path=Path("/wt"),
+        repo_root=Path("/repo"),
+        item_logger=sentinel_logger,
+    )
+    perform_worktree_merge(ctx)
+    
+    # Verify cleanup agent was called at all
     mock_invoke_conflict_cleanup.assert_called_once()
-    assert mock_invoke_conflict_cleanup.call_args[1].get("item_logger") is sentinel_logger
+    
+    # Check that item_logger was actually passed
+    call_kwargs = mock_invoke_conflict_cleanup.call_args[1]
+    assert call_kwargs.get("item_logger") is sentinel_logger
