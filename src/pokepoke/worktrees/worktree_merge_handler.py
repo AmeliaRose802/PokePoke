@@ -7,7 +7,7 @@ the maintenance-agent path (handle_worktree_merge) delegate to perform_worktree_
 from __future__ import annotations
 
 import logging
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -22,8 +22,10 @@ from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
+    from pokepoke.worktrees.merge_step_tracker import MergeStepTracker
 from pokepoke.worktrees.coordination import merge_lock
 from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
+from pokepoke.worktrees.merge_conflict_retry import retry_merge_after_cleanup
 from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree
 from pokepoke.worktrees.worktrees import cleanup_worktree, merge_worktree
 
@@ -41,6 +43,13 @@ class WorktreeMergeContext:
     parent_agent_id: str | None = None
     repo_path: str | None = None
     item_logger: 'ItemLogger | None' = None
+
+
+@dataclass
+class _ConflictResolutionNeeded:
+    """Signal that conflicted merge was aborted and needs out-of-lock cleanup."""
+    conflict_details: str
+    unmerged_files: list[str] = field(default_factory=list)
 
 
 def handle_worktree_merge(
@@ -133,17 +142,46 @@ def handle_worktree_merge(
     # --- Acquire merge lock for the actual merge ---
     tracker.begin_step("1", "Waiting for merge lock…")
 
+    # Fall back to agent_id for cleanup parent if no parent_agent_id
+    if not ctx.parent_agent_id:
+        ctx.parent_agent_id = ctx.agent_id
+
     try:
         with merge_lock():
             tracker.complete_step("1", f"Acquired merge lock for {ctx.agent_id}")
             logger.info("Acquired merge lock for agent %s", ctx.agent_id)
-            # Fall back to agent_id for cleanup parent if no parent_agent_id
-            if not ctx.parent_agent_id:
-                ctx.parent_agent_id = ctx.agent_id
             result = perform_worktree_merge(ctx)
+
+        # --- Lock released here ---
+
+        if not isinstance(result, _ConflictResolutionNeeded):
             outcome = "success" if result[0] else "failed"
             tracker.finish_run(outcome)
             return result
+
+        # Merge hit conflicts, was aborted, and lock is now released.
+        # Run cleanup agent outside the lock so other agents can merge.
+        conflict_info = result
+        logger.info(
+            "🔓 Released merge lock — running conflict cleanup agent for %s outside lock",
+            ctx.agent_id,
+        )
+
+        cleanup_success = _run_conflict_cleanup_outside_lock(ctx, conflict_info, tracker)
+
+        if not cleanup_success:
+            tracker.finish_run("failed")
+            return False, False
+
+        # Re-acquire merge lock for retry
+        tracker.begin_step("1r", "Re-acquiring merge lock for retry…")
+        with merge_lock():
+            tracker.complete_step("1r", f"Re-acquired merge lock for {ctx.agent_id}")
+            logger.info("🔒 Re-acquired merge lock for retry merge of %s", ctx.agent_id)
+            retry_result = retry_merge_after_cleanup(ctx, tracker)
+            outcome = "success" if retry_result[0] else "failed"
+            tracker.finish_run(outcome)
+            return retry_result
     except Timeout as e:
         logger.warning("Merge lock timeout for agent %s: %s", ctx.agent_id, e)
         tracker.fail_step("1", f"Lock timeout: {e}")
@@ -168,9 +206,33 @@ def handle_worktree_merge(
         return False, False
 
 
+def _run_conflict_cleanup_outside_lock(
+    ctx: WorktreeMergeContext,
+    conflict_info: _ConflictResolutionNeeded,
+    tracker: MergeStepTracker,
+) -> bool:
+    """Invoke merge conflict cleanup agent while merge lock is released."""
+    tracker.begin_step("3b", "Invoking merge conflict cleanup agent (outside merge lock)…")
+    logger.info("   Invoking cleanup agent to resolve conflicts...")
+    with cleanup_lock():
+        success, _ = invoke_merge_conflict_cleanup_agent(
+            ctx.agent_item,
+            conflict_info.conflict_details,
+            unmerged_files=conflict_info.unmerged_files,
+            cwd=ctx.repo_path,
+            parent_agent_id=ctx.parent_agent_id,
+            wait_for_merge=False,
+            item_logger=ctx.item_logger,
+        )
+    if success:
+        tracker.complete_step("3b", "Merge conflict cleanup agent succeeded")
+        return True
+    tracker.fail_step("3b", "Merge conflict cleanup agent failed")
+    logger.error("   Cleanup failed.")
+    return False
 def perform_worktree_merge(  # noqa: C901
     ctx: WorktreeMergeContext,
-) -> tuple[bool, bool]:
+) -> tuple[bool, bool] | _ConflictResolutionNeeded:
     """Core merge-attempt-cleanup-retry logic (single source of truth).
 
     Called by both the task-finalization path and the maintenance-agent path.
@@ -181,14 +243,8 @@ def perform_worktree_merge(  # noqa: C901
     Returns:
         Tuple of (merge_success, worktree_cleaned).
     """
-    from pokepoke.git.git_operations import (
-        check_main_repo_ready_for_merge,
-    )
-    from pokepoke.git.merge_conflict import (
-        abort_merge,
-        get_unmerged_files,
-        is_merge_in_progress,
-    )
+    from pokepoke.git.git_operations import check_main_repo_ready_for_merge
+    from pokepoke.git.merge_conflict import abort_merge, get_unmerged_files, is_merge_in_progress
     from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
 
     repo_cwd = ctx.repo_path
@@ -294,7 +350,8 @@ def perform_worktree_merge(  # noqa: C901
     if not merge_success:
         tracker.fail_step("8", "Merge failed")
         repo_root_path = Path(repo_cwd) if repo_cwd else None
-        if is_merge_in_progress(repo_path=repo_root_path):
+        merge_in_progress = is_merge_in_progress(repo_path=repo_root_path)
+        if merge_in_progress:
             logger.error("\n❌ Worktree merge has conflicts!")
         else:
             logger.error("\n❌ Worktree merge failed!")
@@ -307,6 +364,9 @@ def perform_worktree_merge(  # noqa: C901
                 logger.info(f"      - {f}")
             if len(unmerged_files) > 10:
                 logger.info(f"      ... and {len(unmerged_files) - 10} more")
+
+        if not merge_in_progress and not unmerged_files:
+            return False, False
 
         logger.info(f"   Worktree preserved at {WORKTREE_DIR}/{WORKTREE_TASK_PREFIX}{ctx.agent_id} - requires conflict resolution")
 
@@ -323,65 +383,23 @@ def perform_worktree_merge(  # noqa: C901
                 f"- `{f}`" for f in unmerged_files
             )
 
-        logger.info("   Invoking cleanup agent to resolve conflicts...")
-        with cleanup_lock():
-            # Don't wait for merge lock since we already hold it
-            # Merge conflicts are on the main repo, not the worktree
-            success, _ = invoke_merge_conflict_cleanup_agent(
-                ctx.agent_item,
-                f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
-                unmerged_files=unmerged_files,
-                cwd=repo_cwd,
-                parent_agent_id=ctx.parent_agent_id,
-                wait_for_merge=False,
-                item_logger=ctx.item_logger,
-            )
-
-        if success:
-            logger.info("   Cleanup successful, retrying merge...")
-            if is_merge_in_progress(repo_path=repo_root_path):
-                logger.warning("   ⚠️  Merge still in progress after cleanup - aborting to reset state")
-                abort_success, abort_error = abort_merge(repo_path=repo_root_path)
-                if not abort_success:
-                    logger.error(f"   ❌ Failed to abort merge: {abort_error}")
-                    return False, False
-                logger.info("   ✅ Merge aborted, will retry")
-
-            retry_result = merge_worktree(ctx.agent_id, cleanup=True, repo_path=repo_cwd)
-            merge_success = retry_result.success
-            if retry_result.rollback_failed:
-                logger.critical(
-                    "🚨 REPO CORRUPTION: Rollback failed during retry merge for %s — "
-                    "local repo has a merge commit that could not be undone. Manual intervention required.",
-                    ctx.agent_id,
-                )
-            if merge_success:
-                remove_from_manifest(ctx.agent_id)
-                worktree_cleaned = not ctx.worktree_path.exists()
-                if not worktree_cleaned:
-                    logger.error("Worktree directory persists after retry merge: %s", ctx.worktree_path)
-                    add_uncleaned_worktree(ctx.agent_id, str(ctx.worktree_path), "Worktree persists after successful retry merge")
-                logger.info("   Merged worktree" + (" and cleaned up" if worktree_cleaned else " (cleanup incomplete)"))
-                return True, worktree_cleaned
-            else:
-                logger.error("   Merge failed again after cleanup.")
-                if is_merge_in_progress(repo_path=repo_root_path):
-                    abort_success, abort_error = abort_merge(repo_path=repo_root_path)
-                    if not abort_success:
-                        logger.error("Failed to abort merge after retry failure for %s: %s", ctx.agent_id, abort_error)
-                        logger.error(f"   ❌ Failed to abort merge: {abort_error}")
-                        logger.warning("   ⚠️  Repository may be stuck in merge-in-progress state")
-                return False, False
-        else:
-            logger.error("   Cleanup failed.")
-            if is_merge_in_progress(repo_path=repo_root_path):
-                logger.info("   Aborting merge to reset state...")
-                abort_success, abort_error = abort_merge(repo_path=repo_root_path)
-                if not abort_success:
-                    logger.error("Failed to abort merge after cleanup failure for %s: %s", ctx.agent_id, abort_error)
-                    logger.error(f"   ❌ Failed to abort merge: {abort_error}")
-                    logger.warning("   ⚠️  Repository may be stuck in merge-in-progress state")
+        # Always abort conflicted merge while still holding merge lock so the
+        # main repo is clean before releasing lock for conflict resolution.
+        tracker.begin_step("9", "Aborting merge before releasing merge lock…")
+        abort_success, abort_error = abort_merge(repo_path=repo_root_path)
+        if not abort_success:
+            logger.error("Failed to abort merge before conflict cleanup for %s: %s", ctx.agent_id, abort_error)
+            logger.error(f"   ❌ Failed to abort merge: {abort_error}")
+            logger.warning("   ⚠️  Repository may be stuck in merge-in-progress state")
+            tracker.fail_step("9", f"Failed to abort conflicted merge: {abort_error}")
             return False, False
+        tracker.complete_step("9", "Merge aborted, repo reset for out-of-lock conflict cleanup")
+        logger.info("   ✅ Merge aborted; conflict cleanup will run outside merge lock")
+
+        return _ConflictResolutionNeeded(
+            conflict_details=f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
+            unmerged_files=unmerged_files,
+        )
 
     # Mark remaining merge steps as done for the success path
     tracker.complete_step("8", "Merge succeeded")

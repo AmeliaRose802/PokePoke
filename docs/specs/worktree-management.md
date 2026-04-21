@@ -7,7 +7,7 @@ references:
   - src/pokepoke/worktrees/worktree_merge_handler.py
   - src/pokepoke/worktrees/worktrees.py
 confidence: medium
-lastUpdated: 2026-03-31
+lastUpdated: 2026-04-21
 ---
 
 # Spec: Worktree Management
@@ -21,7 +21,7 @@ lastUpdated: 2026-03-31
 ## Component Interaction
 - `worktrees.py`: Core worktree operations (create, list, remove) with pattern `./worktrees/task-{id}`.
 - `coordination.py`: Coordinates multiple worktrees, prevents duplicate creation for same task.
-- `worktree_merge_handler.py`: Handles merging completed work back to main branch.
+- `worktree_merge_handler.py`: Handles merge lock coordination, including releasing the lock after `git merge --abort` so conflict cleanup can run outside the critical section before retrying the merge under lock.
 - `worktree_finalization.py`: Finalizes worktree state after successful merge.
 - `worktree_cleanup.py`: Removes worktrees after completion or on failure.
 
@@ -31,3 +31,4 @@ lastUpdated: 2026-03-31
 - Merge requires all validation gates to pass; failed tasks keep worktree for debugging.
 - Cleanup is aggressive after successful merge; failed worktrees preserved for investigation.
 - Lock contention handled via `lock_contention.py` to prevent race conditions.
+- Conflict-resolution cleanup runs outside `merge_lock` after aborting the in-progress merge, then reacquires `merge_lock` for the retry merge attempt.
