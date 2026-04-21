@@ -90,9 +90,6 @@ def check_git_status(
                     if changes['beads']:
                         warnings.append(f"Beads database changes detected ({len(changes['beads'])} files)")
 
-                    if changes['worktree']:
-                        warnings.append(f"Worktree cleanup changes detected ({len(changes['worktree'])} files)")
-
                 except subprocess.CalledProcessError as e:
                     errors.append(HealthCheckError(
                         check_name='git_status_check',

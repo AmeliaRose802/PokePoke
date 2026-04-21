@@ -198,8 +198,7 @@ class TestSyncAndEnsureCleanMainRepo:
         mock_cat.return_value = {
             "other": [" M src/file.py"],
             "beads": [],
-            "worktree": [],
-        }
+                    }
 
         result = sync_and_ensure_clean_main_repo("task/x")
 
@@ -217,8 +216,7 @@ class TestSyncAndEnsureCleanMainRepo:
         mock_cat.return_value = {
             "other": [" M src/file.py"],
             "beads": [],
-            "worktree": [],
-        }
+                    }
 
         assert sync_and_ensure_clean_main_repo("task/x") is False
 
@@ -235,8 +233,7 @@ class TestSyncAndEnsureCleanMainRepo:
         mock_cat.return_value = {
             "other": [],
             "beads": [" M .beads/db.json"],
-            "worktree": [],
-        }
+                    }
 
         result = sync_and_ensure_clean_main_repo("task/x")
         assert result is True
@@ -294,8 +291,7 @@ class TestSyncAndEnsureCleanMainRepo:
         mock_cat.return_value = {
             "other": [f" M file{i}.py" for i in range(15)],
             "beads": [],
-            "worktree": [],
-        }
+                    }
 
         result = sync_and_ensure_clean_main_repo("task/x")
         assert result is True

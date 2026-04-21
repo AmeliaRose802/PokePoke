@@ -139,7 +139,7 @@ class TestPreflightChecker:
         with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
              patch('pokepoke.utils.preflight_checks.run_git', return_value=mock_result), \
              patch('pokepoke.utils.preflight_checks.categorize_git_changes', return_value={
-                 'other': ['dirty_file.txt'], 'beads': [], 'worktree': [], 'untracked': []
+                 'other': ['dirty_file.txt'], 'beads': [], 'untracked': []
              }):
             errors, _warnings = checker._check_git_status()
 
@@ -438,7 +438,7 @@ class TestIntegrationScenarios:
              patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
              patch('pokepoke.utils.preflight_checks.run_git', return_value=mock_result), \
              patch('pokepoke.utils.preflight_checks.categorize_git_changes', return_value={
-                 'other': ['dirty_file.txt'], 'beads': [], 'worktree': [], 'untracked': []
+                 'other': ['dirty_file.txt'], 'beads': [], 'untracked': []
              }), \
              patch('pokepoke.utils.preflight_repair.repair_git_status', return_value=True):
             checker = PreflightChecker(temp_repo, health_config)
@@ -527,20 +527,19 @@ class TestGitStatusEdgeCases:
         assert 'timed out' in errors[0].message.lower()
 
     def test_git_status_beads_and_worktree_changes(self, temp_repo, health_config):
-        """Test that beads and worktree changes produce warnings."""
+        """Test that beads changes produce warnings (worktrees/ is gitignored)."""
         checker = PreflightChecker(temp_repo, health_config)
 
-        mock_result = MagicMock(returncode=0, stdout='.beads/issues.jsonl\nworktrees/foo/bar.txt\n')
+        mock_result = MagicMock(returncode=0, stdout='.beads/issues.jsonl\n')
         with patch('pokepoke.utils.preflight_checks.has_uncommitted_changes', return_value=True), \
              patch('subprocess.run', return_value=mock_result), \
              patch('pokepoke.utils.preflight_checks.categorize_git_changes', return_value={
-                 'other': [], 'beads': ['.beads/issues.jsonl'], 'worktree': ['worktrees/foo/bar.txt'], 'untracked': []
+                 'other': [], 'beads': ['.beads/issues.jsonl'], 'untracked': []
              }):
             errors, warnings = checker._check_git_status()
 
         assert len(errors) == 0
         assert any('Beads database' in w for w in warnings)
-        assert any('Worktree cleanup' in w for w in warnings)
 
 
 class TestWorktreeCreationEdgeCases:

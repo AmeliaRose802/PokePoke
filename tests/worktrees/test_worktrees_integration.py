@@ -500,8 +500,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
 
         mock_categorize.return_value = {
             'beads': [' M .beads/database.db'],
-            'worktree': [],
-            'other': []
+                        'other': []
         }
 
         result = _sync_and_ensure_clean_main_repo('task/test-123')
@@ -527,8 +526,7 @@ class TestSyncAndEnsureCleanMainRepoIntegration:
 
         mock_categorize.return_value = {
             'beads': [],
-            'worktree': [],
-            'other': [' M src/somefile.py']
+                        'other': [' M src/somefile.py']
         }
 
         result = _sync_and_ensure_clean_main_repo('task/test-123')
