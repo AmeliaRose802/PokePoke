@@ -16,7 +16,6 @@ from pokepoke.orchestration.workflow_helpers import (
     _fail_result,
     _log_failure,
     _maybe_retry_copilot,
-    _pre_loop_validate,
     run_cleanup_with_timeout,
     setup_worktree,
 )
@@ -569,50 +568,6 @@ class TestProcessWorkItem:
         assert any("retry" in aid for aid in agent_ids_routed), (
             f"Expected retry agent_id in {agent_ids_routed}"
         )
-
-
-# ── _pre_loop_validate (unit) ──────────────────────────────────────
-
-class TestPreLoopValidate:
-    """Direct unit tests for _pre_loop_validate."""
-
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("builtins.input", return_value="n")
-    def test_interactive_user_declines(self, mock_input, mock_tui):
-        result, was_assigned, _wt, _root, _cwd = _pre_loop_validate(
-            _item(), interactive=True, worktree_lock_timeout=10,
-            run_logger=None, item_logger=None,
-        )
-        assert result is not None
-        assert result.success is False
-        assert was_assigned is False
-        mock_tui.ui.stop.assert_called_once()
-        mock_tui.ui.start.assert_called_once()
-
-    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree")
-    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=False)
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    def test_assign_failure(self, mock_tui, mock_assign, mock_setup):
-        result, was_assigned, _wt, _root, _cwd = _pre_loop_validate(
-            _item(), interactive=False, worktree_lock_timeout=10,
-            run_logger=None, item_logger=None,
-        )
-        assert result is not None
-        assert result.success is False
-        assert was_assigned is False
-        mock_setup.assert_not_called()
-
-    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree", return_value=None)
-    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    def test_worktree_setup_failure(self, mock_tui, mock_assign, mock_setup):
-        result, was_assigned, _wt, _root, _cwd = _pre_loop_validate(
-            _item(), interactive=False, worktree_lock_timeout=10,
-            run_logger=None, item_logger=None,
-        )
-        assert result is not None
-        assert result.success is False
-        assert was_assigned is True
 
 
 # ── _maybe_retry_copilot (unit) ────────────────────────────────────

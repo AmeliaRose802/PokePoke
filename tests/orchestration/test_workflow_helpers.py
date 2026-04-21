@@ -16,7 +16,6 @@ from pokepoke.orchestration.workflow_helpers import (
     _log_commit_status,
     _log_failure,
     _maybe_retry_copilot,
-    _pre_loop_validate,
     run_cleanup_with_timeout,
     setup_worktree,
 )
@@ -311,72 +310,6 @@ class TestSetupWorktree:
         assert result is None
         mock_run_logger.log_orchestrator.assert_called_once()
         mock_item_logger.log_error.assert_called_once()
-
-
-# ── _pre_loop_validate ──────────────────────────────────────────────────────
-
-
-class TestPreLoopValidate:
-    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree")
-    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
-    def test_non_interactive_success(self, mock_assign, mock_setup, sample_item):
-        mock_setup.return_value = Path("/wt/item-42")
-        early, assigned, wt_path, _root, wt_cwd = _pre_loop_validate(
-            sample_item, interactive=False, worktree_lock_timeout=60.0,
-            run_logger=None, item_logger=None,
-        )
-        assert early is None
-        assert assigned is True
-        assert wt_path == Path("/wt/item-42")
-        assert wt_cwd == str(Path("/wt/item-42"))
-
-    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=False)
-    def test_assignment_failure(self, mock_assign, sample_item, capsys):
-        early, assigned, _wt_path, _, _ = _pre_loop_validate(
-            sample_item, interactive=False, worktree_lock_timeout=60.0,
-            run_logger=None, item_logger=None,
-        )
-        assert early is not None
-        assert early.success is False
-        assert assigned is False
-
-    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree", return_value=None)
-    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
-    def test_worktree_failure(self, mock_assign, mock_setup, sample_item, capsys):
-        early, assigned, wt_path, _, _ = _pre_loop_validate(
-            sample_item, interactive=False, worktree_lock_timeout=60.0,
-            run_logger=None, item_logger=None,
-        )
-        assert early is not None
-        assert early.success is False
-        assert assigned is True
-        assert wt_path is None
-
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree")
-    @patch("builtins.input", return_value="n")
-    def test_interactive_decline(self, mock_input, mock_setup, mock_assign, mock_tui, sample_item):
-        early, assigned, _, _, _ = _pre_loop_validate(
-            sample_item, interactive=True, worktree_lock_timeout=60.0,
-            run_logger=None, item_logger=None,
-        )
-        assert early is not None
-        assert early.success is False
-        assert assigned is False
-
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.assign_and_sync_item", return_value=True)
-    @patch("pokepoke.orchestration.workflow_helpers.setup_worktree")
-    @patch("builtins.input", return_value="")
-    def test_interactive_accept_empty(self, mock_input, mock_setup, mock_assign, mock_tui, sample_item):
-        mock_setup.return_value = Path("/wt/item-42")
-        early, assigned, _wt_path, _, _ = _pre_loop_validate(
-            sample_item, interactive=True, worktree_lock_timeout=60.0,
-            run_logger=None, item_logger=None,
-        )
-        assert early is None
-        assert assigned is True
 
 
 # ── run_cleanup_with_timeout ─────────────────────────────────────────────────

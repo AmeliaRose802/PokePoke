@@ -2,14 +2,10 @@
 
 import logging
 import time
-from collections.abc import Callable
-from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pokepoke.agents.cleanup_agents import run_cleanup_loop
-from pokepoke.beads.beads import assign_and_sync_item
-from pokepoke.desktop import terminal_ui
 from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner
 from pokepoke.git.git_operations import has_uncommitted_changes
 from pokepoke.types import WorkItemResult
@@ -72,48 +68,6 @@ def setup_worktree(
         if item_logger:
             item_logger.log_error(error_msg)
         return None
-
-
-def _pre_loop_validate(
-    item: BeadsWorkItem,
-    interactive: bool,
-    worktree_lock_timeout: float,
-    run_logger: "RunLogger | None",
-    item_logger: "ItemLogger | None",
-) -> "tuple[WorkItemResult | None, bool, Path | None, str, str]":
-    """Interactive confirmation, assignment, and worktree creation.
-
-    Returns (early_result, was_assigned, worktree_path, pokepoke_root_cwd, worktree_cwd).
-    If *early_result* is not None the caller must return it immediately.
-    """
-    if interactive:
-        terminal_ui.ui.stop()
-        confirm = input("Proceed with this item? [Y/n]: ").strip().lower()
-        terminal_ui.ui.start()
-        if confirm and confirm != "y":
-            logger.warning("\u23ed\ufe0f  Skipped.")
-            _log_failure(run_logger, item_logger)
-            return _fail_result(), False, None, "", ""
-
-    logger.info("\n\U0001f512 Claiming work item...")
-    if not assign_and_sync_item(item.id):
-        logger.error(f"\u274c Failed to assign work item {item.id}")
-        _log_failure(run_logger, item_logger)
-        return _fail_result(), False, None, "", ""
-
-    worktree_path = setup_worktree(
-        item, lock_timeout=worktree_lock_timeout,
-        run_logger=run_logger, item_logger=item_logger,
-    )
-    if worktree_path is None:
-        logger.error(f"\u21a9\ufe0f  Returning {item.id} to queue (unassigning due to worktree failure)...")
-        _log_failure(run_logger, item_logger)
-        return _fail_result(), True, None, "", ""
-
-    pokepoke_root_cwd = str(Path.cwd())
-    worktree_cwd = str(worktree_path)
-    logger.info(f"   Working directory: {worktree_cwd}\n")
-    return None, True, worktree_path, pokepoke_root_cwd, worktree_cwd
 
 
 def _extract_agent_stats(result: CopilotResult) -> AgentStats | None:
@@ -221,57 +175,3 @@ def run_cleanup_with_timeout(
             break
 
     return result.success, cleanup_agent_runs
-
-
-@dataclass
-class GateVerdict:
-    """Result of evaluating a gate agent's verdict."""
-    accept: bool = False
-    reject_capped: bool = False
-    rejection_count: int = 0
-    reason: str = ""
-
-
-def evaluate_gate_verdict(
-    gate_success: bool, gate_crashed: bool, gate_timed_out: bool,
-    gate_reason: str, item_id: str, pokepoke_root: Path,
-    gate_rejection_count: int, max_gate_rejections: int,
-    comment_fn: 'Callable[[str, str], object]', defer_fn: 'Callable[[str, str], object]',
-) -> GateVerdict:
-    """Evaluate gate result and return a verdict for the outer loop."""
-    if gate_success:
-        logger.info("\n✅ Gate Agent signed off!")
-        return GateVerdict(accept=True)
-
-    if gate_crashed or gate_timed_out:
-        from pokepoke.beads.reconciliation import worktree_branch_has_commits
-        if worktree_branch_has_commits(item_id, pokepoke_root):
-            fail_mode = "timed out" if gate_timed_out else "crashed"
-            logger.warning("\n⚠️  Gate Agent %s but worktree has valid commits — fallback accept", fail_mode)
-            comment_fn(item_id, f"Gate Agent {fail_mode} but worktree has valid commits. Accepting via fallback.")
-            return GateVerdict(accept=True)
-        return GateVerdict()
-
-    # Check for unclear verdict with valid commits
-    from pokepoke.beads.reconciliation import worktree_branch_has_commits
-    if ("Gate Agent did not explicitly approve" in gate_reason or "could not be parsed" in gate_reason) and \
-            worktree_branch_has_commits(item_id, pokepoke_root):
-        logger.warning("\n⚠️  Gate verdict unclear but worktree has valid commits — fallback accept")
-        comment_fn(item_id, f"Gate Agent verdict unclear: {gate_reason}\nHowever, worktree has valid commits that passed pre-commit hooks. Accepting via fallback.")
-        return GateVerdict(accept=True)
-
-    # Genuine code rejection — check cap
-    from pokepoke.beads.beads_management import increment_gate_rejection_count
-    new_count = increment_gate_rejection_count(item_id)
-    if new_count < 0:
-        gate_rejection_count += 1
-        new_count = gate_rejection_count
-    else:
-        gate_rejection_count = new_count
-    logger.error(f"\n❌ Gate Agent rejected ({gate_rejection_count}/{max_gate_rejections}): {gate_reason}")
-    comment_fn(item_id, f"Gate Agent Rejection ({gate_rejection_count}/{max_gate_rejections}):\n{gate_reason}")
-    if gate_rejection_count >= max_gate_rejections:
-        logger.error(f"\n❌ Exceeded max gate rejections ({gate_rejection_count}/{max_gate_rejections}) for {item_id}")
-        defer_fn(item_id, f"Auto-deferred after {gate_rejection_count} gate rejections (cap: {max_gate_rejections}). Item likely too complex for a single agent session. Last rejection:\n{gate_reason}")
-        return GateVerdict(reject_capped=True, rejection_count=gate_rejection_count, reason=gate_reason)
-    return GateVerdict(rejection_count=gate_rejection_count, reason=gate_reason)
