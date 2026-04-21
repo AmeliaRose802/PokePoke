@@ -15,12 +15,17 @@ PATCH_MAYBE_DECOMPOSE = f"{_WF}._maybe_decompose"
 
 
 def _make_failing_copilot_result(item_id: str = "task-1") -> CopilotResult:
-    """Create a CopilotResult that simulates exhausted retries."""
+    """Create a CopilotResult that simulates exhausted retries.
+
+    NOTE: The workflow enforces an invariant that the Copilot SDK backend
+    always supplies a session_id, even on failure.
+    """
     return CopilotResult(
         work_item_id=item_id,
         success=False,
         error="process died: consecutive ping failures",
         attempt_count=1,
+        session_id="test-session",
     )
 
 
@@ -64,7 +69,9 @@ class TestWorkflowDecompositionOnGateRejection:
             mocks["config"].return_value.max_gate_rejections_per_item = 1
 
             with (
-                patch(PATCH_MAYBE_DECOMPOSE) as mock_decompose,
+                patch(
+                    "pokepoke.orchestration.workflow_helpers._maybe_decompose"
+                ) as mock_decompose,
                 patch(
                     "pokepoke.beads.beads_management.increment_gate_rejection_count",
                     return_value=1,
@@ -95,7 +102,8 @@ class TestMaybeDecomposeHelper:
             mock_run.return_value = DecompositionResult(
                 success=True, parent_id="task-1", child_ids=["c-1"], reason="ok",
             )
-            _maybe_decompose(item, copilot_failure_count=2, gate_rejection_count=1, config=FakeConfig())
+            decomposed = _maybe_decompose(item, copilot_failure_count=2, gate_rejection_count=1, config=FakeConfig())
+            assert decomposed is True
             mock_should.assert_called_once_with(item, 3, 3, True)
             mock_run.assert_called_once_with(item, 3)
 
@@ -110,7 +118,8 @@ class TestMaybeDecomposeHelper:
             patch("pokepoke.agents.decomposition_agent.should_decompose", return_value=False),
             patch("pokepoke.agents.decomposition_agent.run_decomposition") as mock_run,
         ):
-            _maybe_decompose(item, copilot_failure_count=1, gate_rejection_count=0, config=FakeConfig())
+            decomposed = _maybe_decompose(item, copilot_failure_count=1, gate_rejection_count=0, config=FakeConfig())
+            assert decomposed is False
             mock_run.assert_not_called()
 
     def test_handles_missing_config_attrs_gracefully(self) -> None:
@@ -124,7 +133,8 @@ class TestMaybeDecomposeHelper:
             patch("pokepoke.agents.decomposition_agent.should_decompose", return_value=False) as mock_should,
             patch("pokepoke.agents.decomposition_agent.run_decomposition"),
         ):
-            _maybe_decompose(item, copilot_failure_count=1, gate_rejection_count=0, config=EmptyConfig())
+            decomposed = _maybe_decompose(item, copilot_failure_count=1, gate_rejection_count=0, config=EmptyConfig())
+            assert decomposed is False
             mock_should.assert_called_once_with(item, 1, 3, True)
 
 

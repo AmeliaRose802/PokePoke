@@ -168,7 +168,8 @@ class TestInLoopGateRejectionDefer:
         ) as mock_defer, patch(
             "pokepoke.orchestration.workflow.add_comment"
         ), patch(
-            "pokepoke.orchestration.workflow._maybe_decompose"
+            "pokepoke.orchestration.workflow_helpers._maybe_decompose",
+            return_value=False,
         ), patch(
             "pokepoke.orchestration.workflow.save_worker_context"
         ), patch(
@@ -184,6 +185,90 @@ class TestInLoopGateRejectionDefer:
             defer_reason = mock_defer.call_args[0][1]
             assert "gate rejection" in defer_reason.lower()
             assert "single agent session" in defer_reason.lower()
+
+    @patch("pokepoke.git.git_helpers.run_git", return_value=_branch_ok())
+    @patch("pokepoke.orchestration.workflow.unregister_agent")
+    @patch("pokepoke.orchestration.workflow.register_agent")
+    @patch.object(WorkItemSession, "cleanup_on_failure")
+    @patch("pokepoke.orchestration.workflow.cleanup_worktree")
+    @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=False)
+    @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
+    @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
+    @patch("pokepoke.orchestration.workflow.run_cleanup_with_timeout", return_value=(True, 0))
+    @patch("pokepoke.orchestration.workflow.invoke_copilot")
+    @patch("pokepoke.orchestration.workflow.build_prompt_from_work_item", return_value="prompt")
+    @patch("pokepoke.orchestration.workflow.get_config")
+    @patch("pokepoke.orchestration.workflow.select_model_for_item", return_value="gpt-4")
+    @patch("pokepoke.orchestration.workflow.get_assignment_for_item", return_value=("a", "beads-item"))
+    @patch("pokepoke.orchestration.workflow.terminal_ui")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.set_terminal_banner")
+    @patch("pokepoke.orchestration.workflow.terminal_ui.format_work_item_banner", return_value="banner")
+    @patch("pokepoke.orchestration.workflow.get_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.workflow.assign_and_sync_item", return_value=True)
+    @patch("pokepoke.orchestration.workflow.setup_worktree")
+    @patch("pokepoke.orchestration.workflow.is_shutting_down", return_value=False)
+    def test_skips_defer_when_decomposition_succeeds(
+        self, mock_shutdown, mock_setup, mock_assign, mock_agent,
+        mock_banner_fmt, mock_set_banner, mock_ui,
+        mock_assignment, mock_model, mock_config,
+        mock_prompt, mock_copilot, mock_cleanup_timeout,
+        mock_ahead, mock_uncommitted, mock_finalize,
+        mock_cleanup_wt, mock_session, mock_register,
+        mock_unregister, mock_run_git, tmp_path,
+    ):
+        """Race-condition fix: when decomposition succeeds (which blocks the parent
+        and clears its assignee), ``_defer`` must NOT be called. Calling ``_defer``
+        first would leave the item in ``backlog`` (unassigned) for up to 120s while
+        decomposition runs, letting a concurrent orchestrator claim it.
+        """
+        mock_setup.return_value = tmp_path / "worktree"
+        (tmp_path / "worktree").mkdir()
+        mock_config.return_value = MagicMock(
+            command_timeout=300, max_parallel_agents=1,
+            gate_agent_enabled=True, max_copilot_failure_retries=0,
+            max_gate_rejections_per_item=1,
+            ai_backend=MagicMock(provider="copilot"),
+        )
+        mock_copilot.return_value = CopilotResult(
+            work_item_id="defer-1", success=True, attempt_count=1,
+            output="done", stats=AgentStats(input_tokens=100),
+            session_id="test-session",
+        )
+
+        with patch(
+            "pokepoke.beads.beads_management.get_gate_rejection_count",
+            return_value=0,
+        ), patch(
+            "pokepoke.orchestration.workflow.run_gate_agent",
+            return_value=GateAgentResult(
+                success=False, reason="Tests failing",
+                crashed=False, is_timeout=False,
+            ),
+        ), patch(
+            "pokepoke.beads.beads_management.increment_gate_rejection_count",
+            return_value=1,
+        ), patch(
+            "pokepoke.orchestration.workflow.defer_item"
+        ) as mock_defer, patch(
+            "pokepoke.orchestration.workflow.add_comment"
+        ), patch(
+            "pokepoke.orchestration.workflow_helpers._maybe_decompose",
+            return_value=True,
+        ) as mock_decompose, patch(
+            "pokepoke.orchestration.workflow.save_worker_context"
+        ), patch(
+            "pokepoke.beads.beads_management.fail_task"
+        ), patch(
+            "pokepoke.beads.reconciliation.reconcile_completed_item",
+            return_value=(False, {}),
+        ):
+            result = process_work_item(_item(), interactive=False)
+
+            assert result.success is False
+            # Decomposition ran and succeeded (item is now blocked with no assignee).
+            mock_decompose.assert_called_once()
+            # Defer MUST NOT be called — decomposition already owns the status transition.
+            mock_defer.assert_not_called()
 
 
 class TestFakeBeadsClientDefer:

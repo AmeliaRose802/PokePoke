@@ -76,7 +76,8 @@ class TestMaybeDecompose:
             patch(PATCH_SHOULD_DECOMPOSE, return_value=True) as mock_should,
             patch(PATCH_RUN_DECOMPOSITION, return_value=decomp_result) as mock_run,
         ):
-            _maybe_decompose(item, copilot_failure_count=2, gate_rejection_count=1, config=config)
+            decomposed = _maybe_decompose(item, copilot_failure_count=2, gate_rejection_count=1, config=config)
+            assert decomposed is True
             mock_should.assert_called_once_with(item, 3, 3, True)
             mock_run.assert_called_once_with(item, 3)
 
@@ -88,7 +89,8 @@ class TestMaybeDecompose:
             patch(PATCH_SHOULD_DECOMPOSE, return_value=False) as mock_should,
             patch(PATCH_RUN_DECOMPOSITION) as mock_run,
         ):
-            _maybe_decompose(item, copilot_failure_count=5, gate_rejection_count=0, config=config)
+            decomposed = _maybe_decompose(item, copilot_failure_count=5, gate_rejection_count=0, config=config)
+            assert decomposed is False
             mock_should.assert_called_once()
             mock_run.assert_not_called()
 
@@ -100,7 +102,8 @@ class TestMaybeDecompose:
             patch(PATCH_SHOULD_DECOMPOSE, return_value=False) as mock_should,
             patch(PATCH_RUN_DECOMPOSITION) as mock_run,
         ):
-            _maybe_decompose(item, copilot_failure_count=1, gate_rejection_count=1, config=config)
+            decomposed = _maybe_decompose(item, copilot_failure_count=1, gate_rejection_count=1, config=config)
+            assert decomposed is False
             mock_should.assert_called_once()
             mock_run.assert_not_called()
 
@@ -115,8 +118,8 @@ class TestMaybeDecompose:
             patch(PATCH_SHOULD_DECOMPOSE, return_value=True),
             patch(PATCH_RUN_DECOMPOSITION, return_value=decomp_result),
         ):
-            # Should not raise
-            _maybe_decompose(item, copilot_failure_count=5, gate_rejection_count=0, config=config)
+            decomposed = _maybe_decompose(item, copilot_failure_count=5, gate_rejection_count=0, config=config)
+            assert decomposed is False
 
     def test_uses_config_defaults_when_attrs_missing(self) -> None:
         """Gracefully handles config objects missing decomposition attributes."""
@@ -126,7 +129,8 @@ class TestMaybeDecompose:
             patch(PATCH_SHOULD_DECOMPOSE, return_value=False),
             patch(PATCH_RUN_DECOMPOSITION) as mock_run,
         ):
-            _maybe_decompose(item, copilot_failure_count=2, gate_rejection_count=2, config=config)
+            decomposed = _maybe_decompose(item, copilot_failure_count=2, gate_rejection_count=2, config=config)
+            assert decomposed is False
             mock_run.assert_not_called()
 
     def test_copilot_and_gate_failures_summed(self) -> None:
@@ -140,7 +144,8 @@ class TestMaybeDecompose:
             patch(PATCH_SHOULD_DECOMPOSE, return_value=True),
             patch(PATCH_RUN_DECOMPOSITION, return_value=decomp_result) as mock_run,
         ):
-            _maybe_decompose(item, copilot_failure_count=3, gate_rejection_count=2, config=config)
+            decomposed = _maybe_decompose(item, copilot_failure_count=3, gate_rejection_count=2, config=config)
+            assert decomposed is True
             # total_failures = 3 + 2 = 5
             mock_run.assert_called_once_with(item, 5)
 
@@ -201,7 +206,10 @@ class TestGateRejectionCapExceeded:
         ):
             with (
                 patch(f"{_WF}.defer_item") as mock_defer,
-                patch(f"{_WF}._maybe_decompose"),
+                patch(
+                    "pokepoke.orchestration.workflow_helpers._maybe_decompose",
+                    return_value=False,
+                ),
             ):
                 result = process_work_item(item, interactive=False)
 

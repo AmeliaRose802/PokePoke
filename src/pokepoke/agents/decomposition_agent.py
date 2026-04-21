@@ -260,22 +260,44 @@ def _add_blocking_dependency(blocker_id: str, blocked_id: str) -> bool:
 
 
 def _block_parent_item(parent_id: str, child_ids: list[str]) -> bool:
-    """Block parent item after decomposition so it doesn't compete with children."""
+    """Block parent item after decomposition so it doesn't compete with children.
+
+    Also clears assignee so the parent isn't left "owned" by the agent that
+    performed decomposition.
+    """
+    notes = f"Decomposed into {len(child_ids)} subtasks: {', '.join(child_ids)}"
+
+    # Prefer a single atomic update that both blocks and clears assignment.
     try:
-        notes = f"Decomposed into {len(child_ids)} subtasks: {', '.join(child_ids)}"
-        _run_bd([
+        result = _run_bd([
+            "update", parent_id,
+            "--status", "blocked",
+            "-a", "",
+            "--notes", notes,
+        ], check=False, timeout=15)
+        if result.returncode == 0:
+            logger.info("🔀 Blocked parent item %s (cleared assignee)", parent_id)
+            return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+        logger.warning("Failed to block parent item %s (timeout): %s", parent_id, exc)
+        return False
+
+    # Fallback: block without clearing assignee (older CLIs may not accept empty -a).
+    try:
+        result = _run_bd([
             "update", parent_id,
             "--status", "blocked",
             "--notes", notes,
         ], check=False, timeout=15)
-        logger.info("🔀 Blocked parent item %s", parent_id)
-        return True
+        if result.returncode == 0:
+            logger.info("🔀 Blocked parent item %s", parent_id)
+            return True
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
-        logger.warning(
-            "Failed to block parent item %s: %s",
-            parent_id, exc,
-        )
+        logger.warning("Failed to block parent item %s (timeout): %s", parent_id, exc)
         return False
+
+    logger.warning("Failed to block parent item %s (non-zero exit)", parent_id)
+    return False
 
 
 def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionResult:

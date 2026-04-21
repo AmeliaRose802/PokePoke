@@ -20,6 +20,7 @@ from pokepoke.types_stats import AgentStats, ModelCompletionRecord
 from pokepoke.worktrees.worktrees import create_worktree
 
 if TYPE_CHECKING:
+    from pokepoke.orchestration.work_item_session import WorkItemSession
     from pokepoke.utils.logging_utils import ItemLogger, RunLogger
 
 logger = logging.getLogger(__name__)
@@ -225,17 +226,64 @@ def _maybe_retry_copilot(
 def _maybe_decompose(
     item: BeadsWorkItem, copilot_failure_count: int,
     gate_rejection_count: int, config: object,
-) -> None:
-    """Check if a repeatedly failing item should be decomposed into sub-tasks."""
+) -> bool:
+    """Attempt decomposition for a repeatedly failing item.
+
+    Returns:
+        True if decomposition ran and reported success, else False.
+
+    Callers can use this to avoid returning the parent item to the ready queue
+    (via WorkItemSession.cleanup_on_failure) after successful decomposition.
+    """
     from pokepoke.agents.decomposition_agent import run_decomposition, should_decompose
+
     total_failures = copilot_failure_count + gate_rejection_count
     threshold = int(getattr(config, 'decomposition_failure_threshold', 3))
     enabled = bool(getattr(config, 'decomposition_enabled', True))
-    if should_decompose(item, total_failures, threshold, enabled):
-        decomp_result = run_decomposition(item, total_failures)
-        if decomp_result.success:
-            logger.info("\n🔀 Item %s decomposed into %d sub-tasks",
-                        item.id, len(decomp_result.child_ids))
+
+    if not should_decompose(item, total_failures, threshold, enabled):
+        return False
+
+    decomp_result = run_decomposition(item, total_failures)
+    if decomp_result.success:
+        logger.info(
+            "\n🔀 Item %s decomposed into %d sub-tasks",
+            item.id,
+            len(decomp_result.child_ids),
+        )
+        return True
+
+    return False
+
+
+def _decompose_or_defer(
+    item: BeadsWorkItem,
+    copilot_failure_count: int,
+    verdict: "GateVerdict",
+    config: object,
+    defer_fn: "Callable[[str, str], object]",
+    session: "WorkItemSession | None",
+) -> None:
+    """Handle reject_capped outcome without a race window.
+
+    Decomposition runs FIRST while the item is still in_progress + assigned so
+    a concurrent orchestrator cannot claim it during the up-to-120s
+    decomposition window. A successful decomposition already sets the parent
+    to ``blocked`` with the assignee cleared, so ``_defer`` is only invoked on
+    the fallback path (decomposition disabled, below threshold, or failed).
+
+    In both branches the session's ``_assigned`` flag is cleared so the
+    ``WorkItemSession`` cleanup path does not reopen the item.
+    """
+    decomposed = _maybe_decompose(
+        item, copilot_failure_count, verdict.rejection_count, config)
+    if not decomposed:
+        defer_fn(
+            item.id,
+            verdict.defer_reason or "Auto-deferred after max gate rejections",
+        )
+    if session is not None:
+        session._assigned = False
 
 
 def run_cleanup_with_timeout(
@@ -274,13 +322,14 @@ class GateVerdict:
     reject_capped: bool = False
     rejection_count: int = 0
     reason: str = ""
+    defer_reason: str = ""
 
 
 def evaluate_gate_verdict(
     gate_success: bool, gate_crashed: bool, gate_timed_out: bool,
     gate_reason: str, item_id: str, pokepoke_root: Path,
     gate_rejection_count: int, max_gate_rejections: int,
-    comment_fn: 'Callable[[str, str], object]', defer_fn: 'Callable[[str, str], object]',
+    comment_fn: 'Callable[[str, str], object]',
 ) -> GateVerdict:
     """Evaluate gate result and return a verdict for the outer loop."""
     if gate_success:
@@ -315,7 +364,18 @@ def evaluate_gate_verdict(
     logger.error(f"\n❌ Gate Agent rejected ({gate_rejection_count}/{max_gate_rejections}): {gate_reason}")
     comment_fn(item_id, f"Gate Agent Rejection ({gate_rejection_count}/{max_gate_rejections}):\n{gate_reason}")
     if gate_rejection_count >= max_gate_rejections:
-        logger.error(f"\n❌ Exceeded max gate rejections ({gate_rejection_count}/{max_gate_rejections}) for {item_id}")
-        defer_fn(item_id, f"Auto-deferred after {gate_rejection_count} gate rejections (cap: {max_gate_rejections}). Item likely too complex for a single agent session. Last rejection:\n{gate_reason}")
-        return GateVerdict(reject_capped=True, rejection_count=gate_rejection_count, reason=gate_reason)
+        logger.error(
+            f"\n❌ Exceeded max gate rejections ({gate_rejection_count}/{max_gate_rejections}) for {item_id}"
+        )
+        defer_reason = (
+            f"Auto-deferred after {gate_rejection_count} gate rejections (cap: {max_gate_rejections}). "
+            "Item likely too complex for a single agent session. Last rejection:\n"
+            f"{gate_reason}"
+        )
+        return GateVerdict(
+            reject_capped=True,
+            rejection_count=gate_rejection_count,
+            reason=gate_reason,
+            defer_reason=defer_reason,
+        )
     return GateVerdict(rejection_count=gate_rejection_count, reason=gate_reason)

@@ -307,16 +307,31 @@ def defer_item(item_id: str, reason: str) -> bool:
     """
     from .beads_hierarchy import NEEDS_DECOMPOSITION_LABEL
 
+    # Try to clear assignee at the same time so the item isn't left "owned" by a dead agent.
     try:
         _run_bd_with_retry([
             'update', item_id,
             '--status', 'backlog',
+            '-a', '',
             '--add-label', NEEDS_DECOMPOSITION_LABEL,
         ])
-        logger.info("📦 Deferred %s to backlog with %s label", item_id, NEEDS_DECOMPOSITION_LABEL)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
-        logger.error("⚠️  Failed to defer %s after retries: %s", item_id, e)
-        return False
+        logger.info(
+            "📦 Deferred %s to backlog with %s label (cleared assignee)",
+            item_id,
+            NEEDS_DECOMPOSITION_LABEL,
+        )
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError):
+        # Some beads versions may reject an empty -a; fall back to status/label update.
+        try:
+            _run_bd_with_retry([
+                'update', item_id,
+                '--status', 'backlog',
+                '--add-label', NEEDS_DECOMPOSITION_LABEL,
+            ])
+            logger.info("📦 Deferred %s to backlog with %s label", item_id, NEEDS_DECOMPOSITION_LABEL)
+        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+            logger.error("⚠️  Failed to defer %s after retries: %s", item_id, e)
+            return False
     truncated = reason[:500] if reason else "Deferred to backlog for decomposition"
     add_comment(item_id, f"📦 Auto-deferred: {truncated}")
     return True

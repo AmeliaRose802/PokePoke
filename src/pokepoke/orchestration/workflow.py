@@ -25,6 +25,7 @@ from pokepoke.orchestration.worker_context import (
 )
 from pokepoke.orchestration.workflow_helpers import (
     _apply_gate_feedback,
+    _decompose_or_defer,
     _extract_agent_stats,
     _fail_result,
     _log_commit_status,
@@ -256,7 +257,10 @@ def process_work_item(  # noqa: C901
                     last_feedback = feedback
                     last_retry_was_gate_feedback = False
                     continue
-                _maybe_decompose(item, copilot_failure_count, gate_rejection_count, global_config)
+                decomposed = _maybe_decompose(item, copilot_failure_count, gate_rejection_count, global_config)
+                # Decomposition quarantines parent — don't reopen in session cleanup
+                if decomposed and _session is not None:
+                    _session._assigned = False
                 break
 
             _log_commit_status(worktree_cwd)
@@ -366,26 +370,21 @@ def process_work_item(  # noqa: C901
                 break  # Not a crash/timeout — exit the gate retry loop
 
             verdict = evaluate_gate_verdict(
-                gate_success, gate_crashed, gate_timed_out, gate_reason,
-                item.id, pokepoke_root, gate_rejection_count, max_gate_rejections,
-                _comment, _defer)
+                gate_success, gate_crashed, gate_timed_out, gate_reason, item.id,
+                pokepoke_root, gate_rejection_count, max_gate_rejections, _comment)
             if verdict.accept:
-                gate_success = True
-                backoff_delay = _BACKOFF_BASE_SECONDS
+                gate_success, backoff_delay = True, _BACKOFF_BASE_SECONDS
                 break
             if verdict.reject_capped:
-                _maybe_decompose(item, copilot_failure_count, verdict.rejection_count, config)
-                result.success = False
-                result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
+                _decompose_or_defer(item, copilot_failure_count, verdict, config, _defer, _session)
+                result.success, result.error = False, f"Exceeded max gate rejections ({max_gate_rejections})"
                 _log_failure(run_logger, item_logger, request_count)
                 break
             if not verdict.reason:
                 break  # Infra failure without fallback
             gate_rejection_count = verdict.rejection_count
-            resume_session_id = None
-            resume_output_summary = None
-            last_feedback = verdict.reason
-            last_retry_was_gate_feedback = True
+            resume_session_id, resume_output_summary = None, None
+            last_feedback, last_retry_was_gate_feedback = verdict.reason, True
 
         # Save worker context for future workers when this attempt failed
         if not result.success:
