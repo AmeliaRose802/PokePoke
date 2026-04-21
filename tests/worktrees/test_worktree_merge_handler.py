@@ -354,7 +354,14 @@ def test_perform_cleanup_failure_no_abort_when_not_merging(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add,
     mock_is_merging, mock_abort,
 ) -> None:
-    """Abort still runs before out-of-lock cleanup when merge reported conflict files."""
+    """When merge_worktree already aborted (no MERGE_HEAD), skip redundant abort.
+
+    merge_worktree() → _handle_merge_failure() already runs `git merge --abort`
+    internally. If MERGE_HEAD is gone when we re-check, the repo is clean and
+    calling abort_merge() again would fail with "no merge to abort" and
+    spuriously halt the orchestrator. Instead, treat the absence of a merge
+    as success and proceed to out-of-lock cleanup.
+    """
     mock_check.return_value = (True, "")
     mock_merge.return_value = MergeResult(success=False, unmerged_files=["file.py"])
     mock_is_merging.return_value = False
@@ -363,7 +370,8 @@ def test_perform_cleanup_failure_no_abort_when_not_merging(
     ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
     result = perform_worktree_merge(ctx)
     assert isinstance(result, _ConflictResolutionNeeded)
-    mock_abort.assert_called_once()
+    # merge_worktree already aborted — abort_merge must NOT be called again.
+    mock_abort.assert_not_called()
     mock_conflict_cleanup.assert_not_called()
 
 

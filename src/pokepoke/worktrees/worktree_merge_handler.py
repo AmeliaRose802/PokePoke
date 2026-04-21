@@ -391,29 +391,36 @@ def perform_worktree_merge(  # noqa: C901
                 f"- `{f}`" for f in unmerged_files
             )
 
-        # Always abort conflicted merge while still holding merge lock so the
-        # main repo is clean before releasing lock for conflict resolution.
-        tracker.begin_step("9", "Aborting merge before releasing merge lock…")
-        abort_success, abort_error = abort_merge(repo_path=repo_root_path)
+        # Ensure the main repo is clean before releasing the merge lock.
+        # merge_worktree() → _handle_merge_failure() already runs
+        # `git merge --abort` on conflict, so MERGE_HEAD is usually gone by
+        # now. Only invoke abort_merge() when a merge is still in progress
+        # (i.e. the internal abort failed); otherwise proceed directly to
+        # out-of-lock cleanup.
+        tracker.begin_step("9", "Ensuring merge is aborted before releasing merge lock…")
+        if merge_in_progress:
+            abort_success, abort_error = abort_merge(repo_path=repo_root_path)
+        else:
+            abort_success, abort_error = True, ""
+            logger.debug("No merge in progress for %s; skipping redundant abort.", ctx.agent_id)
+
         if not abort_success:
-            # CRITICAL: the main repo is stuck in a merge-in-progress state and
-            # we cannot safely release the merge lock — any other agent that
-            # acquires the lock would operate on a dirty repo. Halt the
-            # orchestrator so a human can investigate.
+            # CRITICAL: merge is still in progress and abort failed. The
+            # `with merge_lock()` wrapper WILL release the lock on return,
+            # so halt the orchestrator to prevent other agents from
+            # operating on the dirty repo.
             from pokepoke.utils.shutdown import request_shutdown
             logger.critical(
-                "🚨 abort_merge failed for %s: %s — main repo may be stuck in "
-                "merge-in-progress state. Holding merge lock and halting "
-                "orchestrator to prevent concurrent agents from operating on a "
-                "dirty repo. Manual intervention required "
-                "(git merge --abort or git reset --hard HEAD).",
+                "🚨 abort_merge failed for %s: %s — main repo stuck in "
+                "merge-in-progress state. Halting orchestrator. Manual "
+                "intervention required (git merge --abort or git reset --hard HEAD).",
                 ctx.agent_id, abort_error,
             )
             tracker.fail_step("9", f"Failed to abort conflicted merge: {abort_error}")
             request_shutdown()
             return False, False
-        tracker.complete_step("9", "Merge aborted, repo reset for out-of-lock conflict cleanup")
-        logger.info("   ✅ Merge aborted; conflict cleanup will run outside merge lock")
+        tracker.complete_step("9", "Repo clean; ready for out-of-lock conflict cleanup")
+        logger.info("   ✅ Repo clean; conflict cleanup will run outside merge lock")
 
         return _ConflictResolutionNeeded(
             conflict_details=f"Merge conflict detected in {len(unmerged_files)} file(s){conflict_details}",
