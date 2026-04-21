@@ -55,7 +55,11 @@ def _is_valid_title(title: str) -> bool:
     return len(stripped) >= MIN_TITLE_LENGTH and not _PLACEHOLDER_TITLE_RE.match(stripped)
 
 
-def _build_decomposition_prompt(item: BeadsWorkItem) -> str:
+def _build_decomposition_prompt(
+    item: BeadsWorkItem,
+    *,
+    too_large_context: str | None = None,
+) -> str:
     """Build the prompt for the Copilot SDK decomposition invocation."""
     from pokepoke.prompts.prompts import PromptService
     from pokepoke.utils.prompt_sanitizer import sanitize_prompt_input, sanitize_short
@@ -72,6 +76,9 @@ def _build_decomposition_prompt(item: BeadsWorkItem) -> str:
         "labels": sanitize_short(
             ", ".join(item.labels) if item.labels else None, "labels",
         ),
+        "too_large_context": sanitize_prompt_input(
+            too_large_context, field_name="too_large_context",
+        ) if too_large_context else None,
     }
     return service.load_and_render("decomposition", variables)
 
@@ -108,11 +115,15 @@ def _parse_subtasks_from_output(output: str, default_priority: int) -> list[SubT
     return subtasks
 
 
-def _invoke_sdk_for_decomposition(item: BeadsWorkItem) -> list[SubTask]:
+def _invoke_sdk_for_decomposition(
+    item: BeadsWorkItem,
+    *,
+    too_large_context: str | None = None,
+) -> list[SubTask]:
     """Invoke the Copilot SDK to decompose *item* into subtasks."""
     from pokepoke.models.ai_backends import invoke_copilot
 
-    prompt = _build_decomposition_prompt(item)
+    prompt = _build_decomposition_prompt(item, too_large_context=too_large_context)
 
     result = invoke_copilot(
         work_item=item,
@@ -278,14 +289,19 @@ def _block_parent_item(parent_id: str, child_ids: list[str]) -> bool:
         return False
 
 
-def run_decomposition(item: BeadsWorkItem, failure_count: int) -> DecompositionResult:
+def run_decomposition(
+    item: BeadsWorkItem,
+    failure_count: int,
+    *,
+    too_large_context: str | None = None,
+) -> DecompositionResult:
     """Decompose a failing item via SDK analysis, creating serialised child tasks."""
     logger.info(
         "\n🔀 Decomposition Agent: item %s failed %d times — breaking into sub-tasks",
         item.id, failure_count,
     )
 
-    subtasks = _invoke_sdk_for_decomposition(item)
+    subtasks = _invoke_sdk_for_decomposition(item, too_large_context=too_large_context)
     if not subtasks:
         reason = "SDK decomposition produced no valid subtasks"
         logger.warning("🔀 Decomposition skipped for %s: %s", item.id, reason)
@@ -400,17 +416,22 @@ def should_decompose(
     failure_count: int,
     threshold: int,
     enabled: bool = True,
+    *,
     max_depth: int = DEFAULT_MAX_DECOMPOSITION_DEPTH,
+    force: bool = False,
 ) -> bool:
     """Return True if *item* should be decomposed based on failure count.
 
     Supports re-decomposition up to *max_depth* rounds.  Depth is tracked
     via ``decomposition_depth`` in item metadata.
+
+    When *force* is True the failure-count threshold is bypassed (the work
+    agent explicitly signalled ``too_large``).
     """
     if not enabled:
         return False
 
-    if failure_count < threshold:
+    if not force and failure_count < threshold:
         return False
 
     # Check decomposition depth via metadata instead of label

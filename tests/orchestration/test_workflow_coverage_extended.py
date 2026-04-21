@@ -416,6 +416,63 @@ class TestFailFastOutcomes:
         # Comment should be added about the status
         assert client.call_count("add_comment") >= 1
 
+    def test_too_large_triggers_immediate_decomposition(self):
+        """When work agent returns too_large, _maybe_decompose is called immediately."""
+        item = _make_item()
+        outcome = WorkAgentOutcome(
+            status="too_large",
+            reason="Changes span 5 modules",
+            suggested_split=["Module A refactor", "Module B tests"],
+        )
+        copilot_result = CopilotResult(
+            work_item_id=item.id, success=True, attempt_count=1,
+            work_agent_outcome=outcome,
+            session_id="test-session",
+        )
+        client = FakeBeadsClient()
+        client.add_item(item)
+
+        patches, ui = _base_patches(
+            config=_make_config(gate_enabled=True),
+            invoke_results=[copilot_result],
+            is_shutting_down_seq=[False, False],
+        )
+        ctx = _PatchCtx(patches, ui, finalize_rv=False)
+        with ctx, patch(f"{_WF}._maybe_decompose") as mock_decompose:
+            process_work_item(item, interactive=False, config=WorkItemConfig(beads_client=client))
+
+        mock_decompose.assert_called_once()
+        call_kwargs = mock_decompose.call_args
+        # Verify too_large_context was passed with the agent's reason and suggested split
+        assert "too_large_context" in call_kwargs.kwargs
+        context = call_kwargs.kwargs["too_large_context"]
+        assert "Changes span 5 modules" in context
+        assert "Module A refactor" in context
+        assert "Module B tests" in context
+
+    def test_blocked_does_not_trigger_decomposition(self):
+        """When work agent returns blocked, _maybe_decompose is NOT called."""
+        item = _make_item()
+        outcome = WorkAgentOutcome(status="blocked", reason="Missing dep")
+        copilot_result = CopilotResult(
+            work_item_id=item.id, success=True, attempt_count=1,
+            work_agent_outcome=outcome,
+            session_id="test-session",
+        )
+        client = FakeBeadsClient()
+        client.add_item(item)
+
+        patches, ui = _base_patches(
+            config=_make_config(gate_enabled=True),
+            invoke_results=[copilot_result],
+            is_shutting_down_seq=[False, False],
+        )
+        ctx = _PatchCtx(patches, ui, finalize_rv=False)
+        with ctx, patch(f"{_WF}._maybe_decompose") as mock_decompose:
+            process_work_item(item, interactive=False, config=WorkItemConfig(beads_client=client))
+
+        mock_decompose.assert_not_called()
+
 
 class TestBeadsItemAlreadyClosed:
     """Agent self-merged, beads item is closed → skip gate."""

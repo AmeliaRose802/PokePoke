@@ -21,6 +21,7 @@ def _make_failing_copilot_result(item_id: str = "task-1") -> CopilotResult:
         success=False,
         error="process died: consecutive ping failures",
         attempt_count=1,
+        session_id="pokepoke-" + item_id,
     )
 
 
@@ -34,6 +35,7 @@ class TestWorkflowDecompositionOnCopilotFailure:
         with make_process_item_mocks(
             copilot_success=False,
             include_config=True,
+            include_session_cleanup=True,
             max_copilot_failure_retries=0,
         ) as mocks:
             mocks["invoke"].return_value = _make_failing_copilot_result("task-fail")
@@ -59,6 +61,7 @@ class TestWorkflowDecompositionOnGateRejection:
             gate_result=GateAgentResult(success=False, reason="Tests fail"),
             include_config=True,
             include_handoff=True,
+            include_session_cleanup=True,
             max_copilot_failure_retries=0,
         ) as mocks:
             mocks["config"].return_value.max_gate_rejections_per_item = 1
@@ -96,8 +99,8 @@ class TestMaybeDecomposeHelper:
                 success=True, parent_id="task-1", child_ids=["c-1"], reason="ok",
             )
             _maybe_decompose(item, copilot_failure_count=2, gate_rejection_count=1, config=FakeConfig())
-            mock_should.assert_called_once_with(item, 3, 3, True)
-            mock_run.assert_called_once_with(item, 3)
+            mock_should.assert_called_once_with(item, 3, 3, True, force=False)
+            mock_run.assert_called_once_with(item, 3, too_large_context=None)
 
     def test_skips_when_should_decompose_returns_false(self) -> None:
         item = make_work_item(item_id="task-1")
@@ -125,7 +128,78 @@ class TestMaybeDecomposeHelper:
             patch("pokepoke.agents.decomposition_agent.run_decomposition"),
         ):
             _maybe_decompose(item, copilot_failure_count=1, gate_rejection_count=0, config=EmptyConfig())
-            mock_should.assert_called_once_with(item, 1, 3, True)
+            mock_should.assert_called_once_with(item, 1, 3, True, force=False)
+
+
+class TestMaybeDecomposeWithTooLargeContext:
+    """Tests for _maybe_decompose when called with too_large_context."""
+
+    def test_too_large_context_forces_decomposition(self) -> None:
+        """When too_large_context is set, force=True bypasses threshold."""
+        item = make_work_item(item_id="task-big")
+
+        class FakeConfig:
+            decomposition_failure_threshold = 3
+            decomposition_enabled = True
+
+        with (
+            patch("pokepoke.agents.decomposition_agent.should_decompose", return_value=True) as mock_should,
+            patch("pokepoke.agents.decomposition_agent.run_decomposition") as mock_run,
+        ):
+            from pokepoke.agents.decomposition_agent import DecompositionResult
+            mock_run.return_value = DecompositionResult(
+                success=True, parent_id="task-big", child_ids=["c-1", "c-2"], reason="ok",
+            )
+            _maybe_decompose(
+                item, copilot_failure_count=0, gate_rejection_count=0,
+                config=FakeConfig(), too_large_context="Agent said it's huge",
+            )
+            mock_should.assert_called_once_with(item, 0, 3, True, force=True)
+            mock_run.assert_called_once_with(
+                item, 0, too_large_context="Agent said it's huge",
+            )
+
+    def test_too_large_context_none_does_not_force(self) -> None:
+        """When too_large_context is None, force=False (normal threshold check)."""
+        item = make_work_item(item_id="task-normal")
+
+        class FakeConfig:
+            decomposition_failure_threshold = 3
+            decomposition_enabled = True
+
+        with (
+            patch("pokepoke.agents.decomposition_agent.should_decompose", return_value=False) as mock_should,
+            patch("pokepoke.agents.decomposition_agent.run_decomposition") as mock_run,
+        ):
+            _maybe_decompose(
+                item, copilot_failure_count=1, gate_rejection_count=0,
+                config=FakeConfig(),
+            )
+            mock_should.assert_called_once_with(item, 1, 3, True, force=False)
+            mock_run.assert_not_called()
+
+
+class TestShouldDecomposeForce:
+    """Tests for the force parameter on should_decompose."""
+
+    def test_force_bypasses_threshold(self) -> None:
+        from pokepoke.agents.decomposition_agent import should_decompose
+        item = make_work_item(item_id="task-force")
+        assert should_decompose(item, failure_count=0, threshold=3, enabled=True, force=True) is True
+
+    def test_force_still_respects_disabled(self) -> None:
+        from pokepoke.agents.decomposition_agent import should_decompose
+        item = make_work_item(item_id="task-disabled")
+        assert should_decompose(item, failure_count=0, threshold=3, enabled=False, force=True) is False
+
+    def test_force_still_respects_max_depth(self) -> None:
+        from pokepoke.agents.decomposition_agent import should_decompose
+        item = make_work_item(item_id="task-deep")
+        item.metadata = {"decomposition_depth": 3}
+        assert should_decompose(
+            item, failure_count=0, threshold=3, enabled=True,
+            max_depth=3, force=True,
+        ) is False
 
 
 class TestConfigDefaults:

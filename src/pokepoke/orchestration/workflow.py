@@ -281,6 +281,14 @@ def process_work_item(  # noqa: C901
                 _gt.finish_run("failed")
                 _comment(item.id, f"Work agent returned '{outcome.status}': {reason}")
                 logger.info("Work agent fail-fast: status=%s reason=%s — skipping gate", outcome.status, reason)
+                if outcome.status == "too_large":
+                    context_parts = [f"Work agent reason: {reason}"]
+                    if outcome.suggested_split:
+                        context_parts.append("Suggested split: " + "; ".join(outcome.suggested_split))
+                    _maybe_decompose(
+                        item, copilot_failure_count, gate_rejection_count, global_config,
+                        too_large_context="\n".join(context_parts),
+                    )
                 break
 
             from pokepoke.beads.reconciliation import is_beads_item_closed

@@ -13,6 +13,14 @@ You are a decomposition agent. A work item has failed multiple times and needs t
 **Description:**
 {{description}}
 
+{{#too_large_context}}
+## Work Agent Analysis
+
+The work agent already attempted this item and determined it is too large to complete in a single pass. Use the agent's analysis below to guide your decomposition — it has already examined the codebase and identified why the item is too large:
+
+{{too_large_context}}
+{{/too_large_context}}
+
 ## Your Task
 
 Analyze this work item AND the codebase to determine why it keeps failing, then decompose it into smaller sub-tasks that each agent can complete in a single pass.

@@ -77,8 +77,8 @@ class TestMaybeDecompose:
             patch(PATCH_RUN_DECOMPOSITION, return_value=decomp_result) as mock_run,
         ):
             _maybe_decompose(item, copilot_failure_count=2, gate_rejection_count=1, config=config)
-            mock_should.assert_called_once_with(item, 3, 3, True)
-            mock_run.assert_called_once_with(item, 3)
+            mock_should.assert_called_once_with(item, 3, 3, True, force=False)
+            mock_run.assert_called_once_with(item, 3, too_large_context=None)
 
     def test_skipped_when_disabled(self) -> None:
         """When config disables decomposition, should_decompose returns False."""
@@ -142,7 +142,7 @@ class TestMaybeDecompose:
         ):
             _maybe_decompose(item, copilot_failure_count=3, gate_rejection_count=2, config=config)
             # total_failures = 3 + 2 = 5
-            mock_run.assert_called_once_with(item, 5)
+            mock_run.assert_called_once_with(item, 5, too_large_context=None)
 
 
 # ═══════════════════════════════════════════════════════════════════════════

@@ -135,14 +135,16 @@ def _maybe_retry_copilot(
 def _maybe_decompose(
     item: BeadsWorkItem, copilot_failure_count: int,
     gate_rejection_count: int, config: object,
+    *, too_large_context: str | None = None,
 ) -> None:
     """Check if a repeatedly failing item should be decomposed into sub-tasks."""
     from pokepoke.agents.decomposition_agent import run_decomposition, should_decompose
     total_failures = copilot_failure_count + gate_rejection_count
     threshold = int(getattr(config, 'decomposition_failure_threshold', 3))
     enabled = bool(getattr(config, 'decomposition_enabled', True))
-    if should_decompose(item, total_failures, threshold, enabled):
-        decomp_result = run_decomposition(item, total_failures)
+    force = too_large_context is not None
+    if should_decompose(item, total_failures, threshold, enabled, force=force):
+        decomp_result = run_decomposition(item, total_failures, too_large_context=too_large_context)
         if decomp_result.success:
             logger.info("\n🔀 Item %s decomposed into %d sub-tasks",
                         item.id, len(decomp_result.child_ids))
