@@ -197,6 +197,7 @@ def dispatch_items(
     process_item_fn: ProcessItemFn,
     lock: threading.Lock | None = None,
     future_start_times: dict[_Future, float] | None = None,
+    repo_path: str | None = None,
 ) -> int:
     """Select, claim, and submit work items. Returns updated worker_counter.
 
@@ -252,7 +253,7 @@ def dispatch_items(
                 submit_failed = True
                 break
             try:
-                fut = executor.submit(process_item_fn, item, run_logger, semaphore, worker_name)
+                fut = executor.submit(process_item_fn, item, run_logger, semaphore, worker_name, repo_path)
             except Exception as e:
                 logger.warning(f"Failed to submit work item {item.id} to executor: {e}")
                 run_logger.log_orchestrator(f"Executor submit failed for {item.id}: {e}", level="ERROR")

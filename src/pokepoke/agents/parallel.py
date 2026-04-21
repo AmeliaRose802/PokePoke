@@ -261,6 +261,7 @@ def _run_loop_iteration(
         futures, semaphore, executor, run_logger, state.worker_counter,
         _build_worker_name, _parallel_process_item, lock,
         future_start_times,
+        repo_path=str(main_repo_path) if main_repo_path else None,
     )
 
     action = _check_loop_exit(

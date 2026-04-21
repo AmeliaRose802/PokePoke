@@ -352,6 +352,7 @@ class ProcessItemFn(Protocol):
         run_logger: RunLogger,
         semaphore: threading.Semaphore,
         worker_agent_name: str | None = None,
+        repo_path: str | None = None,
     ) -> WorkItemResult:
         """Process a work item and return the result."""
         ...

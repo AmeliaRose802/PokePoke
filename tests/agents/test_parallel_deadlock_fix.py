@@ -2,7 +2,7 @@
 
 import concurrent.futures
 import time
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from pokepoke.agents.parallel_worker_pool import (
     _check_agent_health,
@@ -80,7 +80,8 @@ def test_health_monitoring_cancels_multiple_stalled_agents():
         stalled_futures.append(fut)
 
     # Run health check (it will try to cancel stalled futures)
-    stalled_count = _check_agent_health(futures, future_start_times, run_logger, lock=None)
+    with patch("pokepoke.agents.parallel_worker_pool._safe_unassign"):
+        stalled_count = _check_agent_health(futures, future_start_times, run_logger, lock=None)
 
     assert stalled_count == 3
 
