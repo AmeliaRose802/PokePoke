@@ -191,7 +191,14 @@ def _handle_gate_infra_failure(
 def _handle_gate_verdict(
     ctx: GateLoopContext, gt: GateStepTracker, gate_reason: str, gate_agent_runs: int,
 ) -> GateLoopResult:
-    """Handle a definite gate verdict (approval, unclear, or rejection)."""
+    """Handle a definite gate verdict (approval, unclear, or rejection).
+
+    Special-case: if the gate agent explicitly signals `too_large` in its
+    verdict (e.g. via JSON status) then trigger immediate decomposition and
+    skip further retry loops. The gate agent's analysis is passed as the
+    `too_large_context` to the decomposition agent so it can use the gate's
+    perspective (partial implementation + requirements) when creating subtasks.
+    """
     from pokepoke.beads.reconciliation import worktree_branch_has_commits
 
     # Unclear verdict — fallback accept if there are commits
@@ -217,6 +224,26 @@ def _handle_gate_verdict(
 
     logger.error(f"\n❌ Gate Agent rejected ({rejection_count}/{ctx.max_gate_rejections}): {gate_reason}")
     ctx.comment_fn(ctx.item.id, f"Gate Agent Rejection ({rejection_count}/{ctx.max_gate_rejections}):\n{gate_reason}")
+
+    # If the gate explicitly signalled the item is too large, trigger
+    # immediate decomposition using the gate agent's analysis as context.
+    if "too_large" in gate_reason.lower():
+        try:
+            from pokepoke.agents.decomposition_agent import run_decomposition
+            logger.info("\n🔀 Gate Agent signalled 'too_large' — invoking decomposition with gate context")
+            decomp_result = run_decomposition(ctx.item, rejection_count, too_large_context=gate_reason)
+            if decomp_result.success:
+                logger.info("\n🔀 Decomposition created %d child items for %s", len(decomp_result.child_ids), ctx.item.id)
+            else:
+                logger.warning("\n🔀 Decomposition attempted but did not produce children: %s", decomp_result.reason)
+        except Exception as exc:
+            logger.exception("\n🔀 Decomposition failed while handling too_large gate verdict: %s", exc)
+
+        gt.gate_rejected_max(rejection_count)
+        return GateLoopResult(
+            gate_success=False, gate_rejection_count=rejection_count,
+            gate_agent_runs=gate_agent_runs, exceeded_max=True,
+        )
 
     if rejection_count >= ctx.max_gate_rejections:
         logger.error(f"\n❌ Exceeded max gate rejections ({rejection_count}/{ctx.max_gate_rejections}) for {ctx.item.id}")

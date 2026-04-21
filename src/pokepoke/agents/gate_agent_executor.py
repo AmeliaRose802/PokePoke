@@ -102,20 +102,38 @@ def _try_parse_verdict_json(raw: str) -> tuple[bool, str, bool] | None:
         return None
 
     status = data.get("status")
+    # Normalize common fields
+    reason_field = data.get("reason", "Verification failed")
+    details = data.get("details", "")
+
     if status == "success":
         message = data.get("message", "Verification successful")
-        reason = data.get("reason", "")
         recommendation = data.get("recommendation", "")
         full_message = message
-        if reason:
-            full_message = f"[{reason}] {message}"
+        if reason_field:
+            full_message = f"[{reason_field}] {message}"
         if recommendation:
             full_message += f"\nRecommendation: {recommendation}"
         return True, full_message, False
-    elif status is not None:
-        reason = data.get("reason", "Verification failed")
-        details = data.get("details", "")
-        return False, f"{reason}\nDetails: {details}", False
+
+    # Special-case: too_large verdict (explicit signal to decompose)
+    if status == "too_large":
+        suggested = data.get("suggested_split") or data.get("suggested_splits")
+        parts: list[str] = []
+        if reason_field:
+            parts.append(reason_field)
+        if details:
+            parts.append(f"Details: {details}")
+        if suggested:
+            if isinstance(suggested, list):
+                parts.append("Suggested split: " + "; ".join(map(str, suggested)))
+            else:
+                parts.append("Suggested split: " + str(suggested))
+        return False, "too_large: " + " \n".join(parts), False
+
+    if status is not None:
+        # Preserve prior behavior for generic failures: return the reason and details
+        return False, f"{reason_field}\nDetails: {details}", False
     return None
 
 
