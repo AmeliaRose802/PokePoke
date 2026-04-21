@@ -31,18 +31,6 @@ def rollback_merge_commit(reason: str, cwd: str | None = None) -> bool:
         return False
 
 
-def rollback_and_fail(reason: str, cwd: str | None = None) -> MergeResult:
-    """Roll back the merge commit and return a failure MergeResult."""
-    rolled_back = rollback_merge_commit(reason, cwd=cwd)
-    if not rolled_back:
-        logger.critical(
-            "ROLLBACK FAILED after %s — "
-            "repo has a merge commit that could not be undone. Manual intervention required.",
-            reason,
-        )
-    return MergeResult(success=False, rollback_failed=not rolled_back)
-
-
 def log_merge_failure(merge_error: str | None, unmerged_files: list[str]) -> None:
     """Log details about a merge failure."""
     if unmerged_files:

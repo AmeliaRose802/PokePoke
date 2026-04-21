@@ -111,11 +111,6 @@ def register_client_pid(client: Any, registry: ActivePidRegistry) -> int | None:
     return pid
 
 
-def deregister_client_pid(pid: int | None, registry: ActivePidRegistry) -> None:
-    """Deregister a copilot PID if one was registered."""
-    if pid is not None:
-        registry.deregister(pid)
-
 def kill_orphaned_copilot_processes(
     active_pids: frozenset[int] | set[int] | None = None,
 ) -> int:

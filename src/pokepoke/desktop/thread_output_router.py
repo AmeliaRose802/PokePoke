@@ -74,8 +74,3 @@ class ThreadOutputRouter:
     def set_thread_line_buffer(buffer: str) -> None:
         """Set the current thread's line buffer."""
         _thread_output.line_buffer = buffer
-
-    @staticmethod
-    def set_thread_style(style: str | None) -> None:
-        """Set the current thread's output style."""
-        _thread_output.style = style
