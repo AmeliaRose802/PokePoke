@@ -99,6 +99,7 @@ def test_handle_worktree_merge_retries_after_successful_cleanup(
     mock_add_manifest.assert_called_once()  # ensure manifest still tracks preserved state before cleanup
 
 
+@patch("pokepoke.utils.shutdown.request_shutdown")
 @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent")
@@ -110,9 +111,11 @@ def test_handle_worktree_merge_cleanup_retry_respects_second_failure(
     mock_invoke_cleanup,
     mock_merge_worktree,
     mock_remove_from_manifest,
+    mock_shutdown,
 ) -> None:
-    """If the repo is still not ready after cleanup, we should exit early."""
-    mock_check_ready.side_effect = [(False, "dirty state"), (False, "still dirty")]
+    """If repo stays dirty after all 3 cleanup retries, halt the orchestrator."""
+    # First check fails, then all re-checks after cleanup also fail
+    mock_check_ready.side_effect = [(False, "dirty state")] + [(False, "still dirty")] * 3
     mock_invoke_cleanup.return_value = (True, None)
 
     success, cleaned = handle_worktree_merge(
@@ -124,7 +127,8 @@ def test_handle_worktree_merge_cleanup_retry_respects_second_failure(
     assert cleaned is False
     mock_merge_worktree.assert_not_called()
     mock_remove_from_manifest.assert_not_called()
-    mock_add_manifest.assert_called_once()
+    assert mock_invoke_cleanup.call_count == 3, "Should retry cleanup 3 times"
+    mock_shutdown.assert_called_once()  # halt on exhausted retries
 
 
 @patch("pokepoke.git.merge_conflict.abort_merge")

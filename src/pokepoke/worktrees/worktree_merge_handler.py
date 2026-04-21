@@ -69,19 +69,36 @@ def handle_worktree_merge(
     # --- Pre-lock checks (read-only on isolated worktree, no lock needed) ---
 
     # Step 4: worktree clean?
+    # If dirty at this point, it's a pipeline invariant violation — the cleanup
+    # phase already ran after the work agent.  CRITICAL + halt.
     tracker.begin_step("4", "Checking worktree cleanliness (pre-lock)…")
     if not is_worktree_clean(ctx.worktree_path):
-        logger.error(
-            "❌ Worktree %s has uncommitted changes — failing fast without acquiring merge lock",
-            ctx.worktree_path,
+        # Collect git status for diagnostics
+        _diag = ""
+        try:
+            from pokepoke.git.git_helpers import run_git as _diag_run_git
+            _diag = _diag_run_git(
+                ["git", "-C", str(ctx.worktree_path), "status", "--short"],
+            ).stdout.strip()
+        except Exception:
+            _diag = "<unavailable>"
+
+        logger.critical(
+            "🚨 INVARIANT VIOLATION: Worktree %s has uncommitted changes at merge time. "
+            "The cleanup phase should have handled this — this indicates a pipeline bug. "
+            "Halting orchestrator. Manual investigation required.\n"
+            "git status:\n%s",
+            ctx.worktree_path, _diag,
         )
-        tracker.fail_step("4", "Worktree has uncommitted changes")
+        tracker.fail_step("4", "CRITICAL: worktree dirty after cleanup phase — pipeline bug")
         tracker.finish_run("failed")
         add_uncleaned_worktree(
             ctx.agent_id,
             str(ctx.worktree_path),
-            "Worktree has uncommitted changes at merge time (pre-lock check)",
+            "CRITICAL: Worktree dirty at merge time — invariant violation",
         )
+        from pokepoke.utils.shutdown import request_shutdown
+        request_shutdown()
         return False, False
     tracker.complete_step("4", "Worktree is clean")
 
@@ -192,35 +209,55 @@ def perform_worktree_merge(  # noqa: C901
             f"Main repo not ready for merge: {error_msg}",
         )
 
-        tracker.fail_step("2", f"Not ready: {error_msg}")
-        tracker.begin_step("3b", "Invoking cleanup agent…")
-        logger.info("   Invoking cleanup agent to resolve uncommitted changes before merge...")
-        with cleanup_lock():
-            # Don't wait for merge lock since we already hold it
-            # Pass the main repo path so cleanup targets the right directory
-            cleanup_success, _ = invoke_cleanup_agent(
-                ctx.agent_item,
-                cwd=repo_cwd,
-                parent_agent_id=ctx.parent_agent_id,
-                wait_for_merge=False,
-                item_logger=ctx.item_logger,
-            )
+        # Retry cleanup agent up to _MAX_CLEANUP_RETRIES times.
+        # If the main repo can't be cleaned, NO merges can succeed — halt.
+        _MAX_CLEANUP_RETRIES = 3
+        cleaned_up = False
+        for attempt in range(1, _MAX_CLEANUP_RETRIES + 1):
+            tracker.fail_step("2", f"Not ready: {error_msg}")
+            tracker.begin_step("3b", f"Invoking cleanup agent (attempt {attempt}/{_MAX_CLEANUP_RETRIES})…")
+            logger.info("   Invoking cleanup agent to resolve uncommitted changes (attempt %d/%d)...", attempt, _MAX_CLEANUP_RETRIES)
+            with cleanup_lock():
+                cleanup_success, _ = invoke_cleanup_agent(
+                    ctx.agent_item,
+                    cwd=repo_cwd,
+                    parent_agent_id=ctx.parent_agent_id,
+                    wait_for_merge=False,
+                    item_logger=ctx.item_logger,
+                )
 
-        if cleanup_success:
-            tracker.complete_step("3b", "Cleanup agent succeeded")
+            if not cleanup_success:
+                logger.error("   Cleanup agent failed (attempt %d/%d).", attempt, _MAX_CLEANUP_RETRIES)
+                tracker.fail_step("3b", f"Cleanup agent failed (attempt {attempt})")
+                continue
+
+            tracker.complete_step("3b", f"Cleanup agent succeeded (attempt {attempt})")
             tracker.begin_step("3c", "Re-checking main repo…")
             logger.info("   Cleanup successful, retrying merge check...")
             is_ready, error_msg = check_main_repo_ready_for_merge(cwd=repo_cwd)
-            if not is_ready:
-                logger.error(f"   Still failing after cleanup: {error_msg}")
-                tracker.fail_step("3c", f"Still dirty: {error_msg}")
-                return False, False
-            tracker.complete_step("3c", "Repo clean after cleanup")
-            logger.info("   ✅ Repo is ready after cleanup, continuing with merge.")
-            remove_from_manifest(ctx.agent_id)
-        else:
-            logger.error("   Cleanup failed.")
-            tracker.fail_step("3b", "Cleanup agent failed")
+            if is_ready:
+                tracker.complete_step("3c", "Repo clean after cleanup")
+                logger.info("   ✅ Repo is ready after cleanup, continuing with merge.")
+                remove_from_manifest(ctx.agent_id)
+                cleaned_up = True
+                break
+            else:
+                logger.error("   Still failing after cleanup attempt %d: %s", attempt, error_msg)
+                tracker.fail_step("3c", f"Still dirty after attempt {attempt}: {error_msg}")
+
+        if not cleaned_up:
+            # All retries exhausted — this is an invariant violation.
+            # No further merges can succeed while the main repo is dirty.
+            from pokepoke.utils.shutdown import request_shutdown
+            logger.critical(
+                "🚨 MAIN REPO UNCLEANABLE after %d cleanup attempts for %s. "
+                "No further merges can succeed while the main repo has dirty files. "
+                "Halting orchestrator. Manual cleanup required.\n"
+                "Last error: %s",
+                _MAX_CLEANUP_RETRIES, ctx.agent_id, error_msg,
+            )
+            tracker.finish_run("failed")
+            request_shutdown()
             return False, False
 
     # Step 2 passed if we reach here without cleanup
