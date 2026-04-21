@@ -1459,34 +1459,3 @@ class TestStoreDiscoveries:
             mock_cfg.return_value.mcp_server.memory_enabled = True
             # Should not raise
             _store_discoveries(item, Path("/wt"))
-
-
-# ═══════════════════════════════════════════════════════════════════════════
-# DefaultBeadsClient.fail_task protocol contract
-# ═══════════════════════════════════════════════════════════════════════════
-
-
-class TestDefaultBeadsClientFailTask:
-    """Tests for DefaultBeadsClient.fail_task protocol method."""
-
-    def test_delegates_to_beads_management(self) -> None:
-        """DefaultBeadsClient.fail_task delegates to beads_management.fail_task."""
-        from pokepoke.protocols import DefaultBeadsClient
-        with (
-            patch("pokepoke.beads.beads_management.add_comment", return_value=True),
-            patch("pokepoke.beads.beads_item_stats_store.record_event"),
-        ):
-            client = DefaultBeadsClient()
-            result = client.fail_task("PP-1", "test reason", agent_type="gate")
-            assert result is True
-
-    def test_passes_agent_type_through(self) -> None:
-        """agent_type parameter is forwarded correctly."""
-        from pokepoke.protocols import DefaultBeadsClient
-        with (
-            patch("pokepoke.beads.beads_management.add_comment", return_value=True),
-            patch("pokepoke.beads.beads_item_stats_store.record_event") as mock_record,
-        ):
-            client = DefaultBeadsClient()
-            client.fail_task("PP-2", "gate rejected", agent_type="gate")
-            mock_record.assert_called_once_with("failed", "PP-2", "gate", path=None, repo_name="")

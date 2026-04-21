@@ -297,7 +297,7 @@ def run_parallel_loop(
 ) -> int:
     """Run the parallel orchestrator loop with a ThreadPoolExecutor.
 
-    This function implements the :class:`~pokepoke.protocols.ParallelLoop` Protocol.
+    This is the parallel orchestrator loop entry point.
 
     Args:
         external_lock: Optional external lock for failed_claim_ids synchronization.
