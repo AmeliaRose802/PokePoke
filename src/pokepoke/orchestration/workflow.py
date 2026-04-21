@@ -6,7 +6,6 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pokepoke.agents.agent_context import get_agent_name
-from pokepoke.agents.agent_runner import run_gate_agent  # re-exported via workflow_helpers
 from pokepoke.beads.beads import add_comment, assign_and_sync_item, defer_item
 from pokepoke.config import get_config
 from pokepoke.desktop import terminal_ui
@@ -16,6 +15,8 @@ from pokepoke.models.copilot_sdk import build_prompt_from_work_item
 from pokepoke.models.model_selection import get_assignment_for_item, select_model_for_item
 from pokepoke.models.sdk_helpers import build_resume_prompt
 from pokepoke.orchestration.finalization import ResultContext, _finalize_item_result
+from pokepoke.orchestration.gate_agent_loop import GateLoopContext, run_gate_loop
+from pokepoke.orchestration.gate_step_tracker import get_gate_step_tracker
 from pokepoke.orchestration.work_item_selection import select_work_item  # noqa: F401  # re-exported
 from pokepoke.orchestration.work_item_session import WorkItemSession
 from pokepoke.orchestration.worker_context import (
@@ -31,7 +32,6 @@ from pokepoke.orchestration.workflow_helpers import (
     _log_failure,
     _maybe_decompose,
     _maybe_retry_copilot,
-    evaluate_gate_verdict,
     run_cleanup_with_timeout,
     setup_worktree,
 )
@@ -46,8 +46,8 @@ if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import RunLogger
 logger = logging.getLogger(__name__)
 _FAIL_FAST_STATUSES = frozenset({"blocked", "needs_clarification", "too_large"})
-_MAX_GATE_CRASH_RETRIES = _MAX_GATE_TIMEOUT_RETRIES = 3
 _LOCK_TIMEOUT_PER_AGENT, _BACKOFF_BASE_SECONDS, _BACKOFF_MAX_SECONDS = 120.0, 30, 240
+
 
 @dataclass
 class WorkItemConfig:
@@ -108,13 +108,16 @@ def process_work_item(  # noqa: C901
 
         logger.info("\n\U0001f512 Claiming work item...")
         if not _assign(item.id):
+
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason="Failed to assign work item")
         _session = WorkItemSession(item_id=item.id, agent_name=get_agent_name(default="pokepoke"))
         _session._assigned = True
         worktree_path = setup_worktree(item, lock_timeout=worktree_lock_timeout,
             run_logger=run_logger, item_logger=item_logger, repo_path=cfg.repo_path)
+
         if worktree_path is None:
+
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason="Failed to create worktree")
         _session.worktree_path = str(worktree_path)
@@ -141,9 +144,11 @@ def process_work_item(  # noqa: C901
         _get_comments = cfg.beads_client.get_item_comments if cfg.beads_client else None
         prior_contexts = get_worker_contexts(item.id, get_comments_fn=_get_comments)
         previous_worker_context = format_worker_context_for_prompt(prior_contexts)
+        _gt = get_gate_step_tracker()
 
         while not is_shutting_down():
             elapsed = time.time() - start_time
+            _gt.start_work(base_agent_id, item.id, work_agent_iteration, gate_rejection_count)
             if timeout_seconds > 0 and elapsed >= timeout_seconds:
                 timeout_restart_count += 1
                 if timeout_restart_count > cfg.max_timeout_restarts:
@@ -216,22 +221,27 @@ def process_work_item(  # noqa: C901
                         item_logger=item_logger, model=selected_model, cwd=worktree_cwd,
                         session_id=resume_session_id, is_resume=is_resume)
             request_count += result.attempt_count
+            _gt.work_done()
 
             current_stats = _extract_agent_stats(result)
             if current_stats:
                 accumulated_stats.accumulate(current_stats)
 
             # Invariant: Copilot SDK backend always sets session_id on all exit paths.
+            # If missing, something went fundamentally wrong in SDK plumbing — don't mask it.
             if backend_provider == "copilot" and result.session_id is None:
                 from pokepoke.utils.shutdown import request_shutdown
                 logger.critical(
                     "🚨 INVARIANT VIOLATION: Copilot SDK returned session_id=None for %s. "
-                    "Halting orchestrator.  success=%s  error=%s  output_len=%s",
+                    "This indicates a bug in the SDK plumbing — all exit paths should assign session_id. "
+                    "Halting orchestrator to avoid masking the root cause.\n"
+                    "  success=%s  error=%s  output_len=%s",
                     item.id, result.success, result.error,
                     len(result.output) if result.output else 0,
                 )
                 request_shutdown()
                 break
+
             is_process_crash = result.error and (
                 "process died" in result.error.lower() or "exited unexpectedly" in result.error.lower())
 
@@ -254,138 +264,80 @@ def process_work_item(  # noqa: C901
                     result, copilot_failure_count, global_config.max_copilot_failure_retries, run_logger, item.id)
                 if retry:
                     last_feedback = feedback
-                    last_retry_was_gate_feedback = False
+                    last_retry_was_gate_feedback = False  # Not a gate rejection
+                    _gt.finish_run("failed")
                     continue
                 _maybe_decompose(item, copilot_failure_count, gate_rejection_count, global_config)
+                _gt.finish_run("failed")
                 break
 
             _log_commit_status(worktree_cwd)
+
             outcome = result.work_agent_outcome
             if outcome and outcome.status in _FAIL_FAST_STATUSES:
                 reason = outcome.reason or outcome.status
+                _gt.complete_step("2")
+                _gt.fail_step("FF", f"{outcome.status}: {reason}")
+                _gt.finish_run("failed")
                 _comment(item.id, f"Work agent returned '{outcome.status}': {reason}")
                 logger.info("Work agent fail-fast: status=%s reason=%s — skipping gate", outcome.status, reason)
                 break
+
             from pokepoke.beads.reconciliation import is_beads_item_closed
             if is_beads_item_closed(item.id):
                 logger.warning("\n✅ Agent already closed beads item — skipping cleanup and gate checks")
+                _gt.item_closed()
                 gate_success = True
                 break
+
+            _gt.cleanup_done()
             cleanup_success, cleanup_runs = run_cleanup_with_timeout(
                 item, result, pokepoke_root, start_time, timeout_seconds, cfg.timeout_hours,
                 worktree_cwd, parent_agent_id=base_agent_id, item_logger=item_logger)
             cleanup_agent_runs += cleanup_runs
 
             if not cleanup_success:
+                _gt.mark_failure("3")
                 result.success = False
                 _log_failure(run_logger, item_logger, request_count)
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
                                     failure_reason="Cleanup agent failed to resolve uncommitted changes")
+
+            _gt.complete_step("3")
             if not global_config.gate_agent_enabled:
                 logger.warning("\n⏭️  Gate Agent disabled via config — skipping verification")
+                _gt.gate_disabled()
                 gate_success = True
                 break
 
-            gate_crash_attempts = gate_timeout_attempts = 0
-            gate_resume_session_id: str | None = None
-            _gate_resume_output: str | None = None
-            while gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
-                from pokepoke.git.git_operations import build_handoff_context
-                handoff_ctx = build_handoff_context(cwd=worktree_cwd, work_agent_outcome=result.work_agent_outcome)
-                gate_iteration = gate_agent_runs + 1
-                gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
-                gate_is_resume = gate_resume_session_id is not None
-                resume_in_place = gate_is_resume
-                gate_crashed = gate_timed_out = False
-                try:
-                    with terminal_ui.ui.agent_output_for(gate_agent_id):
-                        if resume_in_place:
-                            terminal_ui.ui.push_agent_status(
-                                gate_agent_id, "Gate Agent",
-                                iteration=gate_iteration, status="running",
-                                parent_agent_id=base_agent_id,
-                                work_item_id=item.id, work_item_title=item.title,
-                                agent_type="gate", resume_in_place=True,
-                            )
-                        gate_result = run_gate_agent(
-                            item, cwd=worktree_cwd, work_model=selected_model,
-                            handoff_context=handoff_ctx,
-                            agent_id=gate_agent_id, agent_iteration=gate_iteration,
-                            parent_agent_id=base_agent_id,
-                            item_logger=item_logger,
-                            session_id=gate_resume_session_id,
-                            is_resume=gate_is_resume,
-                        )
-                    gate_success = gate_result.success
-                    gate_reason = gate_result.reason
-                    gate_crashed = gate_result.crashed
-                    gate_timed_out = gate_result.is_timeout
-                except Exception as e:
-                    logger.warning(f"Gate agent raised exception: {e}", exc_info=True)
-                    gate_agent_runs += 1
-                    gate_crash_attempts += 1
-                    terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
-                        iteration=gate_agent_runs, status="failed",
-                        parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
-                        agent_type="gate")
-                    if gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
-                        logger.error(f"\n\u26a0\ufe0f  Gate crashed ({gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {e}, retrying...")
-                        gate_resume_session_id = None
-                        _gate_resume_output = None
-                        continue
-                    logger.error(f"\n❌ Gate Agent crashed {gate_crash_attempts} times — giving up")
-                    raise
-
-                gate_agent_runs += 1
-                terminal_ui.ui.push_agent_status(gate_agent_id, "Gate Agent",
-                    iteration=gate_agent_runs, status="success" if gate_success else "failed",
-                    parent_agent_id=base_agent_id, work_item_id=item.id, work_item_title=item.title,
-                    agent_type="gate")
-
-                if gate_timed_out:
-                    gate_timeout_attempts += 1
-                    if gate_timeout_attempts < _MAX_GATE_TIMEOUT_RETRIES:
-                        gate_resume_session_id = gate_result.session_id
-                        _gate_resume_output = gate_result.last_output_summary
-                        logger.info(f"\n\u23f1\ufe0f  Gate timed out ({gate_timeout_attempts}/{_MAX_GATE_TIMEOUT_RETRIES}), {'resuming' if gate_resume_session_id else 'retrying'}...")
-                        continue
-                    logger.error(f"\n❌ Gate Agent timed out {gate_timeout_attempts} times — giving up")
-                    _comment(item.id, f"Gate Agent timed out {gate_timeout_attempts} times:\n{gate_reason}")
-                    break
-
-                if gate_crashed:
-                    gate_crash_attempts += 1
-                    gate_resume_session_id = None
-                    _gate_resume_output = None
-                    if gate_crash_attempts < _MAX_GATE_CRASH_RETRIES:
-                        logger.error(f"\n\u26a0\ufe0f  Gate crashed ({gate_crash_attempts}/{_MAX_GATE_CRASH_RETRIES}): {gate_reason}, retrying...")
-                        continue
-                    logger.error(f"\n❌ Gate Agent crashed {gate_crash_attempts} times — giving up")
-                    _comment(item.id, f"Gate Agent crashed {gate_crash_attempts} times:\n{gate_reason}")
-                break  # Not a crash/timeout — exit the gate retry loop
-
-            verdict = evaluate_gate_verdict(
-                gate_success, gate_crashed, gate_timed_out, gate_reason,
-                item.id, pokepoke_root, gate_rejection_count, max_gate_rejections,
-                _comment, _defer)
-            if verdict.accept:
+            _gt.gate_start()
+            gate_loop_result = run_gate_loop(GateLoopContext(
+                item=item, result=result, worktree_cwd=worktree_cwd,
+                pokepoke_root=pokepoke_root, selected_model=selected_model,
+                base_agent_id=base_agent_id, max_gate_rejections=max_gate_rejections,
+                gate_rejection_count=gate_rejection_count, gate_agent_runs=gate_agent_runs,
+                item_logger=item_logger, comment_fn=_comment, defer_fn=_defer,
+            ), _gt)
+            gate_agent_runs = gate_loop_result.gate_agent_runs
+            gate_rejection_count = gate_loop_result.gate_rejection_count
+            if gate_loop_result.gate_success:
                 gate_success = True
                 backoff_delay = _BACKOFF_BASE_SECONDS
                 break
-            if verdict.reject_capped:
-                _maybe_decompose(item, copilot_failure_count, verdict.rejection_count, config)
+            if gate_loop_result.exceeded_max:
+                _maybe_decompose(item, copilot_failure_count, gate_rejection_count, config)
                 result.success = False
                 result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
                 _log_failure(run_logger, item_logger, request_count)
                 break
-            if not verdict.reason:
-                break  # Infra failure without fallback
-            gate_rejection_count = verdict.rejection_count
-            resume_session_id = None
-            resume_output_summary = None
-            last_feedback = verdict.reason
-            last_retry_was_gate_feedback = True
+            if gate_loop_result.feedback:
+                resume_session_id = None
+                resume_output_summary = None
+                last_feedback = gate_loop_result.feedback
+                last_retry_was_gate_feedback = True
+            else:
+                break  # Gate infra failure with no fallback
 
         # Save worker context for future workers when this attempt failed
         if not result.success:

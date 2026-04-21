@@ -124,6 +124,11 @@ class DesktopAPI:
         from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
         return get_merge_step_tracker().get_state()
 
+    def get_gate_flow_state(self) -> dict[str, Any]:
+        """Return the live quality-gate workflow step tracker state for the UI."""
+        from pokepoke.orchestration.gate_step_tracker import get_gate_step_tracker
+        return get_gate_step_tracker().get_state()
+
     def get_state(self) -> dict[str, Any]:
         """State snapshot + new log entries since last poll (single IPC call)."""
         from pokepoke.config import get_config

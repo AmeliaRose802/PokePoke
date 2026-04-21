@@ -90,7 +90,7 @@ function App() {
     setShowSettings(false);
   }, []);
 
-  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats, getMergeFlowState } = bridge;
+  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats, getMergeFlowState, getGateFlowState } = bridge;
 
   const handleSpawnAgent = useCallback(async () => {
     const result = await bridge.spawnAgent();
@@ -305,6 +305,24 @@ function App() {
               </summary>
               <div className="orchestrator-collapsible-content">
                 <MergeFlowchartView getMergeFlowState={getMergeFlowState} />
+              </div>
+            </details>
+          </ErrorBoundary>
+
+          {/* Quality gate workflow visualization */}
+          <ErrorBoundary>
+            <details className="orchestrator-collapsible">
+              <summary className="orchestrator-collapsible-summary">
+                <span className="orchestrator-collapsible-title">🔍 Quality Gate</span>
+              </summary>
+              <div className="orchestrator-collapsible-content">
+                <MergeFlowchartView
+                  getMergeFlowState={getGateFlowState}
+                  title="Quality Gate"
+                  icon="🔍"
+                  testIdPrefix="gate"
+                  emptyLabel="No gate activity yet."
+                />
               </div>
             </details>
           </ErrorBoundary>

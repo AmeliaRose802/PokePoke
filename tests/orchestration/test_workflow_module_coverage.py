@@ -359,7 +359,7 @@ class TestProcessWorkItemGateAgentEnabled:
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 1))
         gate_ok = GateAgentResult(success=True, reason="looks good", crashed=False, is_timeout=False)
-        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", lambda *a, **kw: gate_ok)
+        monkeypatch.setattr("pokepoke.orchestration.gate_agent_loop.run_gate_agent", lambda *a, **kw: gate_ok)
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=True, request_count=1), True),
@@ -388,7 +388,7 @@ class TestProcessWorkItemGateAgentEnabled:
             if gate_call["n"] == 1:
                 return GateAgentResult(success=False, reason="tests fail", crashed=False, is_timeout=False)
             return GateAgentResult(success=True, reason="ok", crashed=False, is_timeout=False)
-        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", fake_gate)
+        monkeypatch.setattr("pokepoke.orchestration.gate_agent_loop.run_gate_agent", fake_gate)
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=True, request_count=2), True),
@@ -406,7 +406,7 @@ class TestProcessWorkItemGateAgentEnabled:
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
         def _raise(*a, **kw): raise RuntimeError("infra crash")
-        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", _raise)
+        monkeypatch.setattr("pokepoke.orchestration.gate_agent_loop.run_gate_agent", _raise)
 
         with pytest.raises(RuntimeError, match="infra crash"):
             process_work_item(_item(), interactive=False)
@@ -423,7 +423,7 @@ class TestProcessWorkItemGateAgentEnabled:
             success=False, reason="timed out", crashed=False, is_timeout=True,
             session_id="gate-sess-1", last_output_summary="partial",
         )
-        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", lambda *a, **kw: gate_timeout)
+        monkeypatch.setattr("pokepoke.orchestration.gate_agent_loop.run_gate_agent", lambda *a, **kw: gate_timeout)
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=False, request_count=1), True),
@@ -443,7 +443,7 @@ class TestProcessWorkItemGateAgentEnabled:
         gate_crash = GateAgentResult(
             success=False, reason="segfault", crashed=True, is_timeout=False,
         )
-        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", lambda *a, **kw: gate_crash)
+        monkeypatch.setattr("pokepoke.orchestration.gate_agent_loop.run_gate_agent", lambda *a, **kw: gate_crash)
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=False, request_count=1), True),
@@ -463,7 +463,7 @@ class TestProcessWorkItemGateAgentEnabled:
         gate_crash = GateAgentResult(
             success=False, reason="output corrupted", crashed=True, is_timeout=False,
         )
-        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", lambda *a, **kw: gate_crash)
+        monkeypatch.setattr("pokepoke.orchestration.gate_agent_loop.run_gate_agent", lambda *a, **kw: gate_crash)
         finalize_called = {}
 
         def mock_finalize(ctx):
@@ -657,7 +657,7 @@ class TestProcessWorkItemFeedbackPaths:
             if gate_n["n"] <= 1:
                 return GateAgentResult(success=False, reason="needs fixes", crashed=False, is_timeout=False)
             return GateAgentResult(success=True, reason="ok", crashed=False, is_timeout=False)
-        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", fake_gate)
+        monkeypatch.setattr("pokepoke.orchestration.gate_agent_loop.run_gate_agent", fake_gate)
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=True, request_count=2), True),
@@ -723,7 +723,7 @@ class TestProcessWorkItemGateResumeInPlace:
             return GateAgentResult(
                 success=False, reason="timed out again", crashed=False, is_timeout=True,
             )
-        monkeypatch.setattr("pokepoke.orchestration.workflow.run_gate_agent", fake_gate)
+        monkeypatch.setattr("pokepoke.orchestration.gate_agent_loop.run_gate_agent", fake_gate)
         monkeypatch.setattr(
             "pokepoke.orchestration.workflow._finalize_item_result",
             lambda *a, **kw: (WorkItemResult(success=False, request_count=1), True),

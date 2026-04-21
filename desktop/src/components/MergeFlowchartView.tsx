@@ -12,6 +12,14 @@ import type { MergeFlowRun, MergeFlowState, MergeStepDef, MergeStepStatus } from
 
 interface Props {
   getMergeFlowState: () => Promise<MergeFlowState | null>;
+  /** Display title (default: "Merge Workflow") */
+  title?: string;
+  /** Icon prefix (default: "🔀") */
+  icon?: string;
+  /** data-testid prefix (default: "merge") */
+  testIdPrefix?: string;
+  /** Label shown when no data (default: "No merge activity yet.") */
+  emptyLabel?: string;
 }
 
 /** Map step status to a CSS modifier class */
@@ -83,7 +91,7 @@ function StepLogPanel({ step, onClose }: { step: { step_id: string; label: strin
   );
 }
 
-export function MergeFlowchartView({ getMergeFlowState }: Props) {
+export function MergeFlowchartView({ getMergeFlowState, title = "Merge Workflow", icon = "🔀", testIdPrefix = "merge", emptyLabel = "No merge activity yet." }: Props) {
   const [flowState, setFlowState] = useState<MergeFlowState | null>(null);
   const [selectedStepId, setSelectedStepId] = useState<string | null>(null);
 
@@ -134,19 +142,19 @@ export function MergeFlowchartView({ getMergeFlowState }: Props) {
 
   if (!flowState || !displayRun) {
     return (
-      <div className="merge-flowchart-view" data-testid="merge-flowchart-view">
+      <div className="merge-flowchart-view" data-testid={`${testIdPrefix}-flowchart-view`}>
         <div className="merge-flowchart-header">
-          <span className="merge-flowchart-title">🔀 Merge Workflow</span>
+          <span className="merge-flowchart-title">{icon} {title}</span>
         </div>
-        <div className="merge-flowchart-empty">No merge activity yet.</div>
+        <div className="merge-flowchart-empty">{emptyLabel}</div>
       </div>
     );
   }
 
   return (
-    <div className="merge-flowchart-view" data-testid="merge-flowchart-view">
+    <div className="merge-flowchart-view" data-testid={`${testIdPrefix}-flowchart-view`}>
       <div className="merge-flowchart-header">
-        <span className="merge-flowchart-title">🔀 Merge Workflow</span>
+        <span className="merge-flowchart-title">{icon} {title}</span>
         <span className={`merge-flowchart-status merge-flowchart-status--${displayRun.outcome}`}>
           {isLive ? "● Live" : displayRun.outcome === "success" ? "✓ Completed" : "✗ Failed"}
         </span>
@@ -171,7 +179,7 @@ export function MergeFlowchartView({ getMergeFlowState }: Props) {
                   className={`merge-node ${statusClass(status)}${isSelected ? " merge-node--selected" : ""}${hasLogs ? " merge-node--has-logs" : ""}`}
                   onClick={() => handleStepClick(def.id)}
                   title={`Step ${def.id}: ${def.label}${hasLogs ? " (click for logs)" : ""}`}
-                  data-testid={`merge-step-${def.id}`}
+                  data-testid={`${testIdPrefix}-step-${def.id}`}
                 >
                   <span className="merge-node-icon">{statusIcon(status)}</span>
                   <span className="merge-node-id">{def.id}</span>

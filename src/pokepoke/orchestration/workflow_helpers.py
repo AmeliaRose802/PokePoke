@@ -7,7 +7,6 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING
 
-from pokepoke.agents.agent_runner import run_gate_agent
 from pokepoke.agents.cleanup_agents import run_cleanup_loop
 from pokepoke.beads.beads import assign_and_sync_item
 from pokepoke.desktop import terminal_ui
@@ -115,49 +114,6 @@ def _pre_loop_validate(
     worktree_cwd = str(worktree_path)
     logger.info(f"   Working directory: {worktree_cwd}\n")
     return None, True, worktree_path, pokepoke_root_cwd, worktree_cwd
-
-
-def _run_gate_check(
-    item: BeadsWorkItem,
-    worktree_cwd: str,
-    selected_model: str,
-    gate_agent_runs: int,
-    base_agent_id: str,
-) -> tuple[bool, str | None, int, bool]:
-    """Invoke the gate agent. Returns (gate_success, gate_reason, updated_gate_runs, crashed).
-
-    ``crashed`` is True when the gate agent failed due to an infrastructure
-    error rather than a deliberate code-quality rejection.
-    """
-    from pokepoke.git.git_operations import build_handoff_context
-    handoff_ctx = build_handoff_context(cwd=worktree_cwd)
-    gate_iteration = gate_agent_runs + 1
-    gate_agent_id = f"{base_agent_id}-gate-{gate_iteration}"
-    try:
-        with terminal_ui.ui.agent_output_for(gate_agent_id):
-            gate_success, gate_reason, _, gate_crashed = run_gate_agent(
-                item, cwd=worktree_cwd, work_model=selected_model,
-                handoff_context=handoff_ctx,
-                agent_id=gate_agent_id, agent_iteration=gate_iteration,
-                parent_agent_id=base_agent_id,
-            )
-    except Exception as e:
-        logger.warning("Gate agent raised exception: %s", e, exc_info=True)
-        gate_agent_runs += 1
-        terminal_ui.ui.push_agent_status(
-            gate_agent_id, "Gate Agent", iteration=gate_agent_runs, status="failed",
-            parent_agent_id=base_agent_id, work_item_id=item.id,
-            work_item_title=item.title, agent_type="gate",
-        )
-        raise
-    gate_agent_runs += 1
-    terminal_ui.ui.push_agent_status(
-        gate_agent_id, "Gate Agent", iteration=gate_agent_runs,
-        status="success" if gate_success else "failed",
-        parent_agent_id=base_agent_id, work_item_id=item.id,
-        work_item_title=item.title, agent_type="gate",
-    )
-    return gate_success, gate_reason, gate_agent_runs, gate_crashed
 
 
 def _extract_agent_stats(result: CopilotResult) -> AgentStats | None:

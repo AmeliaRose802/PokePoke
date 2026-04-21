@@ -17,7 +17,6 @@ from pokepoke.orchestration.workflow_helpers import (
     _log_failure,
     _maybe_retry_copilot,
     _pre_loop_validate,
-    _run_gate_check,
     run_cleanup_with_timeout,
     setup_worktree,
 )
@@ -352,7 +351,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.cleanup_worktree")
     @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.add_comment")
-    @patch("pokepoke.orchestration.workflow.run_gate_agent")
+    @patch("pokepoke.orchestration.gate_agent_loop.run_gate_agent")
     @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
     @patch("pokepoke.orchestration.workflow.invoke_copilot")
@@ -398,7 +397,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.cleanup_worktree")
     @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.add_comment")
-    @patch("pokepoke.orchestration.workflow.run_gate_agent")
+    @patch("pokepoke.orchestration.gate_agent_loop.run_gate_agent")
     @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
     @patch("pokepoke.orchestration.workflow.invoke_copilot")
@@ -514,7 +513,7 @@ class TestProcessWorkItem:
     @patch("pokepoke.orchestration.workflow.cleanup_worktree")
     @patch("pokepoke.orchestration.finalization.finalize_work_item", return_value=True)
     @patch("pokepoke.orchestration.workflow.add_comment")
-    @patch("pokepoke.orchestration.workflow.run_gate_agent")
+    @patch("pokepoke.orchestration.gate_agent_loop.run_gate_agent")
     @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     @patch("pokepoke.git.git_operations.has_commits_ahead", return_value=1)
     @patch("pokepoke.orchestration.workflow.invoke_copilot")
@@ -614,42 +613,6 @@ class TestPreLoopValidate:
         assert result is not None
         assert result.success is False
         assert was_assigned is True
-
-
-# ── _run_gate_check (unit) ─────────────────────────────────────────
-
-class TestRunGateCheck:
-    """Direct unit tests for _run_gate_check."""
-
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.run_gate_agent", return_value=GateAgentResult(success=True, reason="all good"))
-    @patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx")
-    def test_success_path(self, mock_ctx, mock_gate, mock_tui):
-        success, reason, runs, crashed = _run_gate_check(
-            _item(), worktree_cwd="/tmp/wt", selected_model="gpt-4",
-            gate_agent_runs=0, base_agent_id="agent-1",
-        )
-        assert success is True
-        assert reason == "all good"
-        assert runs == 1
-        assert crashed is False
-        mock_tui.ui.push_agent_status.assert_called_once()
-        call_kwargs = mock_tui.ui.push_agent_status.call_args
-        assert call_kwargs[1]["status"] == "success"
-
-    @patch("pokepoke.orchestration.workflow_helpers.terminal_ui")
-    @patch("pokepoke.orchestration.workflow_helpers.run_gate_agent", side_effect=RuntimeError("boom"))
-    @patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx")
-    def test_exception_path(self, mock_ctx, mock_gate, mock_tui):
-        import pytest
-        with pytest.raises(RuntimeError, match="boom"):
-            _run_gate_check(
-                _item(), worktree_cwd="/tmp/wt", selected_model="gpt-4",
-                gate_agent_runs=0, base_agent_id="agent-1",
-            )
-        mock_tui.ui.push_agent_status.assert_called_once()
-        call_kwargs = mock_tui.ui.push_agent_status.call_args
-        assert call_kwargs[1]["status"] == "failed"
 
 
 # ── _maybe_retry_copilot (unit) ────────────────────────────────────

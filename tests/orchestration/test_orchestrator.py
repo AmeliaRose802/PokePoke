@@ -136,7 +136,7 @@ class TestProcessWorkItem:
             assert result.success is True
             mocks['close_parent'].assert_called_once()
 
-    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.gate_agent_loop.run_gate_agent')
     @patch('subprocess.run')
     @patch('pokepoke.orchestration.workflow.cleanup_worktree')
     @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
@@ -210,7 +210,7 @@ class TestProcessWorkItem:
         assert result.cleanup_agent_runs == 0
         assert mock_invoke.call_count == 3
 
-    @patch('pokepoke.orchestration.workflow.run_gate_agent')
+    @patch('pokepoke.orchestration.gate_agent_loop.run_gate_agent')
     @patch('subprocess.run')
     @patch('pokepoke.worktrees.worktrees.cleanup_worktree')
     @patch('pokepoke.orchestration.workflow.invoke_copilot')

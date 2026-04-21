@@ -155,7 +155,7 @@ class TestInLoopGateRejectionDefer:
             "pokepoke.beads.beads_management.get_gate_rejection_count",
             return_value=0,
         ), patch(
-            "pokepoke.orchestration.workflow.run_gate_agent",
+            "pokepoke.orchestration.gate_agent_loop.run_gate_agent",
             return_value=GateAgentResult(
                 success=False, reason="Tests failing",
                 crashed=False, is_timeout=False,

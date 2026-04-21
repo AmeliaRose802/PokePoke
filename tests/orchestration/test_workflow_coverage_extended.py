@@ -114,7 +114,7 @@ def _base_patches(
         "invoke_copilot": patch(
             f"{_WF}.invoke_copilot", side_effect=invoke_results
         ),
-        "run_gate_agent": patch(f"{_WF}.run_gate_agent", return_value=gate_rv),
+        "run_gate_agent": patch("pokepoke.orchestration.gate_agent_loop.run_gate_agent", return_value=gate_rv),
         "set_work_item_id": patch(f"{_WF}.set_current_work_item_id"),
         "set_repo_name": patch(f"{_WF}.set_current_repo_name"),
         "register_agent": patch(f"{_WF}.register_agent"),
