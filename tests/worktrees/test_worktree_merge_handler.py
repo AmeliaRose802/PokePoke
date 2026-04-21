@@ -2,7 +2,7 @@
 
 from contextlib import nullcontext
 from pathlib import Path
-from unittest.mock import patch
+from unittest.mock import Mock, patch
 
 import pytest
 
@@ -42,6 +42,26 @@ def _make_merge_context(
         repo_root=repo_root,
         parent_agent_id=parent_agent_id,
         repo_path=repo_path,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _mock_prelock_checks(monkeypatch):
+    """Auto-mock the pre-lock worktree checks so handle_worktree_merge tests
+    can focus on the under-lock logic.  is_worktree_clean returns True and
+    the commit-count git rev-list returns 1 (non-zero → proceed to merge).
+    """
+    monkeypatch.setattr(
+        "pokepoke.worktrees.worktree_merge_handler.is_worktree_clean",
+        lambda _path: True,
+    )
+    monkeypatch.setattr(
+        "pokepoke.worktrees.worktree_merge_handler.get_default_branch",
+        lambda **_kw: "master",
+    )
+    monkeypatch.setattr(
+        "pokepoke.git.git_helpers.subprocess.run",
+        lambda cmd, **kw: Mock(stdout="1\n", stderr="", returncode=0),
     )
 
 

@@ -26,16 +26,17 @@ class MergeStepStatus(str, Enum):
 
 
 # Canonical step IDs matching docs/merge-workflow.md
+# Steps 4 and 5 run before the merge lock (read-only worktree checks).
 MERGE_STEPS: list[dict[str, str]] = [
     {"id": "0", "label": "Agent work complete"},
+    {"id": "4", "label": "Worktree clean? (pre-lock)"},
+    {"id": "5", "label": "Commits on branch? (pre-lock)"},
+    {"id": "5a", "label": "Skip merge — cleanup worktree"},
     {"id": "1", "label": "Acquire merge lock"},
     {"id": "2", "label": "Main repo clean?"},
     {"id": "3a", "label": "Auto-commit .beads/"},
     {"id": "3b", "label": "Invoke cleanup agent"},
     {"id": "3c", "label": "Main repo clean now?"},
-    {"id": "4", "label": "Worktree clean?"},
-    {"id": "5", "label": "Commits on branch?"},
-    {"id": "5a", "label": "Skip merge — cleanup worktree"},
     {"id": "6", "label": "Sync & prepare main"},
     {"id": "7", "label": "Checkout target branch"},
     {"id": "8", "label": "Merge --no-ff branch"},
@@ -48,18 +49,18 @@ MERGE_STEPS: list[dict[str, str]] = [
 # Edges define the default path through the flowchart.
 # The UI renders these as connectors between nodes.
 MERGE_EDGES: list[dict[str, str]] = [
-    {"from": "0", "to": "1"},
-    {"from": "1", "to": "2"},
-    {"from": "2", "to": "3a", "label": "Only .beads/ changes"},
-    {"from": "2", "to": "4", "label": "Clean"},
-    {"from": "2", "to": "3b", "label": "Non-beads dirty"},
-    {"from": "3a", "to": "4"},
-    {"from": "3b", "to": "3c"},
-    {"from": "3c", "to": "4", "label": "Yes"},
+    {"from": "0", "to": "4"},
     {"from": "4", "to": "5", "label": "Clean"},
     {"from": "5", "to": "5a", "label": "0 commits"},
-    {"from": "5", "to": "6", "label": "≥1 commit"},
+    {"from": "5", "to": "1", "label": "≥1 commit"},
     {"from": "5a", "to": "11"},
+    {"from": "1", "to": "2"},
+    {"from": "2", "to": "3a", "label": "Only .beads/ changes"},
+    {"from": "2", "to": "6", "label": "Clean"},
+    {"from": "2", "to": "3b", "label": "Non-beads dirty"},
+    {"from": "3a", "to": "6"},
+    {"from": "3b", "to": "3c"},
+    {"from": "3c", "to": "6", "label": "Yes"},
     {"from": "6", "to": "7"},
     {"from": "7", "to": "8"},
     {"from": "8", "to": "9", "label": "Success"},

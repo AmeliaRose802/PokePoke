@@ -14,26 +14,27 @@ The full sequence from "agent work complete" to "worktree cleaned up", including
 
 ```mermaid
 flowchart TD
-    START(["0. Agent work complete"]) --> LOCK["1. Acquire merge lock<br/>600s timeout, 15min stale detection"]
+    START(["0. Agent work complete"]) --> WT_CHECK{"4. Worktree<br/>clean?<br/>(pre-lock)"}
+
+    WT_CHECK -- "Uncommitted changes" --> FAIL_WT(["FAIL — worktree<br/>not cleaned up<br/>(no lock acquired)"])
+    WT_CHECK -- Clean --> COMMIT_COUNT{"5. Commits on<br/>branch?<br/>(pre-lock)"}
+
+    COMMIT_COUNT -- "0 commits" --> SKIP_MERGE["5a. Skip merge<br/>cleanup worktree force=True<br/>(no lock needed)"]
+    COMMIT_COUNT -- "≥1 commit" --> LOCK["1. Acquire merge lock<br/>600s timeout, 15min stale detection"]
+
     LOCK --> MAIN_CHECK{"2. Main repo<br/>clean?"}
 
     MAIN_CHECK -- "Only .beads/ changes" --> AUTO_BEADS["3a. Auto-commit .beads/<br/>git add .beads/ && git commit"]
-    MAIN_CHECK -- "Clean" --> WT_CHECK
+    MAIN_CHECK -- "Clean" --> SYNC
     MAIN_CHECK -- "Non-beads dirty files" --> CLEANUP_AGENT["3b. Invoke cleanup agent<br/>autonomous mode"]
 
-    AUTO_BEADS --> WT_CHECK
+    AUTO_BEADS --> SYNC
 
     CLEANUP_AGENT --> RECHECK{"3c. Main repo<br/>clean now?"}
-    RECHECK -- Yes --> WT_CHECK
+    RECHECK -- Yes --> SYNC
     RECHECK -- No --> FAIL_DIRTY(["FAIL — add to<br/>uncleaned manifest"])
 
-    WT_CHECK{"4. Worktree<br/>clean?"} -- "Uncommitted changes" --> FAIL_WT(["FAIL — worktree<br/>not cleaned up"])
-    WT_CHECK -- Clean --> COMMIT_COUNT{"5. Commits on<br/>branch?"}
-
-    COMMIT_COUNT -- "0 commits" --> SKIP_MERGE["5a. Skip merge<br/>cleanup worktree force=True"]
-    COMMIT_COUNT -- "≥1 commit" --> SYNC["6. Sync & prepare main<br/>bd sync + commit stragglers"]
-
-    SYNC --> CHECKOUT["7. git checkout target_branch"]
+    SYNC["6. Sync & prepare main<br/>bd sync + commit stragglers"] --> CHECKOUT["7. git checkout target_branch"]
     CHECKOUT --> MERGE["8. git merge --no-ff branch_name"]
 
     MERGE -- Success --> VALIDATE["9. Post-merge validation<br/>correct branch? clean status?"]
@@ -45,17 +46,14 @@ flowchart TD
     CLEANUP_WT --> RELEASE(["11. Release merge lock<br/>DONE"])
 
     ROLLBACK_V --> FAIL_MERGE(["FAIL — rollback applied"])
-    SKIP_MERGE --> RELEASE
+    SKIP_MERGE --> RELEASE_NOLOCK(["11. DONE<br/>(no merge needed)"])
 
-    %% Lock held (blue)
+    %% Lock held (blue) — steps 1–11 under lock
     style LOCK fill:#4a90d9,stroke:#333,color:#fff
     style MAIN_CHECK fill:#4a90d9,stroke:#333,color:#fff
     style AUTO_BEADS fill:#4a90d9,stroke:#333,color:#fff
     style CLEANUP_AGENT fill:#4a90d9,stroke:#333,color:#fff
     style RECHECK fill:#4a90d9,stroke:#333,color:#fff
-    style WT_CHECK fill:#4a90d9,stroke:#333,color:#fff
-    style COMMIT_COUNT fill:#4a90d9,stroke:#333,color:#fff
-    style SKIP_MERGE fill:#4a90d9,stroke:#333,color:#fff
     style SYNC fill:#4a90d9,stroke:#333,color:#fff
     style CHECKOUT fill:#4a90d9,stroke:#333,color:#fff
     style MERGE fill:#4a90d9,stroke:#333,color:#fff
@@ -71,30 +69,30 @@ flowchart TD
 
     %% Success terminal (green)
     style RELEASE fill:#27ae60,stroke:#333,color:#fff
+    style RELEASE_NOLOCK fill:#27ae60,stroke:#333,color:#fff
 ```
 
-All merges are serialized through `.pokepoke/locks/merge-queue.lock` — only one runs at a time. Steps 1–11 (blue) execute under the lock. The lock is released on both success and failure exits. PokePoke does not push to remote — the user decides when to `git push`.
+Steps 4, 5, and 5a run **before** lock acquisition — they are read-only operations on the worktree (isolated per-agent, no shared state). Dirty worktrees and empty branches fail/skip fast without blocking the merge queue. Steps 1–11 (blue) execute under the lock. PokePoke does not push to remote — the user decides when to `git push`.
 
 ## Uncommitted Files on Worktree
 
-What happens when the agent's worktree has uncommitted changes at merge time. This corresponds to **step 4** in the general flow.
+What happens when the agent's worktree has uncommitted changes at merge time. This check runs **before lock acquisition** (step 4 in the general flow) — dirty worktrees fail fast without blocking the merge queue.
 
 ```mermaid
 flowchart TD
-    START(["Begin merge — lock held"]) --> CHECK["4a. is_worktree_clean<br/>git -C worktree status --porcelain"]
+    START(["Step 4 — pre-lock"]) --> CHECK["4a. is_worktree_clean<br/>git -C worktree status --porcelain"]
 
     CHECK -- "Empty output = clean" --> PROCEED(["Continue to step 5"])
     CHECK -- "Non-empty output = dirty" --> CATEGORIZE["4b. Worktree has<br/>uncommitted changes"]
 
-    CATEGORIZE --> RESULT["4c. Return MergeResult<br/>success=False"]
+    CATEGORIZE --> RESULT["4c. Return (False, False)<br/>merge lock never acquired"]
     RESULT --> PRESERVE["4d. Worktree is NOT<br/>auto-cleaned up"]
     PRESERVE --> MANIFEST["4e. Added to uncleaned manifest<br/>.pokepoke/uncleaned_worktrees.json"]
-    MANIFEST --> NEXT(["Lock released —<br/>other agents continue"])
+    MANIFEST --> NEXT(["Other agents continue<br/>merge queue unblocked"])
 
     NEXT --> MAINT["Maintenance cycle<br/>may retry later"]
 
-    %% Lock held (blue)
-    style CHECK fill:#4a90d9,stroke:#333,color:#fff
+    %% Pre-lock (no blue — lock not held)
     style CATEGORIZE fill:#e74c3c,stroke:#333,color:#fff
     style RESULT fill:#e74c3c,stroke:#333,color:#fff
     style PRESERVE fill:#e74c3c,stroke:#333,color:#fff
@@ -117,7 +115,7 @@ flowchart TD
     CATEGORIZE --> DECISION{"2c. What type<br/>of changes?"}
 
     DECISION -- "Only .beads/ files" --> BEADS_COMMIT["3a. Auto-commit beads<br/>git add .beads/<br/>git commit"]
-    BEADS_COMMIT --> OK(["Main repo clean<br/>proceed to step 4"])
+    BEADS_COMMIT --> OK(["Main repo clean<br/>proceed to step 6"])
 
     DECISION -- "Only worktrees/ dirs" --> WT_COMMIT["3a′. Auto-commit worktree cleanup<br/>git add worktrees/<br/>git commit"]
     WT_COMMIT --> OK

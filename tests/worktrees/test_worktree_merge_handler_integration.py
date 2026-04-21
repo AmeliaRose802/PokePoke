@@ -7,6 +7,8 @@ of critical merge sequence logic.
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+import pytest
+
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktrees.worktree_merge_handler import (
     WorktreeMergeContext,
@@ -43,6 +45,23 @@ def _make_context(
         repo_root=repo_root,
         parent_agent_id=parent_agent_id,
         repo_path=repo_path,
+    )
+
+
+@pytest.fixture(autouse=True)
+def _mock_prelock_checks(monkeypatch):
+    """Auto-mock the pre-lock worktree checks (is_worktree_clean, commit count)."""
+    monkeypatch.setattr(
+        "pokepoke.worktrees.worktree_merge_handler.is_worktree_clean",
+        lambda _path: True,
+    )
+    monkeypatch.setattr(
+        "pokepoke.worktrees.worktree_merge_handler.get_default_branch",
+        lambda **_kw: "master",
+    )
+    monkeypatch.setattr(
+        "pokepoke.git.git_helpers.subprocess.run",
+        lambda cmd, **kw: Mock(stdout="1\n", stderr="", returncode=0),
     )
 
 

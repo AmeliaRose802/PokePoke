@@ -14,6 +14,7 @@ from typing import TYPE_CHECKING
 from filelock import Timeout
 
 from pokepoke.agents.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent
+from pokepoke.git.git_operations import get_default_branch, is_worktree_clean
 from pokepoke.git.repo_state_guard import cleanup_lock
 from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.types_stats import AgentStats
@@ -24,7 +25,7 @@ if TYPE_CHECKING:
 from pokepoke.worktrees.coordination import merge_lock
 from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
 from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree
-from pokepoke.worktrees.worktrees import merge_worktree
+from pokepoke.worktrees.worktrees import cleanup_worktree, merge_worktree
 
 logger = logging.getLogger(__name__)
 
@@ -64,6 +65,55 @@ def handle_worktree_merge(
     item_id = ctx.agent_item.id if ctx.agent_item else ctx.agent_id
     tracker.begin_run(ctx.agent_id, item_id)
     tracker.complete_step("0", "Agent work complete")
+
+    # --- Pre-lock checks (read-only on isolated worktree, no lock needed) ---
+
+    # Step 4: worktree clean?
+    tracker.begin_step("4", "Checking worktree cleanliness (pre-lock)…")
+    if not is_worktree_clean(ctx.worktree_path):
+        logger.error(
+            "❌ Worktree %s has uncommitted changes — failing fast without acquiring merge lock",
+            ctx.worktree_path,
+        )
+        tracker.fail_step("4", "Worktree has uncommitted changes")
+        tracker.finish_run("failed")
+        add_uncleaned_worktree(
+            ctx.agent_id,
+            str(ctx.worktree_path),
+            "Worktree has uncommitted changes at merge time (pre-lock check)",
+        )
+        return False, False
+    tracker.complete_step("4", "Worktree is clean")
+
+    # Step 5: any commits on the branch?
+    tracker.begin_step("5", "Checking commit count (pre-lock)…")
+    try:
+        from pokepoke.git.git_helpers import run_git
+        target_branch = get_default_branch(cwd=ctx.repo_path)
+        revlist = run_git(
+            ["git", "rev-list", "--count", "HEAD", f"^{target_branch}"],
+            cwd=str(ctx.worktree_path),
+        )
+        commit_count = int(revlist.stdout.strip())
+    except Exception as e:
+        # Can't determine commit count — proceed to merge (it will check again)
+        logger.debug("Could not check commit count pre-lock: %s", e)
+        commit_count = -1  # sentinel: unknown
+
+    if commit_count == 0:
+        tracker.complete_step("5", "0 commits — skip merge")
+        tracker.begin_step("5a", "Cleaning up empty worktree (no lock needed)…")
+        logger.info("⏭️  No commits in worktree for %s — skipping merge, cleaning up", ctx.agent_id)
+        cleaned = cleanup_worktree(ctx.agent_id, force=True, repo_path=ctx.repo_path)
+        tracker.complete_step("5a", "Worktree cleaned up")
+        tracker.complete_step("11", "Done (no merge needed)")
+        tracker.finish_run("success")
+        return True, cleaned
+
+    if commit_count > 0:
+        tracker.complete_step("5", f"{commit_count} commit(s) ahead")
+
+    # --- Acquire merge lock for the actual merge ---
     tracker.begin_step("1", "Waiting for merge lock…")
 
     try:
@@ -177,9 +227,7 @@ def perform_worktree_merge(  # noqa: C901
     if tracker._current_run and tracker._current_run.steps["2"].status.value == "active":
         tracker.complete_step("2", "Main repo is clean")
 
-    # --- worktree cleanliness (step 4) and merge ---
-    tracker.begin_step("4", "Checking worktree cleanliness…")
-    # merge_worktree validates worktree is clean, runs checkout/merge/validate/cleanup
+    # --- worktree merge (worktree was already validated pre-lock) ---
     tracker.begin_step("8", f"Merging worktree for {ctx.agent_id}")
     logger.info(f"\n🔀 Merging worktree for {ctx.agent_id}...")
     merge_result = merge_worktree(ctx.agent_id, cleanup=True, repo_path=repo_cwd)
@@ -287,9 +335,8 @@ def perform_worktree_merge(  # noqa: C901
             return False, False
 
     # Mark remaining merge steps as done for the success path
-    tracker.complete_step("4", "Worktree is clean")
     tracker.complete_step("8", "Merge succeeded")
-    for sid in ("5", "6", "7", "9"):
+    for sid in ("6", "7", "9"):
         if tracker._current_run and tracker._current_run.steps[sid].status.value == "pending":
             tracker.complete_step(sid)
 
