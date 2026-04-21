@@ -308,6 +308,7 @@ class ProjectConfig:
     circuit_breaker_drain_timeout: int = _c.DEFAULT_CIRCUIT_BREAKER_DRAIN_TIMEOUT
     decomposition_enabled: bool = True
     decomposition_failure_threshold: int = 3
+    decomposition_timeout_seconds: int = _c.DEFAULT_DECOMPOSITION_TIMEOUT_SECONDS
     needs_human_attention_threshold: int = _c.DEFAULT_NEEDS_HUMAN_ATTENTION_FAILURES
     assignment: AssignmentConfig = field(default_factory=AssignmentConfig)
     otel: OtelConfig = field(default_factory=OtelConfig)
@@ -336,6 +337,7 @@ class ProjectConfig:
         self.max_ping_failures = _clamp(_cls, "max_ping_failures", self.max_ping_failures, minimum=_c.MIN_MAX_PING_FAILURES)
         self.circuit_breaker_drain_timeout = _clamp(_cls, "circuit_breaker_drain_timeout", self.circuit_breaker_drain_timeout, minimum=_c.MIN_CIRCUIT_BREAKER_DRAIN_TIMEOUT)
         self.decomposition_failure_threshold = _clamp(_cls, "decomposition_failure_threshold", self.decomposition_failure_threshold, minimum=1)
+        self.decomposition_timeout_seconds = _clamp(_cls, "decomposition_timeout_seconds", self.decomposition_timeout_seconds, minimum=_c.MIN_DECOMPOSITION_TIMEOUT_SECONDS)
         self.needs_human_attention_threshold = _clamp(_cls, "needs_human_attention_threshold", self.needs_human_attention_threshold, minimum=_c.MIN_NEEDS_HUMAN_ATTENTION_FAILURES)
         self.stale_worktree_commit_threshold = _clamp(_cls, "stale_worktree_commit_threshold", self.stale_worktree_commit_threshold, minimum=1)
 

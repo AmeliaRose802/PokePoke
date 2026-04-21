@@ -13,6 +13,7 @@ from pokepoke.agents.decomposition_agent import (
     _create_child_item,
     _delete_child_item,
     _get_existing_child_titles,
+    _invoke_sdk_for_decomposition,
     _is_valid_title,
     _parse_subtasks_from_output,
     _update_parent_metadata,
@@ -204,6 +205,32 @@ class TestParseSubtasksFromOutput:
         subtasks = _parse_subtasks_from_output(output, default_priority=0)
         assert len(subtasks) == 3
         assert all(s.priority == 0 for s in subtasks)
+
+
+# ---------------------------------------------------------------------------
+# _invoke_sdk_for_decomposition
+# ---------------------------------------------------------------------------
+
+
+class TestInvokeSdkForDecomposition:
+    """Tests for SDK invocation configuration."""
+
+    @patch(f"{_DECOMP}._build_decomposition_prompt", return_value="prompt")
+    @patch("pokepoke.config.get_config")
+    @patch("pokepoke.models.ai_backends.invoke_copilot")
+    def test_uses_configured_timeout(
+        self,
+        mock_invoke: MagicMock,
+        mock_get_config: MagicMock,
+        mock_prompt: MagicMock,
+    ) -> None:
+        item = _make_item()
+        mock_get_config.return_value.decomposition_timeout_seconds = 900
+        mock_invoke.return_value = MagicMock(success=False, output="", error="no output")
+
+        _invoke_sdk_for_decomposition(item)
+
+        assert mock_invoke.call_args.kwargs["timeout"] == 900
 
 
 # ---------------------------------------------------------------------------

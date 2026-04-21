@@ -10,6 +10,7 @@ import re
 import subprocess
 from dataclasses import dataclass
 
+import pokepoke.constants as _c
 from pokepoke.beads.beads_query import _parse_beads_json, _run_bd
 from pokepoke.types import BeadsWorkItem
 
@@ -26,7 +27,7 @@ _PLACEHOLDER_TITLE_RE = re.compile(
     re.IGNORECASE,
 )
 
-_DECOMPOSITION_TIMEOUT = 120.0
+_DECOMPOSITION_TIMEOUT = float(_c.DEFAULT_DECOMPOSITION_TIMEOUT_SECONDS)
 
 
 @dataclass
@@ -128,7 +129,7 @@ def _invoke_sdk_for_decomposition(
     result = invoke_copilot(
         work_item=item,
         prompt=prompt,
-        timeout=_DECOMPOSITION_TIMEOUT,
+        timeout=_get_decomposition_timeout(),
         deny_write=True,
     )
 
@@ -141,6 +142,17 @@ def _invoke_sdk_for_decomposition(
         return []
 
     return _parse_subtasks_from_output(result.output, item.priority)
+
+
+def _get_decomposition_timeout() -> float:
+    """Return the configured timeout for decomposition SDK runs."""
+    try:
+        from pokepoke.config import get_config
+
+        return float(get_config().decomposition_timeout_seconds)
+    except Exception as exc:
+        logger.debug("Falling back to default decomposition timeout: %s", exc)
+        return _DECOMPOSITION_TIMEOUT
 
 
 def _get_existing_child_titles(parent_id: str) -> set[str]:
