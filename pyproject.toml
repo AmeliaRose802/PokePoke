@@ -99,7 +99,9 @@ ignore = [
     # PLR0913 (too many arguments) is NOW ENFORCED for new code.
     # Existing violations are grandfathered via per-file-ignores below.
     # See PokePoke-h072s epic and sub-tasks for refactoring plan.
-    "PLR0915", # Too many statements - requires refactoring
+    # PLR0915 (too many statements) is NOW ENFORCED for new code.
+    # Existing violations are grandfathered via per-file-ignores below.
+    # See PokePoke-2i89f for refactoring plan.
     "PLR2004", # Magic value used in comparison - too noisy for existing codebase
     "S603",    # subprocess without shell=True - expected for CLI orchestrator
     "S607",    # subprocess with partial path - expected for CLI orchestrator using git, bd, pwsh, tasklist
@@ -134,30 +136,30 @@ max-statements = 50
     "PLR0913", # Tests: mirror source function signatures — grandfathered
 ]
 "src/pokepoke/models/sdk_await.py" = ["C901"]  # Complex timeout logic (extracted from sdk_helpers)
-"src/pokepoke/agents/parallel_support.py" = ["C901", "PLR0913"]  # Complex dispatch logic; PLR0913 grandfathered
+"src/pokepoke/agents/parallel_support.py" = ["C901", "PLR0913", "PLR0915"]  # Complex dispatch logic; PLR0913 grandfathered
 "src/pokepoke/agents/parallel_worker_pool.py" = ["C901", "PLR0913"]  # Complex future collection; PLR0913 grandfathered
 
 # PLR0913 grandfathered violations — refactor tracked by PokePoke-h072s sub-tasks
 # Remove entries as functions are refactored to use config dataclasses
-"src/pokepoke/agents/agent_registry.py" = ["PLR0913"]
-"src/pokepoke/agents/agent_runner.py" = ["PLR0913"]
-"src/pokepoke/agents/cleanup_agents.py" = ["PLR0913"]
+"src/pokepoke/agents/agent_registry.py" = ["PLR0913", "PLR0915"]
+"src/pokepoke/agents/agent_runner.py" = ["PLR0913", "PLR0915"]
+"src/pokepoke/agents/cleanup_agents.py" = ["PLR0913", "PLR0915"]
 "src/pokepoke/agents/gate_agent_executor.py" = ["PLR0913"]
 "src/pokepoke/agents/parallel.py" = ["PLR0913"]
 "src/pokepoke/agents/parallel_cleanup.py" = ["PLR0913"]
 "src/pokepoke/beads/beads_item_stats_store.py" = ["PLR0913"]
 "src/pokepoke/beads/cli_retry.py" = ["PLR0913"]
 "src/pokepoke/desktop/desktop_api_agents.py" = ["PLR0913"]
-"src/pokepoke/desktop/desktop_ui.py" = ["PLR0913"]
+"src/pokepoke/desktop/desktop_ui.py" = ["PLR0913", "PLR0915"]
 "src/pokepoke/git/git_helpers.py" = ["PLR0913"]
 "src/pokepoke/maintenance/maintenance_scheduler.py" = ["PLR0913"]
 "src/pokepoke/models/ai_backends.py" = ["PLR0913"]
-"src/pokepoke/models/copilot_sdk.py" = ["PLR0913"]
+"src/pokepoke/models/copilot_sdk.py" = ["PLR0913", "PLR0915"]
 "src/pokepoke/models/model_history.py" = ["PLR0913"]
 "src/pokepoke/models/model_sync_beads.py" = ["PLR0913"]
 "src/pokepoke/models/sdk_event_handler.py" = ["PLR0913"]
 "src/pokepoke/models/sdk_helpers.py" = ["PLR0913"]
-"src/pokepoke/models/sdk_watchdog.py" = ["PLR0913"]
+"src/pokepoke/models/sdk_watchdog.py" = ["PLR0913", "PLR0915"]
 "src/pokepoke/orchestration/finalization.py" = ["PLR0913"]
 "src/pokepoke/orchestration/session_lifecycle.py" = ["PLR0913"]
 "src/pokepoke/orchestration/work_item_session.py" = ["PLR0913"]
@@ -169,7 +171,22 @@ max-statements = 50
 "src/pokepoke/stats/session_journal.py" = ["PLR0913"]
 "src/pokepoke/worktrees/worktree_cleanup.py" = ["PLR0913"]
 "src/pokepoke/worktrees/worktree_finalization.py" = ["PLR0913"]
-"src/pokepoke/worktrees/worktrees.py" = ["PLR0913"]
+"src/pokepoke/worktrees/worktrees.py" = ["PLR0913", "PLR0915"]
+
+# PLR0915 grandfathered violations — refactor tracked by PokePoke-2i89f sub-tasks
+# Remove entries as functions are refactored to reduce statement count
+"src/pokepoke/agents/beta_tester.py" = ["PLR0915"]
+"src/pokepoke/agents/decomposition_agent.py" = ["PLR0915"]
+"src/pokepoke/agents/post_mortem_agent.py" = ["PLR0915"]
+"src/pokepoke/beads/beads_item_stats_backfill.py" = ["PLR0915"]
+"src/pokepoke/beads/beads_management.py" = ["PLR0915"]
+"src/pokepoke/git/repo_picker.py" = ["PLR0915"]
+"src/pokepoke/models/mcp_memory_client.py" = ["PLR0915"]
+"src/pokepoke/orchestration/gate_agent_loop.py" = ["PLR0915"]
+"src/pokepoke/orchestration/orchestrator.py" = ["PLR0915"]
+"src/pokepoke/orchestration/workflow.py" = ["PLR0915"]
+"src/pokepoke/worktrees/startup_cleanup.py" = ["PLR0915"]
+"src/pokepoke/worktrees/worktree_merge_handler.py" = ["PLR0915"]
 
 # Mypy type checking configuration
 [tool.mypy]
