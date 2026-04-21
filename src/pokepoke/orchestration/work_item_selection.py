@@ -127,30 +127,109 @@ def _filter_available(ready_items: list[BeadsWorkItem]) -> list[BeadsWorkItem]:
     return available
 
 
-def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_ids: set[str] | None = None, beads_client: BeadsClient | None = None) -> BeadsWorkItem | None:
+def _pick_reclaimed_priority(
+    reclaimed_items: list[BeadsWorkItem] | None,
+    skip_ids: set[str] | None,
+    interactive: bool,
+) -> BeadsWorkItem | None:
+    """Try to pick the highest priority reclaimed item (autonomous mode only).
+
+    Returns a selected item, or None if no reclaimed items or interactive mode
+    (in which case reclaimed items are displayed and fall through to normal flow).
+    """
+    if not reclaimed_items:
+        return None
+    reclaimed_filtered = _filter_skip_ids(reclaimed_items, skip_ids)
+    if not reclaimed_filtered:
+        return None
+    if not interactive:
+        selected = reclaimed_filtered[0]
+        logger.info(
+            "♻️  Prioritizing reclaimed item: %s (was in_progress from previous run)",
+            selected.id,
+        )
+        return selected
+    # Interactive: show reclaimed items prominently, then fall through
+    logger.info("\n♻️  Found %d reclaimed item(s) from previous run:\n", len(reclaimed_filtered))
+    for idx, item in enumerate(reclaimed_filtered, 1):
+        logger.info(f"[R{idx}] [{item.id}] {item.title} (RESUMABLE)")
+        logger.info(f"      Type: {item.issue_type} | Priority: {item.priority}")
+        if item.assignee:
+            logger.info(f"      Previous agent: {item.assignee}")
+        logger.info("")
+    return None
+
+
+def _fallback_to_reclaimed(
+    reclaimed_items: list[BeadsWorkItem] | None,
+    skip_ids: set[str] | None,
+    interactive: bool,
+    fallback_message: str,
+) -> BeadsWorkItem | None:
+    """In interactive mode, fall back to reclaimed item selection if available."""
+    if not (reclaimed_items and interactive):
+        return None
+    reclaimed_filtered = _filter_skip_ids(reclaimed_items, skip_ids)
+    if not reclaimed_filtered:
+        return None
+    logger.info(fallback_message)
+    return _interactive_reclaimed_selection(reclaimed_filtered)
+
+
+def select_work_item(
+    ready_items: list[BeadsWorkItem],
+    interactive: bool,
+    skip_ids: set[str] | None = None,
+    beads_client: BeadsClient | None = None,
+    reclaimed_items: list[BeadsWorkItem] | None = None,
+) -> BeadsWorkItem | None:
     """Select a work item to process using hierarchical assignment.
 
+    Reclaimed items (stale in-progress items from previous runs) are prioritized
+    over fresh ready items since they likely have partially-complete worktrees
+    with real progress.
+
     Args:
-        ready_items: List of available work items
-        interactive: If True, prompt user to select; if False, use hierarchical selection
-        skip_ids: Set of item IDs to skip (e.g., items that failed claiming)
+        ready_items: List of available work items from bd ready.
+        interactive: If True, prompt user to select; if False, use hierarchical selection.
+        skip_ids: Set of item IDs to skip (e.g., items that failed claiming).
+        beads_client: Optional beads client for hierarchical selection.
+        reclaimed_items: Stale in-progress items to prioritize over ready items.
 
     Returns:
-        Selected work item or None to quit
+        Selected work item or None to quit.
     """
+    # First, check if we have reclaimed items to prioritize (autonomous returns early)
+    picked = _pick_reclaimed_priority(reclaimed_items, skip_ids, interactive)
+    if picked is not None:
+        return picked
+
     if not ready_items:
+        fallback = _fallback_to_reclaimed(
+            reclaimed_items, skip_ids, interactive,
+            "No new ready work, but reclaimed items available above.")
+        if fallback is not None:
+            return fallback
         logger.info("No ready work found in beads database. Run 'bd ready' to see available work items.")
         return None
 
     ready_items = _filter_skip_ids(ready_items, skip_ids)
-
     if not ready_items:
+        fallback = _fallback_to_reclaimed(
+            reclaimed_items, skip_ids, interactive,
+            "No ready work after filtering, but reclaimed items available.")
+        if fallback is not None:
+            return fallback
         logger.info("No ready work found - all items were previously skipped. Other agents may still be working.")
         return None
 
     available_items = _filter_available(ready_items)
-
     if not available_items:
+        fallback = _fallback_to_reclaimed(
+            reclaimed_items, skip_ids, interactive,
+            "No available ready work, but reclaimed items available.")
+        if fallback is not None:
+            return fallback
         logger.info("No available work - all ready items are assigned to other agents or require human intervention.")
         return None
 
@@ -158,7 +237,6 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_i
 
     if interactive:
         logger.info(f"\n📋 Found {len(ready_items)} ready work items:\n")
-
         for idx, item in enumerate(ready_items, 1):
             logger.info(f"{idx}. [{item.id}] {item.title}")
             logger.info(f"   Type: {item.issue_type} | Priority: {item.priority}")
@@ -168,11 +246,32 @@ def select_work_item(ready_items: list[BeadsWorkItem], interactive: bool, skip_i
                     desc += "..."
                 logger.info(f"   {desc}")
             logger.info("")
-
-    if interactive:
         return interactive_selection(ready_items)
-    else:
-        return autonomous_selection(ready_items, beads_client=beads_client)
+    return autonomous_selection(ready_items, beads_client=beads_client)
+
+
+def _interactive_reclaimed_selection(reclaimed_items: list[BeadsWorkItem]) -> BeadsWorkItem | None:
+    """Prompt user to select from reclaimed items only."""
+    while not is_shutting_down():
+        try:
+            choice = input("Select a reclaimed item (R1, R2, ...) or 'q' to quit: ").strip()
+
+            if choice.lower() == 'q':
+                return None
+
+            # Accept both "R1" and "1" formats
+            choice_num = choice.upper().lstrip('R')
+            idx = int(choice_num)
+            if 1 <= idx <= len(reclaimed_items):
+                return reclaimed_items[idx - 1]
+            else:
+                logger.error(f"❌ Please enter R1-R{len(reclaimed_items)}")
+        except ValueError:
+            logger.error("❌ Invalid input. Enter R1, R2, etc. or 'q' to quit.")
+        except KeyboardInterrupt:
+            logger.info("\n")
+            return None
+    return None
 
 
 def interactive_selection(ready_items: list[BeadsWorkItem]) -> BeadsWorkItem | None:

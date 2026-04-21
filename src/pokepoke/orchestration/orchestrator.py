@@ -76,6 +76,7 @@ class _OrchestratorContext:
     continuous: bool
     items_completed: int = 0
     total_requests: int = 0
+    reclaimed_items: list[BeadsWorkItem] | None = None  # Stale items recovered at startup
 
     def finalize(self, run_post_mortem: bool = False) -> None:
         """Shorthand to finalize session with current context state."""
@@ -187,13 +188,17 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
     terminal_ui.ui.update_stats(session_stats, time.time() - start_time)
     _run_startup_plugins(session_stats, run_logger, main_repo_path, run_beta_first)
     _run_startup_cleanup(cfg, main_repo_path, run_logger)
+    from pokepoke.beads.stale_item_recovery import recover_stale_items_for_orchestrator
+    reclaimed_items = recover_stale_items_for_orchestrator(
+        agent_name, getattr(cfg, 'stale_item_recovery_enabled', True), run_logger.log_orchestrator)
     effective_parallel = _resolve_parallelism(max_parallel_agents, cfg, interactive, run_logger)
 
     return _OrchestratorContext(
         agent_name=agent_name, mode_name=mode_name, run_logger=run_logger,
         main_repo_path=main_repo_path, start_time=start_time, session_stats=session_stats,
         failed_claim_ids=set(), failed_claim_ids_lock=threading.Lock(), cfg=cfg,
-        effective_parallel=effective_parallel, interactive=interactive, continuous=continuous)
+        effective_parallel=effective_parallel, interactive=interactive, continuous=continuous,
+        reclaimed_items=reclaimed_items or None)
 
 
 def _run_preflight(ctx: _OrchestratorContext) -> int | None:
@@ -239,7 +244,8 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:  # noqa: C901
         # Snapshot failed_claim_ids under lock for work item selection
         with ctx.failed_claim_ids_lock:
             skip_ids = set(ctx.failed_claim_ids)
-        selected_item = select_work_item(ready_items, ctx.interactive, skip_ids=skip_ids)
+        selected_item = select_work_item(
+            ready_items, ctx.interactive, skip_ids=skip_ids, reclaimed_items=ctx.reclaimed_items)
         if ctx.interactive:
             terminal_ui.ui.start()
         if selected_item is None:
@@ -281,6 +287,10 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:  # noqa: C901
             # Use discard() instead of clear() to avoid wiping parallel worker state
             with ctx.failed_claim_ids_lock:
                 ctx.failed_claim_ids.discard(selected_item.id)
+            # Remove from reclaimed items list if present
+            if ctx.reclaimed_items:
+                remaining = [i for i in ctx.reclaimed_items if i.id != selected_item.id]
+                ctx.reclaimed_items = remaining or None
         ctx.total_requests += wi_result.request_count
         _record_item_result(selected_item, wi_result, ctx.session_stats, ctx.run_logger)
         ctx.items_completed = ctx.session_stats.items_completed

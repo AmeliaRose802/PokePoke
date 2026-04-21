@@ -283,11 +283,11 @@ def _handle_gate_verdict(
 
     # If the gate explicitly signalled the item is too large, trigger
     # immediate decomposition using the gate agent's analysis as context.
-    if "too_large" in gate_reason.lower():
+    if "too_large" in details.gate_reason.lower():
         try:
             from pokepoke.agents.decomposition_agent import run_decomposition
             logger.info("\n🔀 Gate Agent signalled 'too_large' — invoking decomposition with gate context")
-            decomp_result = run_decomposition(ctx.item, rejection_count, too_large_context=gate_reason)
+            decomp_result = run_decomposition(ctx.item, rejection_count, too_large_context=details.gate_reason)
             if decomp_result.success:
                 logger.info("\n🔀 Decomposition created %d child items for %s", len(decomp_result.child_ids), ctx.item.id)
             else:
@@ -298,7 +298,7 @@ def _handle_gate_verdict(
         gt.gate_rejected_max(rejection_count)
         return GateLoopResult(
             gate_success=False, gate_rejection_count=rejection_count,
-            gate_agent_runs=gate_agent_runs, exceeded_max=True,
+            gate_agent_runs=ctx.gate_agent_runs, exceeded_max=True,
         )
 
     if rejection_count >= ctx.max_gate_rejections:
