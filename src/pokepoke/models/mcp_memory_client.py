@@ -20,13 +20,6 @@ class MemoryEntity:
     observations: list[str]
 
 
-@dataclass
-class MemoryRelation:
-    """Represents a relation between entities."""
-    from_entity: str
-    to_entity: str
-    relation_type: str
-
 
 class MCPMemoryClient:
     """Client for interacting with MCP memory server via JSON-RPC over stdio."""
