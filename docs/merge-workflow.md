@@ -110,15 +110,12 @@ What happens when the main repository has uncommitted changes before a merge beg
 flowchart TD
     START(["Step 2 — lock held"]) --> STATUS["2a. git status --porcelain<br/>on main repo"]
 
-    STATUS --> CATEGORIZE["2b. Categorize changes:<br/>beads / worktree / untracked / other"]
+    STATUS --> CATEGORIZE["2b. Categorize changes:<br/>beads / untracked / other"]
 
     CATEGORIZE --> DECISION{"2c. What type<br/>of changes?"}
 
     DECISION -- "Only .beads/ files" --> BEADS_COMMIT["3a. Auto-commit beads<br/>git add .beads/<br/>git commit"]
     BEADS_COMMIT --> OK(["Main repo clean<br/>proceed to step 6"])
-
-    DECISION -- "Only worktrees/ dirs" --> WT_COMMIT["3a′. Auto-commit worktree cleanup<br/>git add worktrees/<br/>git commit"]
-    WT_COMMIT --> OK
 
     DECISION -- "Other / mixed changes" --> CLEANUP["3b. Invoke cleanup agent<br/>loads cleanup.md prompt<br/>runs autonomous with timeout"]
 
@@ -135,7 +132,6 @@ flowchart TD
     style CATEGORIZE fill:#4a90d9,stroke:#333,color:#fff
     style DECISION fill:#4a90d9,stroke:#333,color:#fff
     style BEADS_COMMIT fill:#4a90d9,stroke:#333,color:#fff
-    style WT_COMMIT fill:#4a90d9,stroke:#333,color:#fff
     style CLEANUP fill:#4a90d9,stroke:#333,color:#fff
     style RECHECK fill:#4a90d9,stroke:#333,color:#fff
 
@@ -144,7 +140,7 @@ flowchart TD
     style OK fill:#27ae60,stroke:#333,color:#fff
 ```
 
-Known-safe changes (`.beads/`, `worktrees/`) are auto-committed. Everything else triggers a cleanup agent.
+Known-safe `.beads/` changes are auto-committed. Everything else triggers a cleanup agent. Note: `worktrees/` is gitignored (`.gitignore` line 9), so changes there never appear in `git status`.
 
 ## Merge Conflict Handling
 
