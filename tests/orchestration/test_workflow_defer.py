@@ -148,6 +148,7 @@ class TestInLoopGateRejectionDefer:
         mock_copilot.return_value = CopilotResult(
             work_item_id="defer-1", success=True, attempt_count=1,
             output="done", stats=AgentStats(input_tokens=100),
+            session_id="test-session",
         )
 
         with patch(

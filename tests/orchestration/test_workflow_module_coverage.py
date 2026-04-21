@@ -36,13 +36,13 @@ def _item(id: str = "wf-cov-1", desc: str = "test desc") -> BeadsWorkItem:
 
 
 def _ok_copilot(item_id: str = "wf-cov-1", **kw) -> CopilotResult:
-    defaults = dict(work_item_id=item_id, success=True, attempt_count=1)
+    defaults = dict(work_item_id=item_id, success=True, attempt_count=1, session_id="test-session")
     defaults.update(kw)
     return CopilotResult(**defaults)
 
 
 def _fail_copilot(item_id: str = "wf-cov-1", **kw) -> CopilotResult:
-    defaults = dict(work_item_id=item_id, success=False, error="copilot failed", attempt_count=1)
+    defaults = dict(work_item_id=item_id, success=False, error="copilot failed", attempt_count=1, session_id="test-session")
     defaults.update(kw)
     return CopilotResult(**defaults)
 

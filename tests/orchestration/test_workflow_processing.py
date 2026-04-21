@@ -165,11 +165,13 @@ class TestProcessWorkItem:
                 CopilotResult(
                     work_item_id="task-1", success=False,
                     error="Tests failed", attempt_count=1,
-                ),
+            session_id="test-session",
+        ),
                 CopilotResult(
                     work_item_id="task-1", success=True,
                     output="Done", attempt_count=1,
-                ),
+            session_id="test-session",
+        ),
             ]
 
             result = process_work_item(item, interactive=True)
@@ -194,7 +196,8 @@ class TestProcessWorkItem:
                 work_item_id="task-1", success=False,
                 error="Rate limit exceeded", attempt_count=1,
                 is_rate_limited=True,
-            )
+            session_id="test-session",
+        )
 
             result = process_work_item(item, interactive=True)
 
@@ -224,11 +227,13 @@ class TestProcessWorkItem:
                     work_item_id="task-1", success=False,
                     error="Process died: consecutive ping failures or output timeout",
                     attempt_count=1,
-                ),
+            session_id="test-session",
+        ),
                 CopilotResult(
                     work_item_id="task-1", success=True,
                     output="Fixed on retry", attempt_count=1,
-                ),
+            session_id="test-session",
+        ),
             ]
 
             result = process_work_item(item, interactive=True)
@@ -261,11 +266,13 @@ class TestProcessWorkItem:
                     work_item_id="task-1", success=False,
                     error="SDK exception: CLI process exited unexpectedly",
                     attempt_count=1,
-                ),
+            session_id="test-session",
+        ),
                 CopilotResult(
                     work_item_id="task-1", success=True,
                     output="Fixed on retry", attempt_count=1,
-                ),
+            session_id="test-session",
+        ),
             ]
 
             result = process_work_item(item, interactive=True)
@@ -291,8 +298,12 @@ class TestProcessWorkItem:
             ]
             # Two work agent invocations
             mocks['invoke'].side_effect = [
-                CopilotResult(work_item_id="task-1", success=True, output="Try 1", attempt_count=1),
-                CopilotResult(work_item_id="task-1", success=True, output="Try 2", attempt_count=1),
+                CopilotResult(work_item_id="task-1", success=True, output="Try 1", attempt_count=1,
+            session_id="test-session",
+        ),
+                CopilotResult(work_item_id="task-1", success=True, output="Try 2", attempt_count=1,
+            session_id="test-session",
+        ),
             ]
             with patch(PATCH_WF_ADD_COMMENT) as mock_add_comment:
                 result = process_work_item(item, interactive=True)
@@ -329,7 +340,8 @@ class TestProcessWorkItem:
             mocks['invoke'].return_value = CopilotResult(
                 work_item_id="task-1", success=True, output="Completed",
                 attempt_count=1, stats=work_stats,
-            )
+            session_id="test-session",
+        )
 
             with patch(PATCH_WF_ADD_COMMENT):
                 result = process_work_item(item, interactive=True)
@@ -356,7 +368,8 @@ class TestProcessWorkItem:
             mocks['invoke'].return_value = CopilotResult(
                 work_item_id="task-1", success=True, output="Completed",
                 attempt_count=1, stats=work_stats,
-            )
+            session_id="test-session",
+        )
             mocks['cleanup_timeout'].return_value = (False, 2)  # Cleanup fails
 
             result = process_work_item(item, interactive=True)

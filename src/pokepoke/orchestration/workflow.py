@@ -31,6 +31,7 @@ from pokepoke.orchestration.workflow_helpers import (
     _log_failure,
     _maybe_decompose,
     _maybe_retry_copilot,
+    evaluate_gate_verdict,
     run_cleanup_with_timeout,
     setup_worktree,
 )
@@ -47,7 +48,6 @@ logger = logging.getLogger(__name__)
 _FAIL_FAST_STATUSES = frozenset({"blocked", "needs_clarification", "too_large"})
 _MAX_GATE_CRASH_RETRIES = _MAX_GATE_TIMEOUT_RETRIES = 3
 _LOCK_TIMEOUT_PER_AGENT, _BACKOFF_BASE_SECONDS, _BACKOFF_MAX_SECONDS = 120.0, 30, 240
-
 
 @dataclass
 class WorkItemConfig:
@@ -108,16 +108,13 @@ def process_work_item(  # noqa: C901
 
         logger.info("\n\U0001f512 Claiming work item...")
         if not _assign(item.id):
-
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason="Failed to assign work item")
         _session = WorkItemSession(item_id=item.id, agent_name=get_agent_name(default="pokepoke"))
         _session._assigned = True
         worktree_path = setup_worktree(item, lock_timeout=worktree_lock_timeout,
             run_logger=run_logger, item_logger=item_logger, repo_path=cfg.repo_path)
-
         if worktree_path is None:
-
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason="Failed to create worktree")
         _session.worktree_path = str(worktree_path)
@@ -224,6 +221,17 @@ def process_work_item(  # noqa: C901
             if current_stats:
                 accumulated_stats.accumulate(current_stats)
 
+            # Invariant: Copilot SDK backend always sets session_id on all exit paths.
+            if backend_provider == "copilot" and result.session_id is None:
+                from pokepoke.utils.shutdown import request_shutdown
+                logger.critical(
+                    "🚨 INVARIANT VIOLATION: Copilot SDK returned session_id=None for %s. "
+                    "Halting orchestrator.  success=%s  error=%s  output_len=%s",
+                    item.id, result.success, result.error,
+                    len(result.output) if result.output else 0,
+                )
+                request_shutdown()
+                break
             is_process_crash = result.error and (
                 "process died" in result.error.lower() or "exited unexpectedly" in result.error.lower())
 
@@ -246,27 +254,23 @@ def process_work_item(  # noqa: C901
                     result, copilot_failure_count, global_config.max_copilot_failure_retries, run_logger, item.id)
                 if retry:
                     last_feedback = feedback
-                    last_retry_was_gate_feedback = False  # Not a gate rejection
+                    last_retry_was_gate_feedback = False
                     continue
-
                 _maybe_decompose(item, copilot_failure_count, gate_rejection_count, global_config)
                 break
 
             _log_commit_status(worktree_cwd)
-
             outcome = result.work_agent_outcome
             if outcome and outcome.status in _FAIL_FAST_STATUSES:
                 reason = outcome.reason or outcome.status
                 _comment(item.id, f"Work agent returned '{outcome.status}': {reason}")
                 logger.info("Work agent fail-fast: status=%s reason=%s — skipping gate", outcome.status, reason)
                 break
-
             from pokepoke.beads.reconciliation import is_beads_item_closed
             if is_beads_item_closed(item.id):
                 logger.warning("\n✅ Agent already closed beads item — skipping cleanup and gate checks")
                 gate_success = True
                 break
-
             cleanup_success, cleanup_runs = run_cleanup_with_timeout(
                 item, result, pokepoke_root, start_time, timeout_seconds, cfg.timeout_hours,
                 worktree_cwd, parent_agent_id=base_agent_id, item_logger=item_logger)
@@ -278,7 +282,6 @@ def process_work_item(  # noqa: C901
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
                                     failure_reason="Cleanup agent failed to resolve uncommitted changes")
-
             if not global_config.gate_agent_enabled:
                 logger.warning("\n⏭️  Gate Agent disabled via config — skipping verification")
                 gate_success = True
@@ -362,50 +365,27 @@ def process_work_item(  # noqa: C901
                     _comment(item.id, f"Gate Agent crashed {gate_crash_attempts} times:\n{gate_reason}")
                 break  # Not a crash/timeout — exit the gate retry loop
 
-            if gate_success:
-                logger.info("\n✅ Gate Agent signed off!")
+            verdict = evaluate_gate_verdict(
+                gate_success, gate_crashed, gate_timed_out, gate_reason,
+                item.id, pokepoke_root, gate_rejection_count, max_gate_rejections,
+                _comment, _defer)
+            if verdict.accept:
+                gate_success = True
                 backoff_delay = _BACKOFF_BASE_SECONDS
                 break
-            elif gate_crashed or gate_timed_out:
-                # Gate infra failure — if worktree has commits, accept via fallback
-                from pokepoke.beads.reconciliation import worktree_branch_has_commits
-                if worktree_branch_has_commits(item.id, pokepoke_root):
-                    fail_mode = "timed out" if gate_timed_out else "crashed"
-                    logger.warning("\n⚠️  Gate Agent %s but worktree has valid commits — fallback accept", fail_mode)
-                    _comment(item.id, f"Gate Agent {fail_mode} but worktree has valid commits. Accepting via fallback.")
-                    gate_success = True
+            if verdict.reject_capped:
+                _maybe_decompose(item, copilot_failure_count, verdict.rejection_count, config)
+                result.success = False
+                result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
+                _log_failure(run_logger, item_logger, request_count)
                 break
-            else:
-                from pokepoke.beads.reconciliation import worktree_branch_has_commits
-                if ("Gate Agent did not explicitly approve" in gate_reason or "could not be parsed" in gate_reason) and \
-                        worktree_branch_has_commits(item.id, pokepoke_root):
-                    logger.warning("\n⚠️  Gate verdict unclear but worktree has valid commits — fallback accept")
-                    _comment(item.id, f"Gate Agent verdict unclear: {gate_reason}\nHowever, worktree has valid commits that passed pre-commit hooks. Accepting via fallback.")
-                    gate_success = True
-                    break
-
-                # Genuine code rejection — check cap
-                from pokepoke.beads.beads_management import increment_gate_rejection_count
-                new_count = increment_gate_rejection_count(item.id)
-                if new_count < 0:
-                    gate_rejection_count += 1
-                    new_count = gate_rejection_count
-                else:
-                    gate_rejection_count = new_count
-                logger.error(f"\n❌ Gate Agent rejected ({gate_rejection_count}/{max_gate_rejections}): {gate_reason}")
-                _comment(item.id, f"Gate Agent Rejection ({gate_rejection_count}/{max_gate_rejections}):\n{gate_reason}")
-                if gate_rejection_count >= max_gate_rejections:
-                    logger.error(f"\n❌ Exceeded max gate rejections ({gate_rejection_count}/{max_gate_rejections}) for {item.id}")
-                    _defer(item.id, f"Auto-deferred after {gate_rejection_count} gate rejections (cap: {max_gate_rejections}). Item likely too complex for a single agent session. Last rejection:\n{gate_reason}")
-                    _maybe_decompose(item, copilot_failure_count, gate_rejection_count, config)
-                    result.success = False
-                    result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
-                    _log_failure(run_logger, item_logger, request_count)
-                    break
-                resume_session_id = None
-                resume_output_summary = None
-                last_feedback = gate_reason
-                last_retry_was_gate_feedback = True
+            if not verdict.reason:
+                break  # Infra failure without fallback
+            gate_rejection_count = verdict.rejection_count
+            resume_session_id = None
+            resume_output_summary = None
+            last_feedback = verdict.reason
+            last_retry_was_gate_feedback = True
 
         # Save worker context for future workers when this attempt failed
         if not result.success:

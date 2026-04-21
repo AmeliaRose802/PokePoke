@@ -291,6 +291,7 @@ def make_process_item_mocks(
             output="Work completed" if copilot_success else "",
             error="" if copilot_success else "Failed",
             attempt_count=1,
+            session_id="pokepoke-task-1",
         )
 
         yield mocks
@@ -361,7 +362,8 @@ def make_workflow_mocks(
             work_item_id="task-1",
             success=copilot_success,
             output="Work completed" if copilot_success else "Failed",
-            attempt_count=1
+            attempt_count=1,
+            session_id="pokepoke-task-1",
         )
 
         # Mock subprocess with smart command handling
@@ -467,6 +469,7 @@ def make_copilot_result(
     success: bool = True,
     output: str = "Work completed",
     attempt_count: int = 1,
+    session_id: str = "pokepoke-task-1",
     **kwargs
 ) -> CopilotResult:
     """Build a CopilotResult with sensible defaults."""
@@ -475,6 +478,7 @@ def make_copilot_result(
         success=success,
         output=output,
         attempt_count=attempt_count,
+        session_id=session_id,
         **kwargs
     )
 

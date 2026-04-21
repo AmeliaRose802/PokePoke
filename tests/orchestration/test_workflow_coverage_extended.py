@@ -89,7 +89,9 @@ def _base_patches(
         setup_worktree_rv = Path("C:/fake/worktree")
     if invoke_results is None:
         invoke_results = [
-            CopilotResult(work_item_id="test-ext-1", success=True, attempt_count=1)
+            CopilotResult(work_item_id="test-ext-1", success=True, attempt_count=1,
+            session_id="test-session",
+        )
         ]
     if is_shutting_down_seq is None:
         is_shutting_down_seq = [False, True]
@@ -314,8 +316,9 @@ class TestCopilotSuccessGateDisabled:
             config=_make_config(gate_enabled=False),
             invoke_results=[
                 CopilotResult(
-                    work_item_id=item.id, success=True, attempt_count=1
-                )
+                    work_item_id=item.id, success=True, attempt_count=1,
+            session_id="test-session",
+        )
             ],
             is_shutting_down_seq=[False, False],
         )
@@ -333,9 +336,11 @@ class TestCopilotFailureWithRetry:
         fail_result = CopilotResult(
             work_item_id=item.id, success=False, error="Transient error",
             attempt_count=1,
+            session_id="test-session",
         )
         ok_result = CopilotResult(
             work_item_id=item.id, success=True, attempt_count=1,
+            session_id="test-session",
         )
 
         patches, ui = _base_patches(
@@ -364,6 +369,7 @@ class TestCopilotFailureExhausted:
         fail_result = CopilotResult(
             work_item_id=item.id, success=False,
             error="Persistent failure", attempt_count=1,
+            session_id="test-session",
         )
 
         patches, ui = _base_patches(
@@ -391,6 +397,7 @@ class TestFailFastOutcomes:
         copilot_result = CopilotResult(
             work_item_id=item.id, success=True, attempt_count=1,
             work_agent_outcome=outcome,
+            session_id="test-session",
         )
         client = FakeBeadsClient()
         client.add_item(item)
@@ -417,6 +424,7 @@ class TestBeadsItemAlreadyClosed:
         item = _make_item()
         copilot_result = CopilotResult(
             work_item_id=item.id, success=True, attempt_count=1,
+            session_id="test-session",
         )
 
         result, ctx = _run(
@@ -438,6 +446,7 @@ class TestTimeoutRestart:
         item = _make_item()
         ok_result = CopilotResult(
             work_item_id=item.id, success=True, attempt_count=1,
+            session_id="test-session",
         )
 
         call_count = 0
@@ -489,6 +498,7 @@ class TestTimeoutRestartExhausted:
         fail = CopilotResult(
             work_item_id=item.id, success=False,
             error="Transient", attempt_count=1,
+            session_id="test-session",
         )
 
         patches, ui = _base_patches(
@@ -562,6 +572,7 @@ class TestCleanupAgentFailure:
         item = _make_item()
         ok_result = CopilotResult(
             work_item_id=item.id, success=True, attempt_count=1,
+            session_id="test-session",
         )
 
         result, _ctx = _run(
@@ -584,6 +595,7 @@ class TestWorkerContextSavedOnFailure:
         fail_result = CopilotResult(
             work_item_id=item.id, success=False,
             error="Something went wrong", attempt_count=1,
+            session_id="test-session",
         )
 
         patches, ui = _base_patches(
@@ -606,6 +618,7 @@ class TestWorkerContextSavedOnFailure:
         item = _make_item()
         ok_result = CopilotResult(
             work_item_id=item.id, success=True, attempt_count=1,
+            session_id="test-session",
         )
 
         _, ctx = _run(
@@ -651,6 +664,7 @@ class TestVerifyWorktreeBranchError:
         item = _make_item()
         ok_result = CopilotResult(
             work_item_id=item.id, success=True, attempt_count=1,
+            session_id="test-session",
         )
 
         result, ctx = _run(

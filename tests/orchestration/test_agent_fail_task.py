@@ -408,6 +408,7 @@ class TestMaybeRetryCopilotEdgeCases:
         result = CopilotResult(
             work_item_id="task-1", success=False,
             error="some error", attempt_count=1,
+            session_id="test-session",
         )
         should_retry, _ = _maybe_retry_copilot(
             result, failure_count=3, max_retries=3, run_logger=None, item_id="task-1",
@@ -419,6 +420,7 @@ class TestMaybeRetryCopilotEdgeCases:
         result = CopilotResult(
             work_item_id="task-1", success=False,
             error="some error", attempt_count=1,
+            session_id="test-session",
         )
         should_retry, _ = _maybe_retry_copilot(
             result, failure_count=4, max_retries=3, run_logger=None, item_id="task-1",
@@ -430,6 +432,7 @@ class TestMaybeRetryCopilotEdgeCases:
         result = CopilotResult(
             work_item_id="task-1", success=False,
             error="", attempt_count=1,
+            session_id="test-session",
         )
         should_retry, feedback = _maybe_retry_copilot(
             result, failure_count=1, max_retries=3, run_logger=None, item_id="task-1",
@@ -634,6 +637,7 @@ class TestRunCleanupWithTimeoutEdgeCases:
         item = make_work_item()
         result = CopilotResult(
             work_item_id="task-1", success=False, output="", attempt_count=1,
+            session_id="test-session",
         )
         with (
             patch(f"{_WFH}.has_uncommitted_changes", return_value=True),
@@ -651,6 +655,7 @@ class TestRunCleanupWithTimeoutEdgeCases:
         item = make_work_item()
         result = CopilotResult(
             work_item_id="task-1", success=True, output="done", attempt_count=1,
+            session_id="test-session",
         )
         with (
             patch(f"{_WFH}.has_uncommitted_changes", return_value=False),
@@ -669,6 +674,7 @@ class TestRunCleanupWithTimeoutEdgeCases:
         item = make_work_item()
         result = CopilotResult(
             work_item_id="task-1", success=True, output="done", attempt_count=1,
+            session_id="test-session",
         )
         call_count = 0
 
@@ -704,6 +710,7 @@ class TestFinalizeReconciliation:
         result = CopilotResult(
             work_item_id="task-reconcile", success=False,
             error="process died", attempt_count=1,
+            session_id="test-session",
         )
         item = make_work_item(id="task-reconcile", title="Reconcile Task")
 
@@ -739,6 +746,7 @@ class TestFinalizeReconciliation:
         result = CopilotResult(
             work_item_id="task-no-reconcile", success=False,
             error="agent crashed", attempt_count=1,
+            session_id="test-session",
         )
         item = make_work_item(id="task-no-reconcile", title="No Reconcile")
 
@@ -774,6 +782,7 @@ class TestFinalizeReconciliation:
         result = CopilotResult(
             work_item_id="task-reconcile-err", success=False,
             error="agent failed", attempt_count=1,
+            session_id="test-session",
         )
         item = make_work_item(id="task-reconcile-err", title="Reconcile Error")
 
@@ -822,6 +831,7 @@ class TestProcessCrashDetection:
             output="some output",
             error="Process died: consecutive ping failures or output timeout",
             attempt_count=1,
+            session_id="test-session",
         )
         with make_process_item_mocks(
             include_handoff=True,
@@ -843,6 +853,7 @@ class TestProcessCrashDetection:
             output="partial work",
             error="SDK process exited unexpectedly",
             attempt_count=1,
+            session_id="test-session",
         )
         with make_process_item_mocks(
             include_handoff=True,
@@ -1012,6 +1023,7 @@ class TestExtractAgentStats:
         result = CopilotResult(
             work_item_id="t1", success=True, output="x", attempt_count=1,
             stats=stats,
+            session_id="test-session",
         )
         extracted = _extract_agent_stats(result)
         assert extracted is stats
@@ -1022,6 +1034,7 @@ class TestExtractAgentStats:
         result = CopilotResult(
             work_item_id="t1", success=True, output="some output text",
             attempt_count=1,
+            session_id="test-session",
         )
         with patch("pokepoke.stats.stats.parse_agent_stats") as mock_parse:
             mock_parse.return_value = AgentStats()
@@ -1034,6 +1047,7 @@ class TestExtractAgentStats:
         from pokepoke.orchestration.workflow_helpers import _extract_agent_stats
         result = CopilotResult(
             work_item_id="t1", success=True, output="", attempt_count=1,
+            session_id="test-session",
         )
         extracted = _extract_agent_stats(result)
         assert extracted is None
@@ -1122,6 +1136,7 @@ class TestMaybeRetryCopilotWithLogger:
         result = CopilotResult(
             work_item_id="task-1", success=False,
             error="timeout", attempt_count=1,
+            session_id="test-session",
         )
         should_retry, _feedback = _maybe_retry_copilot(
             result, failure_count=1, max_retries=3, run_logger=run_logger,
@@ -1137,6 +1152,7 @@ class TestMaybeRetryCopilotWithLogger:
             work_item_id="task-1", success=False,
             error="rate limited", attempt_count=1,
             is_rate_limited=True,
+            session_id="test-session",
         )
         should_retry, _ = _maybe_retry_copilot(
             result, failure_count=1, max_retries=10, run_logger=None,
@@ -1158,6 +1174,7 @@ class TestCleanupTimeoutPath:
         item = make_work_item()
         result = CopilotResult(
             work_item_id="task-1", success=True, output="done", attempt_count=1,
+            session_id="test-session",
         )
         time_call = 0
 
@@ -1183,6 +1200,7 @@ class TestCleanupTimeoutPath:
         item = make_work_item()
         result = CopilotResult(
             work_item_id="task-1", success=True, output="done", attempt_count=1,
+            session_id="test-session",
         )
         call_count = 0
 
@@ -1238,6 +1256,7 @@ class TestReconcileWithLoggers:
         result = CopilotResult(
             work_item_id="task-log", success=False,
             error="died", attempt_count=1,
+            session_id="test-session",
         )
         item = make_work_item(id="task-log", title="Log Task")
         run_logger = Mock()
@@ -1287,6 +1306,7 @@ class TestHandleFailureWithLoggers:
         result = CopilotResult(
             work_item_id="task-fail-log", success=False,
             error="agent crashed hard", attempt_count=1,
+            session_id="test-session",
         )
         item = make_work_item(id="task-fail-log", title="Fail Log Task")
         run_logger = Mock()
@@ -1329,6 +1349,7 @@ class TestHandleFailureWithLoggers:
         result = CopilotResult(
             work_item_id="task-reason", success=False,
             error="memory exhausted", attempt_count=1,
+            session_id="test-session",
         )
         item = make_work_item(id="task-reason", title="Reason Task")
 
@@ -1364,6 +1385,7 @@ class TestHandleFailureWithLoggers:
         result = CopilotResult(
             work_item_id="task-unknown", success=False,
             error=None, attempt_count=1,
+            session_id="test-session",
         )
         item = make_work_item(id="task-unknown", title="Unknown Task")
 

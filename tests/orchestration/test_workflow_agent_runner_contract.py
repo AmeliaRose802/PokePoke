@@ -231,6 +231,7 @@ class TestCopilotResultRoundTrip:
         result = CopilotResult(
             work_item_id="item-1", success=False,
             output="", error="some error", attempt_count=1,
+            session_id="test-session",
         )
         assert result.work_item_id == "item-1"
         assert result.success is False
@@ -272,6 +273,7 @@ class TestCopilotResultRoundTrip:
         """workflow.py mutates result.success = False after cleanup failure."""
         result = CopilotResult(
             work_item_id="item-3", success=True, output="ok", attempt_count=1,
+            session_id="test-session",
         )
         assert result.success is True
         result.success = False
@@ -286,6 +288,7 @@ class TestCopilotResultRoundTrip:
             output="",
             error="subprocess error",
             attempt_count=1,
+            session_id="test-session",
         )
         assert result.work_item_id == "agent-item"
         assert result.output == ""
@@ -342,6 +345,7 @@ class TestRunGateAgentReturnsValidResult:
             success=True,
             output='```json\n{"status": "success", "message": "All good"}\n```',
             attempt_count=1,
+            session_id="test-session",
         )
         mock_ui.ui = MagicMock()
 
@@ -383,6 +387,7 @@ class TestRunGateAgentReturnsValidResult:
             success=True,
             output='```json\n{"status": "failure", "reason": "Tests broken", "details": "line 42"}\n```',
             attempt_count=1,
+            session_id="test-session",
         )
         mock_ui.ui = MagicMock()
 
@@ -445,6 +450,7 @@ class TestRunGateAgentReturnsValidResult:
             output="",
             error="process died unexpectedly",
             attempt_count=1,
+            session_id="test-session",
         )
         mock_ui.ui = MagicMock()
 
@@ -497,6 +503,7 @@ class TestWorkflowFieldAccessPatterns:
             success=False,
             error="Session aborted due to application shutdown",
             attempt_count=0,
+            session_id="test-session",
         )
         # workflow.py later reads these:
         assert result.success is False
@@ -511,6 +518,7 @@ class TestWorkflowFieldAccessPatterns:
         result = CopilotResult(
             work_item_id="item-1", success=True, output="done",
             attempt_count=1, work_agent_outcome=outcome,
+            session_id="test-session",
         )
         assert result.work_agent_outcome is not None
         assert result.work_agent_outcome.status == "blocked"
@@ -522,6 +530,7 @@ class TestWorkflowFieldAccessPatterns:
             work_item_id="item-1", success=False,
             error="rate limited", attempt_count=1,
             is_rate_limited=True,
+            session_id="test-session",
         )
         assert result.is_rate_limited is True
 

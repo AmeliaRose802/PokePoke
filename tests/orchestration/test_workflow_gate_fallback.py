@@ -88,8 +88,12 @@ class TestGateVerdictFallback:
 
                 # Work agent will be called twice (initial + retry after gate rejection)
                 mocks['invoke'].side_effect = [
-                    CopilotResult(work_item_id="task-1", success=True, output="Try 1", attempt_count=1),
-                    CopilotResult(work_item_id="task-1", success=True, output="Try 2", attempt_count=1),
+                    CopilotResult(work_item_id="task-1", success=True, output="Try 1", attempt_count=1,
+            session_id="test-session",
+        ),
+                    CopilotResult(work_item_id="task-1", success=True, output="Try 2", attempt_count=1,
+            session_id="test-session",
+        ),
                 ]
                 # Gate agent rejects both times
                 mocks['gate'].side_effect = [

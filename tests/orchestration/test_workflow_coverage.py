@@ -146,7 +146,9 @@ class TestRunCleanupWithTimeout:
         # First call: has changes; after cleanup: no changes
         mock_uncommitted.side_effect = [True, False]
         item = _item()
-        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        )
 
         success, runs = run_cleanup_with_timeout(
             item, result_obj, Path("."), time.time(), 7200, 2.0, cwd="/fake",
@@ -163,7 +165,9 @@ class TestRunCleanupWithTimeout:
         # which also calls time.time() internally.
         mock_time.side_effect = [8000.0] + [8000.0] * 20  # past timeout_seconds (7200)
         item = _item()
-        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        )
 
         success, runs = run_cleanup_with_timeout(
             item, result_obj, Path("."), 0.0, 7200, 2.0, cwd="/fake",
@@ -174,7 +178,9 @@ class TestRunCleanupWithTimeout:
     @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False)
     def test_no_changes_skips_cleanup(self, mock_uncommitted):
         item = _item()
-        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        )
 
         success, runs = run_cleanup_with_timeout(
             item, result_obj, Path("."), time.time(), 7200, 2.0,
@@ -186,7 +192,9 @@ class TestRunCleanupWithTimeout:
     @patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=True)
     def test_cleanup_failure(self, mock_uncommitted, mock_cleanup):
         item = _item()
-        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+        result_obj = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        )
 
         _success, runs = run_cleanup_with_timeout(
             item, result_obj, Path("."), time.time(), 7200, 2.0,
@@ -287,6 +295,7 @@ class TestProcessWorkItem:
         mock_copilot.return_value = CopilotResult(
             work_item_id="wf-1", success=True, attempt_count=1,
             output="done", stats=AgentStats(input_tokens=100),
+            session_id="test-session",
         )
         result = process_work_item(_item(), interactive=False)
         assert result.success is True
@@ -330,6 +339,7 @@ class TestProcessWorkItem:
         mock_copilot.return_value = CopilotResult(
             work_item_id="wf-1", success=False, attempt_count=1,
             error="timeout",
+            session_id="test-session",
         )
         result = process_work_item(_item(), interactive=False)
         assert result.success is False
@@ -374,6 +384,7 @@ class TestProcessWorkItem:
         )
         mock_copilot.return_value = CopilotResult(
             work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
         )
         mock_gate.return_value = GateAgentResult(success=True, reason="looks good")
         with patch("pokepoke.git.git_operations.build_handoff_context", return_value="ctx"):
@@ -420,8 +431,12 @@ class TestProcessWorkItem:
         )
         # First copilot call -> gate rejects; second copilot call -> gate passes
         mock_copilot.side_effect = [
-            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
-            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
+            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        ),
+            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        ),
         ]
         mock_gate.side_effect = [
             GateAgentResult(success=False, reason="needs fix"),
@@ -532,8 +547,12 @@ class TestProcessWorkItem:
             ai_backend=MagicMock(provider="copilot"),
         )
         mock_copilot.side_effect = [
-            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
-            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1),
+            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        ),
+            CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        ),
         ]
         mock_gate.side_effect = [
             GateAgentResult(success=False, reason="needs fix"),
@@ -639,7 +658,9 @@ class TestMaybeRetryCopilot:
     """Direct unit tests for _maybe_retry_copilot."""
 
     def test_failure_count_exceeds_max_retries(self):
-        result = CopilotResult(work_item_id="x", success=False, attempt_count=1)
+        result = CopilotResult(work_item_id="x", success=False, attempt_count=1,
+            session_id="test-session",
+        )
         should_retry, feedback = _maybe_retry_copilot(
             result, failure_count=4, max_retries=3,
             run_logger=None, item_id="x",
@@ -651,6 +672,7 @@ class TestMaybeRetryCopilot:
         result = CopilotResult(
             work_item_id="x", success=False, attempt_count=1,
             is_rate_limited=True,
+            session_id="test-session",
         )
         should_retry, feedback = _maybe_retry_copilot(
             result, failure_count=1, max_retries=5,
@@ -670,7 +692,9 @@ class TestRunCleanupTimeout:
     @patch("pokepoke.orchestration.workflow_helpers.format_work_item_banner", return_value="banner")
     def test_timeout_during_cleanup(self, mock_banner, mock_set, mock_uncommitted):
         item = _item()
-        result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+        result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        )
         # start_time far in the past so elapsed > timeout_seconds immediately
         start_time = time.time() - 9999
         success, runs = run_cleanup_with_timeout(
@@ -695,7 +719,9 @@ class TestFinalizeItemResult:
                                mock_beta, mock_tui, tmp_path):
         beta_stats = AgentStats(input_tokens=50)
         mock_beta.return_value = beta_stats
-        result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+        result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        )
         wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),
@@ -726,7 +752,9 @@ class TestFinalizeItemResult:
                           mock_tui, tmp_path):
         run_logger = MagicMock()
         item_logger = MagicMock()
-        result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1)
+        result = CopilotResult(work_item_id="wf-1", success=True, attempt_count=1,
+            session_id="test-session",
+        )
         _wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),
@@ -763,7 +791,9 @@ class TestFinalizeItemResult:
             "worktree_cleaned": True,
         })
         result = CopilotResult(work_item_id="wf-1", success=False, attempt_count=1,
-                               error="session failed")
+                               error="session failed",
+            session_id="test-session",
+        )
         run_logger = MagicMock()
         item_logger = MagicMock()
         wir, success = _finalize_item_result(ResultContext(
@@ -804,7 +834,9 @@ class TestFinalizeItemResult:
             "worktree_cleaned": False,
         })
         result = CopilotResult(work_item_id="wf-1", success=False, attempt_count=1,
-                               error="session failed")
+                               error="session failed",
+            session_id="test-session",
+        )
         wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),
@@ -841,7 +873,9 @@ class TestFinalizeItemResult:
             "worktree_cleaned": True,
         })
         result = CopilotResult(work_item_id="wf-1", success=False, attempt_count=1,
-                               error="session failed")
+                               error="session failed",
+            session_id="test-session",
+        )
         wir, success = _finalize_item_result(ResultContext(
             result=result,
             item=_item(),

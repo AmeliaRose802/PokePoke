@@ -179,7 +179,8 @@ class TestProcessWorkItem:
             work_item_id="task-1",
             success=False,
             error="Something went wrong",
-            attempt_count=1
+            attempt_count=1,
+            session_id="test-session",
         )
 
         # Mock subprocess for git and bd commands

@@ -104,7 +104,8 @@ class TestRunCleanupWithTimeout:
             work_item_id="task-1",
             success=True,
             output="",
-            attempt_count=1
+            attempt_count=1,
+            session_id="test-session",
         )
         repo_root = Path("/fake/repo")
 
@@ -141,7 +142,8 @@ class TestRunCleanupWithTimeout:
             work_item_id="task-1",
             success=True,
             output="",
-            attempt_count=1
+            attempt_count=1,
+            session_id="test-session",
         )
         repo_root = Path("/fake/repo")
 
@@ -179,7 +181,8 @@ class TestRunCleanupWithTimeout:
             work_item_id="task-1",
             success=True,
             output="",
-            attempt_count=1
+            attempt_count=1,
+            session_id="test-session",
         )
         repo_root = Path("/fake/repo")
 
@@ -221,7 +224,8 @@ class TestRunCleanupWithTimeout:
             work_item_id="task-1",
             success=True,
             output="",
-            attempt_count=1
+            attempt_count=1,
+            session_id="test-session",
         )
         repo_root = Path("/fake/repo")
 
