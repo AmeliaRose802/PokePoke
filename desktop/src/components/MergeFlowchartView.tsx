@@ -164,9 +164,9 @@ export function MergeFlowchartView({ getMergeFlowState, title = "Merge Workflow"
       </div>
 
       <div className="merge-flowchart-body">
-        {/* Step nodes in pipeline order */}
+        {/* Step nodes in pipeline order — only show steps that have been reached */}
         <div className="merge-flowchart-steps">
-          {stepDefs.map((def) => {
+          {stepDefs.filter((def) => def.id in displayRun.steps).map((def, idx, visible) => {
             const stepState = displayRun.steps[def.id];
             const status: MergeStepStatus = stepState?.status ?? "pending";
             const duration = stepState ? formatDuration(stepState.started_at, stepState.ended_at) : null;
@@ -187,8 +187,8 @@ export function MergeFlowchartView({ getMergeFlowState, title = "Merge Workflow"
                   {duration && <span className="merge-node-duration">{duration}</span>}
                 </button>
 
-                {/* Edge connector (except last step) */}
-                {def.id !== stepDefs[stepDefs.length - 1].id && (
+                {/* Edge connector (except last visible step) */}
+                {idx < visible.length - 1 && (
                   <div className={`merge-edge merge-edge--${status}`}>
                     <span className="merge-edge-line" />
                     <span className="merge-edge-arrow">▾</span>
