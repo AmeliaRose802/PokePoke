@@ -250,6 +250,7 @@ def test_perform_pre_merge_cleanup_fails(
     mock_add.assert_called_once()
 
 
+@patch("pokepoke.utils.shutdown.request_shutdown")
 @patch("pokepoke.git.merge_conflict.abort_merge")
 @patch("pokepoke.git.merge_conflict.is_merge_in_progress")
 @patch("pokepoke.git.merge_conflict.get_unmerged_files")
@@ -258,11 +259,16 @@ def test_perform_pre_merge_cleanup_fails(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_perform_abort_merge_failure_returns_false(
+def test_perform_abort_merge_failure_halts_orchestrator(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
-    mock_get_unmerged, mock_is_merging, mock_abort,
+    mock_get_unmerged, mock_is_merging, mock_abort, mock_shutdown,
 ) -> None:
-    """When abort_merge fails after cleanup, return (False, False)."""
+    """When abort_merge fails, orchestrator must halt (PokePoke-jixa6).
+
+    If abort_merge() fails the main repo is stuck in merge-in-progress state.
+    Returning (False, False) alone would release the merge lock and let other
+    agents operate on a dirty repo, so we must request_shutdown() instead.
+    """
     mock_check.return_value = (True, "")
     mock_merge.return_value = MergeResult(success=False, unmerged_files=["file.py"])
     mock_is_merging.return_value = True
@@ -276,6 +282,9 @@ def test_perform_abort_merge_failure_returns_false(
     assert cleaned is False
     mock_abort.assert_called_once()
     assert mock_merge.call_count == 1
+    # Cleanup must NOT run — repo is stuck, lock must stay held
+    mock_conflict_cleanup.assert_not_called()
+    mock_shutdown.assert_called_once()
 
 
 @patch("pokepoke.git.merge_conflict.abort_merge")
@@ -306,6 +315,7 @@ def test_perform_retry_merge_succeeds_after_cleanup(
     mock_remove.assert_not_called()
 
 
+@patch("pokepoke.utils.shutdown.request_shutdown")
 @patch("pokepoke.git.merge_conflict.abort_merge")
 @patch("pokepoke.git.merge_conflict.is_merge_in_progress")
 @patch("pokepoke.git.merge_conflict.get_unmerged_files")
@@ -316,9 +326,9 @@ def test_perform_retry_merge_succeeds_after_cleanup(
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_retry_merge_fails_aborts(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
-    mock_get_unmerged, mock_is_merging, mock_abort,
+    mock_get_unmerged, mock_is_merging, mock_abort, mock_shutdown,
 ) -> None:
-    """Abort failure while preparing out-of-lock cleanup returns failure tuple."""
+    """Abort failure while preparing out-of-lock cleanup halts the orchestrator."""
     mock_check.return_value = (True, "")
     mock_merge.return_value = MergeResult(success=False, unmerged_files=["f.py"])
     mock_is_merging.return_value = True
@@ -331,6 +341,7 @@ def test_perform_retry_merge_fails_aborts(
     assert cleaned is False
     mock_abort.assert_called_once()
     mock_conflict_cleanup.assert_not_called()
+    mock_shutdown.assert_called_once()
 
 
 @patch("pokepoke.git.merge_conflict.abort_merge")
@@ -459,6 +470,7 @@ def test_perform_first_merge_worktree_persists(
     assert "persists" in mock_add.call_args[0][2].lower()
 
 
+@patch("pokepoke.utils.shutdown.request_shutdown")
 @patch("pokepoke.git.merge_conflict.abort_merge")
 @patch("pokepoke.git.merge_conflict.is_merge_in_progress")
 @patch("pokepoke.git.merge_conflict.get_unmerged_files")
@@ -469,9 +481,9 @@ def test_perform_first_merge_worktree_persists(
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_retry_abort_failure_logs_error(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
-    mock_get_unmerged, mock_is_merging, mock_abort,
+    mock_get_unmerged, mock_is_merging, mock_abort, mock_shutdown,
 ) -> None:
-    """When abort_merge fails after retry merge failure, return (False, False) with error logged."""
+    """When abort_merge fails, halt — cleanup agent and retry must not run."""
     mock_check.return_value = (True, "")
     mock_merge.side_effect = [MergeResult(success=False, unmerged_files=["f.py"]), MergeResult(success=False, unmerged_files=["f.py"])]
     mock_is_merging.side_effect = [True, False, True]
@@ -484,8 +496,11 @@ def test_perform_retry_abort_failure_logs_error(
     assert success is False
     assert cleaned is False
     mock_abort.assert_called_once()
+    mock_conflict_cleanup.assert_not_called()
+    mock_shutdown.assert_called_once()
 
 
+@patch("pokepoke.utils.shutdown.request_shutdown")
 @patch("pokepoke.git.merge_conflict.abort_merge")
 @patch("pokepoke.git.merge_conflict.is_merge_in_progress")
 @patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
@@ -494,9 +509,9 @@ def test_perform_retry_abort_failure_logs_error(
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_perform_cleanup_failure_abort_failure_logged(
     mock_check, mock_merge, mock_conflict_cleanup, mock_add,
-    mock_is_merging, mock_abort,
+    mock_is_merging, mock_abort, mock_shutdown,
 ) -> None:
-    """When abort_merge fails after cleanup failure, error is logged but function returns."""
+    """When abort_merge fails, orchestrator halts before the cleanup agent runs."""
     mock_check.return_value = (True, "")
     mock_merge.return_value = MergeResult(success=False, unmerged_files=["file.py"])
     mock_is_merging.side_effect = [True, True]
@@ -508,6 +523,9 @@ def test_perform_cleanup_failure_abort_failure_logged(
     assert success is False
     assert cleaned is False
     mock_abort.assert_called_once()
+    # Abort precedes cleanup — cleanup agent must not run when abort fails.
+    mock_conflict_cleanup.assert_not_called()
+    mock_shutdown.assert_called_once()
 
 
 @patch("pokepoke.git.merge_conflict.abort_merge")
@@ -699,7 +717,7 @@ def test_cleanup_agent_receives_main_repo_cwd(
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
-def test_merge_conflict_cleanup_receives_main_repo_cwd(
+def test_merge_conflict_cleanup_receives_worktree_cwd(
     mock_check_ready,
     mock_merge_worktree,
     mock_invoke_conflict_cleanup,
@@ -709,10 +727,13 @@ def test_merge_conflict_cleanup_receives_main_repo_cwd(
     _mock_is_merging,
     _mock_abort,
 ) -> None:
-    """Merge-conflict cleanup agent must target the main repo, not the worktree.
+    """Merge-conflict cleanup agent must target the isolated worktree, NOT the main repo.
 
-    Regression test: merge conflicts occur on main (where `git merge` runs),
-    so the conflict cleanup agent must receive cwd pointing at the main repo.
+    Regression test for PokePoke-jixa6: once the merge lock is released, the
+    cleanup agent must only touch the feature branch in its worktree so other
+    agents can merge to main in parallel without interference. Passing
+    cwd=repo_path would cause the agent to operate on the shared main repo,
+    which races with concurrent merges.
     """
     mock_check_ready.return_value = (True, "")
     mock_merge_worktree.side_effect = [
@@ -722,13 +743,18 @@ def test_merge_conflict_cleanup_receives_main_repo_cwd(
     mock_invoke_conflict_cleanup.return_value = (True, None)
 
     repo_path = "C:/my-repo"
-    ctx = _make_merge_context(repo_path=repo_path)
+    worktree_path = Path("C:/my-repo/worktrees/task-item-1")
+    ctx = _make_merge_context(repo_path=repo_path, worktree_path=worktree_path)
     handle_worktree_merge(ctx, agent_stats=None)
 
     mock_invoke_conflict_cleanup.assert_called_once()
     call_kwargs = mock_invoke_conflict_cleanup.call_args
-    assert call_kwargs[1].get("cwd") == repo_path, (
-        f"invoke_merge_conflict_cleanup_agent must receive cwd={repo_path!r}, got {call_kwargs}"
+    assert call_kwargs[1].get("cwd") == str(worktree_path), (
+        f"invoke_merge_conflict_cleanup_agent must receive cwd={str(worktree_path)!r} "
+        f"(isolated worktree), got {call_kwargs}"
+    )
+    assert call_kwargs[1].get("cwd") != repo_path, (
+        "Cleanup agent must not run in the main repo while merge lock is released"
     )
 
 
