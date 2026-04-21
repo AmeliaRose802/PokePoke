@@ -173,7 +173,7 @@ class TestPerformWorktreeMergeIntegration:
     @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
-    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.worktrees.merge_conflict_retry.invoke_merge_conflict_cleanup_agent')
     def test_perform_merge_handles_merge_conflicts(
         self,
         mock_conflict_agent,
@@ -197,6 +197,7 @@ class TestPerformWorktreeMergeIntegration:
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        ctx.max_conflict_retries = 1
         success, _cleaned = perform_worktree_merge(ctx)
 
         assert success is False
@@ -209,7 +210,7 @@ class TestPerformWorktreeMergeIntegration:
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
     @patch('pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree')
-    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.worktrees.merge_conflict_retry.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
     @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
     def test_perform_merge_tracks_uncleaned_worktree_on_failure(
@@ -475,7 +476,7 @@ class TestCleanupAgentInvocation:
 
     @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent')
+    @patch('pokepoke.worktrees.merge_conflict_retry.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
     def test_conflict_agent_receives_conflict_files(
         self,
@@ -501,6 +502,7 @@ class TestCleanupAgentInvocation:
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        ctx.max_conflict_retries = 1
         perform_worktree_merge(ctx)
 
         # Verify conflict agent was called
