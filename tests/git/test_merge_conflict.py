@@ -6,7 +6,6 @@ from unittest.mock import Mock, patch
 
 from pokepoke.git.merge_conflict import (
     abort_merge,
-    get_merge_conflict_details,
     get_unmerged_files,
     is_merge_in_progress,
 )
@@ -160,77 +159,6 @@ class TestAbortMerge:
 
         assert success is False
         assert "timed out" in error.lower()
-
-
-class TestGetMergeConflictDetails:
-    """Tests for get_merge_conflict_details function."""
-
-    @patch('pokepoke.git.merge_conflict.get_unmerged_files')
-    @patch('pokepoke.git.merge_conflict.is_merge_in_progress')
-    @patch('subprocess.run')
-    def test_get_details_with_conflict(
-        self, mock_run: Mock, mock_is_merge: Mock, mock_get_unmerged: Mock
-    ) -> None:
-        """Test getting details when merge is in progress."""
-        mock_is_merge.return_value = True
-        mock_get_unmerged.return_value = ["file1.py", "file2.py"]
-        mock_run.return_value = Mock(stdout="abc123\n", returncode=0)
-
-        result = get_merge_conflict_details()
-
-        assert result["is_merging"] is True
-        assert result["conflict_count"] == 2
-        assert "file1.py" in result["unmerged_files"]
-        assert result["merge_head"] == "abc123"
-
-    @patch('pokepoke.git.merge_conflict.get_unmerged_files')
-    @patch('pokepoke.git.merge_conflict.is_merge_in_progress')
-    def test_get_details_no_conflict(
-        self, mock_is_merge: Mock, mock_get_unmerged: Mock
-    ) -> None:
-        """Test getting details when no merge is in progress."""
-        mock_is_merge.return_value = False
-        mock_get_unmerged.return_value = []
-
-        result = get_merge_conflict_details()
-
-        assert result["is_merging"] is False
-        assert result["conflict_count"] == 0
-        assert result["merge_head"] == ""
-
-    @patch('pokepoke.git.merge_conflict.get_unmerged_files')
-    @patch('pokepoke.git.merge_conflict.is_merge_in_progress')
-    @patch('subprocess.run')
-    def test_get_details_with_repo_path(
-        self, mock_run: Mock, mock_is_merge: Mock, mock_get_unmerged: Mock
-    ) -> None:
-        """Test get_merge_conflict_details with explicit repo_path (line 124)."""
-        mock_is_merge.return_value = True
-        mock_get_unmerged.return_value = []
-        mock_run.return_value = Mock(stdout="def456\n", returncode=0)
-
-        result = get_merge_conflict_details(repo_path=Path("/my/repo"))
-
-        assert result["merge_head"] == "def456"
-        call_args = mock_run.call_args[0][0]
-        assert "-C" in call_args
-
-    @patch('pokepoke.git.merge_conflict.get_unmerged_files')
-    @patch('pokepoke.git.merge_conflict.is_merge_in_progress')
-    @patch('subprocess.run')
-    def test_get_details_merge_head_exception(
-        self, mock_run: Mock, mock_is_merge: Mock, mock_get_unmerged: Mock
-    ) -> None:
-        """Test get_merge_conflict_details when MERGE_HEAD retrieval fails (lines 135-136)."""
-        mock_is_merge.return_value = True
-        mock_get_unmerged.return_value = ["file.py"]
-        mock_run.side_effect = Exception("git process error")
-
-        result = get_merge_conflict_details()
-
-        assert result["is_merging"] is True
-        assert result["merge_head"] == ""
-        assert result["conflict_count"] == 1
 
 
 class TestAbortMergeGenericException:

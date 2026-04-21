@@ -85,27 +85,6 @@ def abort_merge(repo_path: Path | None = None) -> tuple[bool, str]:
         return False, str(e)
 
 
-def abort_rebase(repo_path: Path | None = None) -> tuple[bool, str]:
-    """Abort an in-progress rebase, returning to the state before the rebase started.
-
-    Returns:
-        Tuple of (success, error_message)
-    """
-    try:
-        cmd = ["git", "rebase", "--abort"]
-        if repo_path:
-            cmd = ["git", "-C", str(repo_path), "rebase", "--abort"]
-        result = run_git(cmd, timeout=30, check=False)
-        if result.returncode == 0:
-            return True, ""
-        else:
-            return False, result.stderr.strip() if result.stderr else "Unknown error"
-    except subprocess.TimeoutExpired:
-        return False, "Rebase abort timed out"
-    except Exception as e:
-        return False, str(e)
-
-
 def scan_files_for_conflict_markers(
     file_paths: list[str],
     repo_path: Path | None = None,
@@ -175,35 +154,3 @@ def detect_dirty_conflict_files(repo_path: Path) -> list[str]:
         return []
 
     return scan_files_for_conflict_markers(file_paths, repo_path=repo_path)
-
-
-def get_merge_conflict_details(repo_path: Path | None = None) -> dict[str, object]:
-    """Get detailed information about the current merge conflict state.
-
-    Returns a dictionary with:
-    - is_merging: bool - whether a merge is in progress
-    - unmerged_files: list - files with conflicts
-    - merge_head: str - the commit being merged (if available)
-    - conflict_count: int - number of conflicted files
-    """
-    is_merging = is_merge_in_progress(repo_path)
-    unmerged = get_unmerged_files(repo_path)
-
-    merge_head = ""
-    if is_merging:
-        try:
-            cmd = ["git", "rev-parse", "--short", "MERGE_HEAD"]
-            if repo_path:
-                cmd = ["git", "-C", str(repo_path), "rev-parse", "--short", "MERGE_HEAD"]
-            result = run_git(cmd, timeout=10, check=False)
-            if result.returncode == 0:
-                merge_head = result.stdout.strip()
-        except Exception as e:
-            logger.debug(f"Failed to get merge head: {e}")
-
-    return {
-        "is_merging": is_merging,
-        "unmerged_files": unmerged,
-        "merge_head": merge_head,
-        "conflict_count": len(unmerged)
-    }
