@@ -22,18 +22,18 @@ from pokepoke.worktrees.worktrees import (
 class TestRunGit:
     """Tests for _run_git helper."""
 
-    def test_run_git_success(self) -> None:
+    def test_run_git_success(self, monkeypatch) -> None:
         """_run_git returns subprocess result on success."""
-        with patch('subprocess.run') as mock_run:
-            mock_run.return_value = Mock(
-                stdout='branch info',
-                stderr='',
-                returncode=0,
-                args=['git', 'branch']
-            )
-            result = _run_git(['git', 'branch'])
-            assert result.stdout == 'branch info'
-            assert result.returncode == 0
+        mock_result = Mock(
+            stdout='branch info',
+            stderr='',
+            returncode=0,
+            args=['git', 'branch']
+        )
+        monkeypatch.setattr('subprocess.run', lambda *a, **kw: mock_result)
+        result = _run_git(['git', 'branch'])
+        assert result.stdout == 'branch info'
+        assert result.returncode == 0
 
     def test_run_git_sets_encoding_and_timeout(self) -> None:
         """_run_git uses UTF-8 encoding and default timeout."""
@@ -356,8 +356,6 @@ class TestMergeWorktree:
     """Tests for merge_worktree function."""
 
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
-    @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
-    @patch('pokepoke.worktrees.merge_helpers._run_git')
     @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
@@ -370,10 +368,7 @@ class TestMergeWorktree:
         mock_is_clean,
         mock_default_branch,
         mock_validate,
-        mock_run_git,
-        mock_is_merged,
         mock_cleanup,
-        monkeypatch,
     ) -> None:
         """Successfully merge worktree."""
         mock_default_branch.return_value = 'main'
@@ -381,13 +376,7 @@ class TestMergeWorktree:
         mock_sync.return_value = True
         mock_execute.return_value = (True, '', [])
         mock_validate.return_value = True
-        mock_run_git.return_value = Mock(returncode=0, stdout='')
-        mock_is_merged.return_value = True
         mock_cleanup.return_value = None
-        monkeypatch.setattr(
-            'pokepoke.worktrees.merge_helpers._run_git_with_retry',
-            lambda *a, **kw: Mock(returncode=0, stdout=''),
-        )
 
         success, conflicts = merge_worktree('item-1')
 
@@ -449,8 +438,6 @@ class TestMergeWorktree:
         assert conflicts == conflict_files
 
     @patch('pokepoke.worktrees.worktrees.cleanup_after_merge')
-    @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
-    @patch('pokepoke.worktrees.merge_helpers._run_git')
     @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
@@ -463,10 +450,7 @@ class TestMergeWorktree:
         mock_is_clean,
         mock_default_branch,
         mock_validate,
-        mock_run_git,
-        mock_is_merged,
         mock_cleanup,
-        monkeypatch,
     ) -> None:
         """Call cleanup_after_merge when cleanup=True."""
         mock_default_branch.return_value = 'main'
@@ -474,13 +458,7 @@ class TestMergeWorktree:
         mock_sync.return_value = True
         mock_execute.return_value = (True, '', [])
         mock_validate.return_value = True
-        mock_run_git.return_value = Mock(returncode=0, stdout='')
-        mock_is_merged.return_value = True
         mock_cleanup.return_value = None
-        monkeypatch.setattr(
-            'pokepoke.worktrees.merge_helpers._run_git_with_retry',
-            lambda *a, **kw: Mock(returncode=0, stdout=''),
-        )
 
         success, _ = merge_worktree('item-1', cleanup=True)
 
