@@ -12,6 +12,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.orchestration.workflow import process_work_item
+from pokepoke.types_agent import CopilotResult
 from tests.orchestration.conftest import (
     PATCH_WF_GET_CONFIG,
     make_process_item_mocks,
@@ -285,3 +286,109 @@ class TestWorkflowFinallyAlwaysRunsStateCleanup:
             assert len(set_none_calls) >= 1, "set_current_work_item_id(None) not called after exception"
             repo_none_calls = [c for c in mock_set_repo.call_args_list if c.args == (None,)]
             assert len(repo_none_calls) >= 1, "set_current_repo_name(None) not called after exception"
+
+
+class TestCopilotSDKInvariantViolation:
+    """Tests for Copilot SDK session_id=None invariant violation (PokePoke-mlyoc)."""
+
+    def test_copilot_sdk_session_id_none_triggers_shutdown(self) -> None:
+        """When Copilot SDK backend returns session_id=None, orchestrator halts with CRITICAL log.
+
+        This is an invariant violation — the SDK always generates session_id early
+        and assigns it to all exit paths. If missing, something went fundamentally
+        wrong in the SDK plumbing.
+        """
+        item = make_work_item(id="task-sdk-invariant", title="SDK Invariant Task")
+
+        with (
+            make_process_item_mocks(
+                copilot_success=False,
+                include_config=True,
+                include_cleanup_worktree=True,
+                include_session_cleanup=True,
+            ) as mocks,
+            patch("pokepoke.utils.shutdown.request_shutdown") as mock_shutdown,
+        ):
+            # Configure copilot backend
+            cfg = mocks['config'].return_value
+            cfg.ai_backend.provider = "copilot"
+
+            # Return a result with session_id=None (invariant violation)
+            mocks['invoke'].return_value = CopilotResult(
+                work_item_id=item.id,
+                success=False,
+                output="",
+                error="Some error",
+                attempt_count=1,
+                session_id=None,  # <-- Invariant violation
+            )
+
+            result = process_work_item(item, interactive=False)
+
+            # Should have called request_shutdown()
+            mock_shutdown.assert_called_once()
+            assert result.success is False
+
+    def test_copilot_sdk_session_id_present_no_violation(self) -> None:
+        """When session_id is present, no invariant violation occurs."""
+        item = make_work_item(id="task-sdk-ok", title="SDK OK Task")
+
+        with (
+            make_process_item_mocks(
+                copilot_success=True,
+                include_config=True,
+                include_handoff=True,
+            ) as mocks,
+            patch("pokepoke.utils.shutdown.request_shutdown") as mock_shutdown,
+        ):
+            # Configure copilot backend
+            cfg = mocks['config'].return_value
+            cfg.ai_backend.provider = "copilot"
+
+            # Return a result with session_id present (normal case)
+            mocks['invoke'].return_value = CopilotResult(
+                work_item_id=item.id,
+                success=True,
+                output="Work completed",
+                error="",
+                attempt_count=1,
+                session_id="pokepoke-task-sdk-ok",  # <-- session_id present
+            )
+
+            result = process_work_item(item, interactive=False)
+
+            # Should NOT call request_shutdown()
+            mock_shutdown.assert_not_called()
+            assert result.success is True
+
+    def test_non_copilot_backend_session_id_none_no_violation(self) -> None:
+        """When using non-copilot backend, session_id=None is allowed."""
+        item = make_work_item(id="task-claude", title="Claude Task")
+
+        with (
+            make_process_item_mocks(
+                copilot_success=True,
+                include_config=True,
+                include_handoff=True,
+            ) as mocks,
+            patch("pokepoke.utils.shutdown.request_shutdown") as mock_shutdown,
+        ):
+            # Configure claude backend (not copilot)
+            cfg = mocks['config'].return_value
+            cfg.ai_backend.provider = "claude"
+
+            # Return a result with session_id=None (allowed for non-copilot backends)
+            mocks['invoke'].return_value = CopilotResult(
+                work_item_id=item.id,
+                success=True,
+                output="Work completed",
+                error="",
+                attempt_count=1,
+                session_id=None,  # <-- OK for non-copilot backend
+            )
+
+            result = process_work_item(item, interactive=False)
+
+            # Should NOT call request_shutdown() since backend is not copilot
+            mock_shutdown.assert_not_called()
+            assert result.success is True
