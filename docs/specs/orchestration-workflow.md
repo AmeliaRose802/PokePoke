@@ -2,7 +2,6 @@
 description: Main autonomous workflow loop coordinating work item selection, agent execution, validation, and retry with corrective feedback.
 references:
   - src/pokepoke/orchestration/orchestrator.py
-  - src/pokepoke/orchestration/retry_context.py
   - src/pokepoke/orchestration/workflow.py
   - src/pokepoke/orchestration/work_item_selection.py
   - src/pokepoke/orchestration/work_item_session.py
@@ -23,7 +22,7 @@ lastUpdated: 2026-03-31
 - `workflow.py`: Core workflow state machine managing task lifecycle from selection to completion.
 - `work_item_selection.py`: Queries beads for ready items, filters and ranks by priority.
 - `work_item_session.py`: Manages per-item execution session with isolated state.
-- `retry_context.py`: Tracks validation failures and generates corrective feedback for retry attempts.
+
 
 ## Design Decisions
 - Infinite retry loop with intelligent corrective prompts until validation passes.
