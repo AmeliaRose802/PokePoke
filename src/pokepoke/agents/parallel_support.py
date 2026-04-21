@@ -26,6 +26,7 @@ from pokepoke.agents.parallel_worker_pool import (
 )
 from pokepoke.beads.beads_hierarchy import is_high_conflict_risk
 from pokepoke.desktop import terminal_ui
+from pokepoke.git.repo_state_guard import cleanup_lock_active
 from pokepoke.protocols import (
     BuildWorkerNameFn,
     CheckAndCommitMainRepoFn,
@@ -209,6 +210,11 @@ def dispatch_items(
     if slots <= 0 or should_stop_after_current():
         return worker_counter
     if (not continuous and has_success) or consecutive_failures >= max_consecutive_failures:
+        return worker_counter
+    # Block new agent spawns while a cleanup agent is running on the main repo
+    # (step 3b of merge flow). Spawning during cleanup risks working-tree conflicts.
+    if cleanup_lock_active():
+        run_logger.log_orchestrator("Cleanup agent active — pausing new agent dispatches")
         return worker_counter
     if _check_high_conflict_active(lock, futures):
         run_logger.log_orchestrator("High-conflict item active — deferring new dispatches")
