@@ -5,7 +5,7 @@ import subprocess
 from unittest.mock import Mock, patch
 
 from pokepoke.beads.beads import get_issue_dependencies, get_ready_work_items, is_item_claimable
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 
 
 class TestBeadsIntegration:
@@ -255,7 +255,7 @@ class TestHasFeatureParent:
     def test_has_feature_parent_true(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns True when parent is feature."""
         from pokepoke.beads.beads import has_feature_parent
-        from pokepoke.types import Dependency, IssueWithDependencies
+        from pokepoke.types_beads import Dependency, IssueWithDependencies
 
         mock_get_issue.return_value = IssueWithDependencies(
             id="task-1",
@@ -284,7 +284,7 @@ class TestHasFeatureParent:
     def test_has_feature_parent_false_no_dependencies(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns False when no dependencies."""
         from pokepoke.beads.beads import has_feature_parent
-        from pokepoke.types import IssueWithDependencies
+        from pokepoke.types_beads import IssueWithDependencies
 
         mock_get_issue.return_value = IssueWithDependencies(
             id="task-1",
@@ -304,7 +304,7 @@ class TestHasFeatureParent:
     def test_has_feature_parent_false_non_parent_dependency(self, mock_get_issue: Mock) -> None:
         """Test has_feature_parent returns False for non-parent dependencies."""
         from pokepoke.beads.beads import has_feature_parent
-        from pokepoke.types import Dependency, IssueWithDependencies
+        from pokepoke.types_beads import Dependency, IssueWithDependencies
 
         mock_get_issue.return_value = IssueWithDependencies(
             id="task-1",

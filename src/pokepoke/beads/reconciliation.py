@@ -19,7 +19,7 @@ from pokepoke.git.git_operations import get_default_branch, list_worktrees, sani
 from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 
 if TYPE_CHECKING:
-    from pokepoke.types import BeadsWorkItem
+    from pokepoke.types_beads import BeadsWorkItem
     from pokepoke.utils.logging_utils import RunLogger
 
 logger = logging.getLogger(__name__)
