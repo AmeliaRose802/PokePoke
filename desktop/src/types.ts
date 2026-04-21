@@ -339,3 +339,49 @@ export interface GateRejectionStats {
     rejection_rate: number;
   };
 }
+
+// ── Merge Workflow Visualization ────────────────────────────────────
+
+/** Status of a single merge workflow step */
+export type MergeStepStatus = "pending" | "active" | "done" | "failed" | "skipped";
+
+/** State snapshot of a single merge step */
+export interface MergeStepState {
+  step_id: string;
+  label: string;
+  status: MergeStepStatus;
+  started_at: number | null;
+  ended_at: number | null;
+  logs: string[];
+}
+
+/** A single merge run (current or last completed) */
+export interface MergeFlowRun {
+  agent_id: string;
+  item_id: string;
+  started_at: number;
+  ended_at: number | null;
+  outcome: "in_progress" | "success" | "failed";
+  steps: Record<string, MergeStepState>;
+}
+
+/** Step definition from the canonical step list */
+export interface MergeStepDef {
+  id: string;
+  label: string;
+}
+
+/** Edge between two merge steps */
+export interface MergeEdge {
+  from: string;
+  to: string;
+  label?: string;
+}
+
+/** Full merge flow state from the bridge */
+export interface MergeFlowState {
+  current_run: MergeFlowRun | null;
+  last_completed_run: MergeFlowRun | null;
+  steps_definition: MergeStepDef[];
+  edges: MergeEdge[];
+}

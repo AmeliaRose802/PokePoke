@@ -2020,6 +2020,278 @@
   border-color: var(--accent-primary);
 }
 
+/* ── Merge Workflow Flowchart ──────────────────────────────────────────── */
+
+.merge-flowchart-view {
+  display: flex;
+  flex-direction: column;
+  gap: 8px;
+  padding: 8px 0;
+}
+
+.merge-flowchart-header {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  flex-wrap: wrap;
+}
+
+.merge-flowchart-title {
+  font-size: 14px;
+  font-weight: 700;
+  color: var(--text-primary);
+}
+
+.merge-flowchart-status {
+  font-size: 12px;
+  font-weight: 600;
+  padding: 2px 8px;
+  border-radius: 10px;
+}
+
+.merge-flowchart-status--in_progress {
+  color: var(--accent-warning, #ffa500);
+  background: rgba(255, 165, 0, 0.12);
+  animation: merge-live-pulse 2s ease-in-out infinite;
+}
+
+.merge-flowchart-status--success {
+  color: var(--accent-success, #2ea043);
+  background: rgba(46, 160, 67, 0.12);
+}
+
+.merge-flowchart-status--failed {
+  color: var(--accent-danger, #f85149);
+  background: rgba(248, 81, 73, 0.12);
+}
+
+@keyframes merge-live-pulse {
+  0%, 100% { opacity: 1; }
+  50% { opacity: 0.6; }
+}
+
+.merge-flowchart-agent {
+  font-size: 11px;
+  color: var(--text-muted);
+}
+
+.merge-flowchart-empty {
+  color: var(--text-muted);
+  font-size: 13px;
+  padding: 12px 0;
+}
+
+.merge-flowchart-body {
+  overflow-y: auto;
+  max-height: 400px;
+}
+
+.merge-flowchart-steps {
+  display: flex;
+  flex-direction: column;
+  align-items: flex-start;
+  gap: 0;
+  max-width: 340px;
+}
+
+.merge-flowchart-step-wrapper {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  width: 100%;
+}
+
+/* Merge step node button */
+.merge-node {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  width: 100%;
+  padding: 6px 12px;
+  border: 2px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+  font-size: 12px;
+  cursor: pointer;
+  transition: border-color 0.2s, background 0.2s, box-shadow 0.2s;
+  text-align: left;
+  font-family: inherit;
+}
+
+.merge-node:hover {
+  background: var(--bg-elevated);
+}
+
+.merge-node--has-logs {
+  cursor: pointer;
+}
+
+.merge-node--has-logs:hover {
+  border-color: var(--accent-primary);
+}
+
+.merge-node--selected {
+  border-color: var(--accent-primary);
+  background: var(--bg-elevated);
+  box-shadow: 0 0 6px rgba(94, 255, 0, 0.2);
+}
+
+.merge-node--done {
+  border-color: var(--accent-success, #2ea043);
+  color: var(--accent-success, #2ea043);
+}
+
+.merge-node--active {
+  border-color: var(--accent-warning, #ffa500);
+  color: var(--accent-warning, #ffa500);
+  animation: flowchart-pulse 2s ease-in-out infinite;
+}
+
+.merge-node--failed {
+  border-color: var(--accent-danger, #f85149);
+  color: var(--accent-danger, #f85149);
+}
+
+.merge-node--skipped {
+  border-style: dashed;
+  opacity: 0.45;
+}
+
+.merge-node--pending {
+  opacity: 0.45;
+}
+
+.merge-node-icon {
+  font-size: 14px;
+  flex-shrink: 0;
+  width: 20px;
+  text-align: center;
+}
+
+.merge-node-id {
+  font-weight: 700;
+  flex-shrink: 0;
+  min-width: 24px;
+  color: inherit;
+}
+
+.merge-node-label {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+  color: var(--text-primary);
+}
+
+.merge-node-duration {
+  font-size: 10px;
+  color: var(--text-muted);
+  flex-shrink: 0;
+}
+
+/* Edge connector between steps */
+.merge-edge {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  height: 16px;
+  width: 100%;
+}
+
+.merge-edge .merge-edge-line {
+  width: 2px;
+  height: 10px;
+  background: var(--border-primary);
+  display: block;
+}
+
+.merge-edge .merge-edge-arrow {
+  font-size: 10px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.merge-edge--done .merge-edge-line {
+  background: var(--accent-success, #2ea043);
+}
+
+.merge-edge--done .merge-edge-arrow {
+  color: var(--accent-success, #2ea043);
+}
+
+.merge-edge--active .merge-edge-line {
+  background: var(--accent-warning, #ffa500);
+}
+
+.merge-edge--active .merge-edge-arrow {
+  color: var(--accent-warning, #ffa500);
+}
+
+.merge-edge--failed .merge-edge-line {
+  background: var(--accent-danger, #f85149);
+}
+
+/* Step log drill-down panel */
+.merge-step-log-panel {
+  border: 1px solid var(--border-primary);
+  border-radius: 8px;
+  background: var(--bg-tertiary, #212700);
+  margin-top: 8px;
+  overflow: hidden;
+}
+
+.merge-step-log-header {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 12px;
+  background: var(--bg-elevated);
+  border-bottom: 1px solid var(--border-primary);
+}
+
+.merge-step-log-title {
+  font-size: 13px;
+  font-weight: 600;
+  color: var(--text-primary);
+}
+
+.merge-step-log-close {
+  background: transparent;
+  border: none;
+  color: var(--text-muted);
+  font-size: 14px;
+  cursor: pointer;
+  padding: 2px 6px;
+  border-radius: 4px;
+}
+
+.merge-step-log-close:hover {
+  background: var(--bg-secondary);
+  color: var(--text-primary);
+}
+
+.merge-step-log-body {
+  padding: 8px 12px;
+  max-height: 200px;
+  overflow-y: auto;
+  font-family: var(--font-mono, monospace);
+  font-size: 12px;
+}
+
+.merge-step-log-line {
+  padding: 1px 0;
+  color: var(--text-secondary);
+  white-space: pre-wrap;
+  word-break: break-all;
+}
+
+.merge-step-log-empty {
+  color: var(--text-muted);
+  font-style: italic;
+  padding: 8px 0;
+}
+
 /* ── Log Panel ─────────────────────────────────────────────────────────── */
 
 .log-panel {

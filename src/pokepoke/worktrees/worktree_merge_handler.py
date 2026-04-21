@@ -22,6 +22,7 @@ from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
 from pokepoke.worktrees.coordination import merge_lock
+from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
 from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree
 from pokepoke.worktrees.worktrees import merge_worktree
 
@@ -59,16 +60,27 @@ def handle_worktree_merge(
     """
     # Acquire merge lock to serialize with other parallel agents
     logger.info("Waiting for merge lock for agent %s", ctx.agent_id)
+    tracker = get_merge_step_tracker()
+    item_id = ctx.agent_item.id if ctx.agent_item else ctx.agent_id
+    tracker.begin_run(ctx.agent_id, item_id)
+    tracker.complete_step("0", "Agent work complete")
+    tracker.begin_step("1", "Waiting for merge lock…")
 
     try:
         with merge_lock():
+            tracker.complete_step("1", f"Acquired merge lock for {ctx.agent_id}")
             logger.info("Acquired merge lock for agent %s", ctx.agent_id)
             # Fall back to agent_id for cleanup parent if no parent_agent_id
             if not ctx.parent_agent_id:
                 ctx.parent_agent_id = ctx.agent_id
-            return perform_worktree_merge(ctx)
+            result = perform_worktree_merge(ctx)
+            outcome = "success" if result[0] else "failed"
+            tracker.finish_run(outcome)
+            return result
     except Timeout as e:
         logger.warning("Merge lock timeout for agent %s: %s", ctx.agent_id, e)
+        tracker.fail_step("1", f"Lock timeout: {e}")
+        tracker.finish_run("failed")
 
         add_uncleaned_worktree(
             ctx.agent_id,
@@ -78,6 +90,8 @@ def handle_worktree_merge(
         return False, False
     except Exception as e:
         logger.error("Merge coordination error for agent %s: %s", ctx.agent_id, e, exc_info=True)
+        tracker.fail_step("1", f"Coordination error: {e}")
+        tracker.finish_run("failed")
 
         add_uncleaned_worktree(
             ctx.agent_id,
@@ -111,8 +125,10 @@ def perform_worktree_merge(  # noqa: C901
     from pokepoke.worktrees.worktree_cleanup import add_uncleaned_worktree, remove_from_manifest
 
     repo_cwd = ctx.repo_path
+    tracker = get_merge_step_tracker()
 
     # --- pre-merge readiness check ---
+    tracker.begin_step("2", "Checking if main repo is clean…")
     logger.info("\n🔍 Checking if main repo is ready for merge...")
     is_ready, error_msg = check_main_repo_ready_for_merge(cwd=repo_cwd)
 
@@ -126,6 +142,8 @@ def perform_worktree_merge(  # noqa: C901
             f"Main repo not ready for merge: {error_msg}",
         )
 
+        tracker.fail_step("2", f"Not ready: {error_msg}")
+        tracker.begin_step("3b", "Invoking cleanup agent…")
         logger.info("   Invoking cleanup agent to resolve uncommitted changes before merge...")
         with cleanup_lock():
             # Don't wait for merge lock since we already hold it
@@ -139,18 +157,30 @@ def perform_worktree_merge(  # noqa: C901
             )
 
         if cleanup_success:
+            tracker.complete_step("3b", "Cleanup agent succeeded")
+            tracker.begin_step("3c", "Re-checking main repo…")
             logger.info("   Cleanup successful, retrying merge check...")
             is_ready, error_msg = check_main_repo_ready_for_merge(cwd=repo_cwd)
             if not is_ready:
                 logger.error(f"   Still failing after cleanup: {error_msg}")
+                tracker.fail_step("3c", f"Still dirty: {error_msg}")
                 return False, False
+            tracker.complete_step("3c", "Repo clean after cleanup")
             logger.info("   ✅ Repo is ready after cleanup, continuing with merge.")
             remove_from_manifest(ctx.agent_id)
         else:
             logger.error("   Cleanup failed.")
+            tracker.fail_step("3b", "Cleanup agent failed")
             return False, False
 
-    # --- attempt merge ---
+    # Step 2 passed if we reach here without cleanup
+    if tracker._current_run and tracker._current_run.steps["2"].status.value == "active":
+        tracker.complete_step("2", "Main repo is clean")
+
+    # --- worktree cleanliness (step 4) and merge ---
+    tracker.begin_step("4", "Checking worktree cleanliness…")
+    # merge_worktree validates worktree is clean, runs checkout/pull/merge/push/cleanup
+    tracker.begin_step("11", f"Merging worktree for {ctx.agent_id}")
     logger.info(f"\n🔀 Merging worktree for {ctx.agent_id}...")
     merge_result = merge_worktree(ctx.agent_id, cleanup=True, repo_path=repo_cwd)
     merge_success = merge_result.success
@@ -165,6 +195,7 @@ def perform_worktree_merge(  # noqa: C901
         )
 
     if not merge_success:
+        tracker.fail_step("11", "Merge failed")
         repo_root_path = Path(repo_cwd) if repo_cwd else None
         if is_merge_in_progress(repo_path=repo_root_path):
             logger.error("\n❌ Worktree merge has conflicts!")
@@ -255,11 +286,21 @@ def perform_worktree_merge(  # noqa: C901
                     logger.warning("   ⚠️  Repository may be stuck in merge-in-progress state")
             return False, False
 
+    # Mark remaining merge steps as done for the success path
+    tracker.complete_step("4", "Worktree is clean")
+    tracker.complete_step("11", "Merge succeeded")
+    for sid in ("5", "6", "7", "8", "9", "10", "12", "13", "14"):
+        if tracker._current_run and tracker._current_run.steps[sid].status.value == "pending":
+            tracker.complete_step(sid)
+
     # Verify worktree was actually cleaned up
     worktree_cleaned = not ctx.worktree_path.exists()
     if not worktree_cleaned:
         logger.error("Worktree directory persists after merge: %s", ctx.worktree_path)
         add_uncleaned_worktree(ctx.agent_id, str(ctx.worktree_path), "Worktree persists after successful merge")
+    else:
+        tracker.complete_step("15", "Worktree removed")
+    tracker.complete_step("16", "Merge lock released")
     logger.info("   Merged worktree" + (" and cleaned up" if worktree_cleaned else " (cleanup incomplete)"))
 
     # Invalidate warm sessions after successful merge (codebase may have changed)

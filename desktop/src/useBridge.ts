@@ -24,6 +24,7 @@ import type {
   ConnectionStatus,
   GateRejectionStats,
   LogEntry,
+  MergeFlowState,
   ModelHistoryEntry,
   ModelPerformanceSummary,
   ProgressState,
@@ -123,6 +124,7 @@ interface PyWebViewAPI {
   get_available_models(): Promise<AvailableModelsResponse>;
   get_concurrency_timeline(): Promise<ConcurrencyTimeline>;
   get_gate_rejection_stats(): Promise<GateRejectionStats>;
+  get_merge_flow_state(): Promise<MergeFlowState>;
 
   // First-time setup wizard API
   check_setup_status(): Promise<SetupStatus>;
@@ -191,6 +193,7 @@ export interface BridgeStateBase {
   getProcessDiagnostics: (limit?: number) => Promise<ProcessSnapshot[]>;
   getConcurrencyTimeline: () => Promise<ConcurrencyTimeline | null>;
   getGateRejectionStats: () => Promise<GateRejectionStats | null>;
+  getMergeFlowState: () => Promise<MergeFlowState | null>;
   requestStopAfterCurrent: () => Promise<void>;
   cancelStopAfterCurrent: () => Promise<void>;
   addWorkItemLabel: (label: string) => Promise<void>;
@@ -311,6 +314,15 @@ export function useBridge(): BridgeState {
     if (!window.pywebview?.api) return null;
     try {
       return await window.pywebview.api.get_gate_rejection_stats();
+    } catch {
+      return null;
+    }
+  }, []);
+
+  const getMergeFlowState = useCallback(async (): Promise<MergeFlowState | null> => {
+    if (!window.pywebview?.api) return null;
+    try {
+      return await window.pywebview.api.get_merge_flow_state();
     } catch {
       return null;
     }
@@ -507,6 +519,7 @@ export function useBridge(): BridgeState {
     getProcessDiagnostics,
     getConcurrencyTimeline,
     getGateRejectionStats,
+    getMergeFlowState,
     requestStopAfterCurrent,
     cancelStopAfterCurrent,
     addWorkItemLabel,

@@ -279,6 +279,49 @@ export const AppStateSchema = z.object({
   new_logs: z.array(LogEntrySchema).optional(),
 });
 
+// ── Merge Workflow Visualization Schemas ─────────────────────────────
+
+/** State of a single merge workflow step */
+export const MergeStepStateSchema = z.object({
+  step_id: z.string(),
+  label: z.string(),
+  status: z.enum(["pending", "active", "done", "failed", "skipped"]),
+  started_at: z.number().nullable(),
+  ended_at: z.number().nullable(),
+  logs: z.array(z.string()),
+});
+
+/** A single merge run */
+export const MergeFlowRunSchema = z.object({
+  agent_id: z.string(),
+  item_id: z.string(),
+  started_at: z.number(),
+  ended_at: z.number().nullable(),
+  outcome: z.enum(["in_progress", "success", "failed"]),
+  steps: z.record(z.string(), MergeStepStateSchema),
+});
+
+/** Step definition from canonical step list */
+export const MergeStepDefSchema = z.object({
+  id: z.string(),
+  label: z.string(),
+});
+
+/** Edge between two merge steps */
+export const MergeEdgeSchema = z.object({
+  from: z.string(),
+  to: z.string(),
+  label: z.string().optional(),
+});
+
+/** Full merge flow state */
+export const MergeFlowStateSchema = z.object({
+  current_run: MergeFlowRunSchema.nullable(),
+  last_completed_run: MergeFlowRunSchema.nullable(),
+  steps_definition: z.array(MergeStepDefSchema),
+  edges: z.array(MergeEdgeSchema),
+});
+
 /**
  * Helper to validate and provide detailed error messages
  */

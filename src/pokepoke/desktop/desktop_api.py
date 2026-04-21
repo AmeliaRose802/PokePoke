@@ -119,6 +119,11 @@ class DesktopAPI:
         _stats.get_process_diagnostics, _stats.get_concurrency_timeline,
         _stats.get_gate_rejection_stats)
 
+    def get_merge_flow_state(self) -> dict[str, Any]:
+        """Return the live merge workflow step tracker state for the UI."""
+        from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
+        return get_merge_step_tracker().get_state()
+
     def get_state(self) -> dict[str, Any]:
         """State snapshot + new log entries since last poll (single IPC call)."""
         from pokepoke.config import get_config

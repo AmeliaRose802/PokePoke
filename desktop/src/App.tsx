@@ -16,6 +16,7 @@ import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LogPanel } from "./components/LogPanel";
 import { LogsLocationBox } from "./components/LogsLocationBox";
+import { MergeFlowchartView } from "./components/MergeFlowchartView";
 import { PromptEditor } from "./components/PromptEditor";
 import { SettingsPage } from "./components/SettingsPage";
 import { SetupWizard } from "./components/SetupWizard";
@@ -89,7 +90,7 @@ function App() {
     setShowSettings(false);
   }, []);
 
-  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats } = bridge;
+  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats, getMergeFlowState } = bridge;
 
   const handleSpawnAgent = useCallback(async () => {
     const result = await bridge.spawnAgent();
@@ -294,6 +295,18 @@ function App() {
               </div>
             </details>
           ) : null}
+          </ErrorBoundary>
+
+          {/* Merge workflow visualization */}
+          <ErrorBoundary>
+            <details className="orchestrator-collapsible">
+              <summary className="orchestrator-collapsible-summary">
+                <span className="orchestrator-collapsible-title">🔀 Merge Workflow</span>
+              </summary>
+              <div className="orchestrator-collapsible-content">
+                <MergeFlowchartView getMergeFlowState={getMergeFlowState} />
+              </div>
+            </details>
           </ErrorBoundary>
         </div>
 
