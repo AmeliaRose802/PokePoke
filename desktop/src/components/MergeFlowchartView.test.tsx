@@ -71,7 +71,7 @@ describe("MergeFlowchartView", () => {
     expect(screen.getByText("No merge activity yet.")).toBeInTheDocument();
   });
 
-  it("renders step nodes from a current run", async () => {
+  it("renders only non-pending step nodes from a current run", async () => {
     const run = mkRun({ "0": { status: "done" }, "1": { status: "active" } });
     const state = mkFlowState({ current_run: run });
     const getMergeFlowState = vi.fn().mockResolvedValue(state);
@@ -84,13 +84,14 @@ describe("MergeFlowchartView", () => {
     });
 
     expect(screen.getByTestId("merge-step-1")).toBeInTheDocument();
-    expect(screen.getByTestId("merge-step-2")).toBeInTheDocument();
-    expect(screen.getByTestId("merge-step-11")).toBeInTheDocument();
-    expect(screen.getByTestId("merge-step-16")).toBeInTheDocument();
+    // Steps still pending should NOT be rendered
+    expect(screen.queryByTestId("merge-step-2")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("merge-step-11")).not.toBeInTheDocument();
+    expect(screen.queryByTestId("merge-step-16")).not.toBeInTheDocument();
   });
 
   it("shows Live indicator for current run", async () => {
-    const run = mkRun({});
+    const run = mkRun({ "0": { status: "active" } });
     const state = mkFlowState({ current_run: run });
     const getMergeFlowState = vi.fn().mockResolvedValue(state);
 
@@ -102,7 +103,7 @@ describe("MergeFlowchartView", () => {
   });
 
   it("shows Completed indicator for last completed run", async () => {
-    const run = { ...mkRun({}), outcome: "success" as const, ended_at: 2000 };
+    const run = { ...mkRun({ "0": { status: "done" } }), outcome: "success" as const, ended_at: 2000 };
     const state = mkFlowState({ last_completed_run: run });
     const getMergeFlowState = vi.fn().mockResolvedValue(state);
 
@@ -114,7 +115,7 @@ describe("MergeFlowchartView", () => {
   });
 
   it("shows Failed indicator for failed run", async () => {
-    const run = { ...mkRun({}), outcome: "failed" as const, ended_at: 2000 };
+    const run = { ...mkRun({ "0": { status: "failed" } }), outcome: "failed" as const, ended_at: 2000 };
     const state = mkFlowState({ last_completed_run: run });
     const getMergeFlowState = vi.fn().mockResolvedValue(state);
 
@@ -205,9 +206,9 @@ describe("MergeFlowchartView", () => {
   });
 
   it("prefers current_run over last_completed_run", async () => {
-    const currentRun = mkRun({});
+    const currentRun = mkRun({ "0": { status: "active" } });
     currentRun.agent_id = "current-agent";
-    const lastRun = { ...mkRun({}), agent_id: "old-agent", outcome: "success" as const, ended_at: 2000 };
+    const lastRun = { ...mkRun({ "0": { status: "done" } }), agent_id: "old-agent", outcome: "success" as const, ended_at: 2000 };
     const state = mkFlowState({ current_run: currentRun, last_completed_run: lastRun });
     const getMergeFlowState = vi.fn().mockResolvedValue(state);
 
