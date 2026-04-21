@@ -18,6 +18,7 @@ from pokepoke.agents.cleanup_agents import (
 )
 from pokepoke.agents.gate_agent_executor import run_gate_agent
 from pokepoke.beads.reconciliation import worktree_branch_has_commits
+from pokepoke.config import get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.stats.metrics_context import agent_type_context
@@ -258,6 +259,7 @@ def _reconcile_worktree_branch(
         config.agent_name,
     )
     agent_stats = parse_agent_stats(result.output) if result.output else None
+    project_config = get_config()
     merge_success, _worktree_cleaned = handle_worktree_merge(
         WorktreeMergeContext(
             agent_id=config.agent_id,
@@ -266,6 +268,7 @@ def _reconcile_worktree_branch(
             worktree_path=config.worktree_path,
             repo_root=config.repo_root,
             parent_agent_id=cleanup_parent_id,
+            max_conflict_retries=project_config.max_conflict_retries,
         ),
         agent_stats,
     )
@@ -303,6 +306,7 @@ def _handle_successful_agent(
 
     logger.info("All changes committed and validated")
     agent_stats = parse_agent_stats(result.output) if result.output else None
+    project_config = get_config()
     merge_success, worktree_cleaned = handle_worktree_merge(
         WorktreeMergeContext(
             agent_id=config.agent_id,
@@ -311,6 +315,7 @@ def _handle_successful_agent(
             worktree_path=config.worktree_path,
             repo_root=config.repo_root,
             parent_agent_id=cleanup_parent_id,
+            max_conflict_retries=project_config.max_conflict_retries,
         ),
         agent_stats,
     )

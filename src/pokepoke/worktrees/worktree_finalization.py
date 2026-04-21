@@ -121,8 +121,10 @@ def merge_worktree_to_dev(
         worktree_path: Worktree directory (defaults to worktrees/task-{id}).
         repo_path: Target repo root for git operations.
     """
+    from pokepoke.config import get_config
     from .worktree_merge_handler import WorktreeMergeContext, perform_worktree_merge
 
+    config = get_config()
     effective_repo_root = repo_root if repo_root is not None else (Path(repo_path) if repo_path else Path.cwd())
     effective_worktree_path = (
         worktree_path if worktree_path is not None
@@ -138,6 +140,7 @@ def merge_worktree_to_dev(
         parent_agent_id=parent_agent_id,
         repo_path=repo_path,
         item_logger=item_logger,
+        max_conflict_retries=config.max_conflict_retries,
     )
     merge_success, _ = perform_worktree_merge(ctx)
     return merge_success

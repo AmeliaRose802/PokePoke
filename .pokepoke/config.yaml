@@ -152,6 +152,7 @@ performance_thresholds:
 repos: []
 startup_cleanup_enabled: false
 stale_worktree_commit_threshold: 20
+max_conflict_retries: 3
 prompt_templates:
   orchestrator: orchestrator-work
   desktop: desktop-work

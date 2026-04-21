@@ -283,6 +283,7 @@ class EconomyModeConfig:
 class ProjectConfig:
     """Top-level project configuration."""
     project_name: str = ""
+    max_conflict_retries: int = 3
     models: ModelConfig = field(default_factory=ModelConfig)
     ai_backend: AIBackendConfig = field(default_factory=AIBackendConfig)
     maintenance: MaintenanceConfig = field(default_factory=MaintenanceConfig.defaults)
@@ -337,6 +338,7 @@ class ProjectConfig:
         self.decomposition_failure_threshold = _clamp(_cls, "decomposition_failure_threshold", self.decomposition_failure_threshold, minimum=1)
         self.needs_human_attention_threshold = _clamp(_cls, "needs_human_attention_threshold", self.needs_human_attention_threshold, minimum=_c.MIN_NEEDS_HUMAN_ATTENTION_FAILURES)
         self.stale_worktree_commit_threshold = _clamp(_cls, "stale_worktree_commit_threshold", self.stale_worktree_commit_threshold, minimum=1)
+        self.max_conflict_retries = _clamp(_cls, "max_conflict_retries", self.max_conflict_retries, minimum=1, maximum=10)
 
     def to_dict(self) -> dict[str, Any]:
         """Serialize to a canonical dict suitable for YAML/JSON output."""
