@@ -36,9 +36,12 @@ __all__ = [
 def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
     """Categorize git status --porcelain lines into beads, untracked, and other changes.
 
-    Note: worktrees/ is gitignored and should never have tracked changes.
-    If tracked worktrees/ files appear in git status, they were likely force-added
-    before the gitignore rule existed and should be removed with git rm --cached.
+    Note: worktrees/ is gitignored (.gitignore line 9) and protected from tracking.
+    Files in worktrees/ never appear in git status output because:
+    1. The gitignore rule prevents them from being staged
+    2. Git worktree directories are managed by git itself (via .git/worktrees/)
+    If tracked worktrees/ files ever appear, they were force-added before the
+    gitignore rule existed and should be removed with: git rm --cached worktrees/
     """
     return {
         'beads': [line for line in lines if line and _BEADS_PATH in line],
