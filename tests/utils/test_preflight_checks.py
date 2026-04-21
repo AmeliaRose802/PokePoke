@@ -49,7 +49,7 @@ class TestCheckGitStatus:
         with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=True), \
              patch("subprocess.run", return_value=mock_result), \
              patch("pokepoke.utils.preflight_checks.categorize_git_changes", return_value={
-                 "other": [], "beads": [], "worktree": [], "untracked": ["new_file.py"],
+                 "other": [], "beads": [], "untracked": ["new_file.py"],
              }):
             errors, _warnings = check_git_status(fake_repo, health_config)
         status_errors = [e for e in errors if e.check_name == "git_status_check"]
@@ -61,7 +61,7 @@ class TestCheckGitStatus:
         with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=True), \
              patch("subprocess.run", return_value=mock_result), \
              patch("pokepoke.utils.preflight_checks.categorize_git_changes", return_value={
-                 "other": ["a.py"], "beads": [], "worktree": [], "untracked": ["b.py"],
+                 "other": ["a.py"], "beads": [], "untracked": ["b.py"],
              }):
             errors, _ = check_git_status(fake_repo, health_config)
         status_errors = [e for e in errors if e.check_name == "git_status_check"]
@@ -94,7 +94,7 @@ class TestCheckGitStatus:
         with patch("pokepoke.utils.preflight_checks.has_uncommitted_changes", return_value=True), \
              patch("subprocess.run", return_value=mock_result), \
              patch("pokepoke.utils.preflight_checks.categorize_git_changes", return_value={
-                 "other": [], "beads": [".beads/issues.jsonl"], "worktree": [], "untracked": [],
+                 "other": [], "beads": [".beads/issues.jsonl"], "untracked": [],
              }):
             errors, warnings = check_git_status(fake_repo, health_config)
         assert any("Beads database" in w for w in warnings)
