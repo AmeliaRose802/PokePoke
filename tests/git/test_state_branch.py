@@ -7,7 +7,6 @@ from pokepoke.config import StateBranchConfig
 from pokepoke.git.state_branch import (
     _branch_exists,
     _create_state_branch_if_needed,
-    _get_current_branch,
     _has_state_changes,
     commit_state_branch,
 )
@@ -15,13 +14,6 @@ from pokepoke.git.state_branch import (
 
 class TestBranchHelpers:
     """Test git branch helper functions."""
-
-    @patch('pokepoke.git.state_branch._git_plumbing')
-    def test_get_current_branch(self, mock_plumbing: Mock) -> None:
-        """Returns the current branch name."""
-        mock_plumbing.return_value = "main"
-        assert _get_current_branch() == "main"
-        mock_plumbing.assert_called_once_with(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=None)
 
     @patch('pokepoke.git.state_branch._git_plumbing')
     def test_branch_exists_true(self, mock_plumbing: Mock) -> None:

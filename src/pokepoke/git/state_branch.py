@@ -59,14 +59,6 @@ def _branch_exists(branch_name: str, cwd: Path | None = None) -> bool:
         return False
 
 
-def _get_current_branch(cwd: Path | None = None) -> str:
-    """Get the name of the current branch."""
-    try:
-        return _git_plumbing(["git", "rev-parse", "--abbrev-ref", "HEAD"], cwd=cwd)
-    except subprocess.CalledProcessError:
-        return ""
-
-
 def _create_state_branch_if_needed(
     branch_name: str = STATE_BRANCH_NAME,
     cwd: Path | None = None,
