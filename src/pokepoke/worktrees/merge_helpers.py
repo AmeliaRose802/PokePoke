@@ -56,18 +56,64 @@ def log_merge_failure(merge_error: str | None, unmerged_files: list[str]) -> Non
 
 
 def validate_post_merge_or_rollback(target_branch: str, cwd: str | None = None) -> MergeResult | None:
-    """Run post-merge validation, rolling back on failure.
+    """Run post-merge validation.  Failure is a CRITICAL invariant violation.
+
+    After a successful ``git merge --no-ff`` the repo MUST be on the target
+    branch with no uncommitted changes.  If either check fails it indicates
+    git state corruption, a filesystem issue, or a bug in the merge sequence.
+
+    On failure the repo state is **preserved** (no rollback) so it can be
+    inspected manually, and a CRITICAL log with diagnostics is emitted.
+    The returned MergeResult has ``halt_required=True`` to signal the
+    orchestrator to stop processing further items.
 
     Returns None if validation passed, or a failure MergeResult otherwise.
     """
     try:
         if not validate_post_merge(target_branch, cwd=cwd):
-            logger.warning("Post-merge validation failed, rolling back merge commit")
-            return rollback_and_fail("post-merge validation failure", cwd=cwd)
+            _log_post_merge_diagnostics(target_branch, cwd)
+            return MergeResult(success=False, halt_required=True)
     except Exception as e:
-        logger.error("Post-merge validation raised exception: %s", e)
-        return rollback_and_fail("post-merge validation exception", cwd=cwd)
+        logger.critical(
+            "POST-MERGE VALIDATION EXCEPTION — repo state preserved for investigation: %s",
+            e, exc_info=True,
+        )
+        _log_post_merge_diagnostics(target_branch, cwd)
+        return MergeResult(success=False, halt_required=True)
     return None
+
+
+def _log_post_merge_diagnostics(target_branch: str, cwd: str | None) -> None:
+    """Emit CRITICAL-level diagnostics after a post-merge invariant violation."""
+    diag_parts: list[str] = []
+    try:
+        status = _run_git(["git", "status", "--short"], cwd=cwd).stdout.strip()
+        diag_parts.append(f"git status:\n{status or '(clean)'}")
+    except Exception:
+        diag_parts.append("git status: <unavailable>")
+    try:
+        log_out = _run_git(
+            ["git", "log", "--oneline", "-5"], cwd=cwd,
+        ).stdout.strip()
+        diag_parts.append(f"git log -5:\n{log_out}")
+    except Exception:
+        diag_parts.append("git log: <unavailable>")
+    try:
+        branch = _run_git(
+            ["git", "branch", "--show-current"], cwd=cwd,
+        ).stdout.strip()
+        diag_parts.append(f"current branch: {branch}")
+    except Exception:
+        diag_parts.append("current branch: <unavailable>")
+
+    diagnostics = "\n".join(diag_parts)
+    logger.critical(
+        "🚨 POST-MERGE INVARIANT VIOLATION — repo state preserved (no rollback).\n"
+        "Expected to be on '%s' with clean status after merge.\n"
+        "This indicates git state corruption or a merge sequence bug.\n"
+        "The orchestrator will halt. Manual investigation required.\n\n%s",
+        target_branch, diagnostics,
+    )
 
 
 def is_worktree_merged(item_id: str, target_branch: str | None = None, repo_path: str | None = None) -> bool:

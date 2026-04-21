@@ -15,6 +15,7 @@ class MergeResult:
     success: bool
     unmerged_files: list[str] = field(default_factory=list)
     rollback_failed: bool = False
+    halt_required: bool = False
 
     def __iter__(self) -> Iterator[bool | list[str]]:
         """Yield (success, unmerged_files) for backward-compatible unpacking."""

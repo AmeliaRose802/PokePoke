@@ -242,6 +242,18 @@ def perform_worktree_merge(  # noqa: C901
             ctx.agent_id,
         )
 
+    if merge_result.halt_required:
+        from pokepoke.utils.shutdown import request_shutdown
+        logger.critical(
+            "🚨 Post-merge validation failed for %s — halting orchestrator. "
+            "Repo state preserved for manual investigation.",
+            ctx.agent_id,
+        )
+        tracker.fail_step("9", "Post-merge invariant violation — halt requested")
+        tracker.finish_run("failed")
+        request_shutdown()
+        return False, False
+
     if not merge_success:
         tracker.fail_step("8", "Merge failed")
         repo_root_path = Path(repo_cwd) if repo_cwd else None
