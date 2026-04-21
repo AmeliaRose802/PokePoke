@@ -416,6 +416,43 @@ class TestFailFastOutcomes:
         # Comment should be added about the status
         assert client.call_count("add_comment") >= 1
 
+    def test_needs_clarification_blocks_item(self):
+        item = _make_item()
+        outcome = WorkAgentOutcome(
+            status="needs_clarification",
+            reason="Acceptance criteria are ambiguous",
+        )
+        copilot_result = CopilotResult(
+            work_item_id=item.id,
+            success=True,
+            attempt_count=1,
+            work_agent_outcome=outcome,
+            session_id="test-session",
+        )
+        client = FakeBeadsClient()
+        client.add_item(item)
+
+        patches, ui = _base_patches(
+            config=_make_config(gate_enabled=True),
+            invoke_results=[copilot_result],
+            is_shutting_down_seq=[False, False],
+        )
+        ctx = _PatchCtx(patches, ui, finalize_rv=False)
+        with ctx:
+            result = process_work_item(
+                item,
+                interactive=False,
+                config=WorkItemConfig(beads_client=client),
+            )
+
+        assert result.success is False
+        assert client.call_count("block_item") == 1
+        assert client.call_count("defer_item") == 0
+        assert client.items[item.id].status == "blocked"
+        assert any("clarification" in c.lower() for c in client.get_comments(item.id))
+        ctx.mocks["run_gate_agent"].assert_not_called()
+        ctx.mocks["finalize"].assert_not_called()
+
     def test_too_large_triggers_immediate_decomposition(self):
         """When work agent returns too_large, _maybe_decompose is called immediately."""
         item = _make_item()

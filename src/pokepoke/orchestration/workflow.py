@@ -6,7 +6,7 @@ from pathlib import Path
 from typing import TYPE_CHECKING
 
 from pokepoke.agents.agent_context import get_agent_name
-from pokepoke.beads.beads import add_comment, assign_and_sync_item, defer_item
+from pokepoke.beads.beads import add_comment, assign_and_sync_item, block_item, defer_item
 from pokepoke.config import get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_helpers import verify_worktree_branch
@@ -70,6 +70,7 @@ def process_work_item(  # noqa: C901
     cfg = config or WorkItemConfig()
     _assign = cfg.beads_client.assign_and_sync_item if cfg.beads_client else assign_and_sync_item
     _comment = cfg.beads_client.add_comment if cfg.beads_client else add_comment
+    _block = cfg.beads_client.block_item if cfg.beads_client else block_item
     _defer = cfg.beads_client.defer_item if cfg.beads_client else defer_item
     _session: WorkItemSession | None = None
     try:
@@ -285,6 +286,22 @@ def process_work_item(  # noqa: C901
                 _gt.finish_run("failed")
                 _comment(item.id, f"Work agent returned '{outcome.status}': {reason}")
                 logger.info("Work agent fail-fast: status=%s reason=%s — skipping gate", outcome.status, reason)
+                if outcome.status == "needs_clarification":
+                    block_reason = f"Needs clarification before work can continue: {reason}"
+                    if not _block(item.id, block_reason):
+                        _comment(item.id, f"Failed to auto-block item after needs_clarification: {reason}")
+                    if _session is not None:
+                        # Item is intentionally blocked; don't unassign back to open in failure cleanup.
+                        _session._assigned = False
+                    _log_failure(run_logger, item_logger, request_count)
+                    terminal_ui.ui.set_current_agent(None)
+                    return _fail_result(
+                        request_count=request_count,
+                        stats=accumulated_stats,
+                        cleanup_agent_runs=cleanup_agent_runs,
+                        gate_agent_runs=gate_agent_runs,
+                        failure_reason=f"Blocked pending clarification: {reason}",
+                    )
                 if outcome.status == "too_large":
                     context_parts = [f"Work agent reason: {reason}"]
                     if outcome.suggested_split:
