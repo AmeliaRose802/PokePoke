@@ -45,11 +45,15 @@ def finalize_work_item(
     """
     logger.info("\n✅ Successfully completed work item!")
     logger.info("   All changes committed and validated")
+    if item_logger:
+        item_logger.log("✅ ORCHESTRATOR: Work item completed successfully — starting finalization")
 
     if not check_and_merge_worktree(item, worktree_path, parent_agent_id=parent_agent_id, repo_path=repo_path, item_logger=item_logger):
+        if item_logger:
+            item_logger.log_error("❌ ORCHESTRATOR: Finalization failed at merge step")
         return False
 
-    close_work_item_and_parents(item)
+    close_work_item_and_parents(item, item_logger=item_logger)
 
     return True
 
@@ -79,25 +83,42 @@ def check_and_merge_worktree(
         if commit_count == 0:
             logger.info("\n⏭️  No commits in worktree - nothing to merge")
             logger.info("   Cleaning up worktree without merge...")
+            if item_logger:
+                item_logger.log("⏭️  ORCHESTRATOR: No commits in worktree — skipping merge, cleaning up")
             cleanup_worktree(item.id, force=True, repo_path=repo_path)
             return True
+        
+        # Log commit count for merge tracking
+        logger.info(f"\n📊 Found {commit_count} commit(s) to merge")
+        if item_logger:
+            item_logger.log(f"📊 ORCHESTRATOR: Found {commit_count} commit(s) to merge to {target_branch}")
 
     except subprocess.TimeoutExpired:
         logger.error("Git timed out checking commit count for %s — aborting merge", item.id)
+        if item_logger:
+            item_logger.log_error(f"❌ ORCHESTRATOR: Git timed out checking commit count for {item.id} — aborting merge")
         return False
     except (subprocess.CalledProcessError, ValueError) as e:
         # Branch not found or parse error — recoverable, attempt merge
         logger.warning(f"\n⚠️  Could not check commit count: {e}")
         logger.info("   Attempting merge anyway...")
+        if item_logger:
+            item_logger.log(f"⚠️  ORCHESTRATOR: Could not check commit count ({e}) — attempting merge anyway")
     except Exception as e:
         logger.error("Unexpected error checking commit count for %s: %s", item.id, e)
         logger.info("   Aborting merge to prevent data corruption")
+        if item_logger:
+            item_logger.log_error(f"❌ ORCHESTRATOR: Unexpected error checking commit count for {item.id}: {e} — aborting merge")
         return False
 
     # Acquire merge lock to serialize with other parallel agents
     logger.info("Waiting for merge lock for item %s", item.id)
+    if item_logger:
+        item_logger.log(f"🔒 ORCHESTRATOR: Waiting for merge lock for {item.id}")
     with merge_lock():
         logger.info("Acquired merge lock for item %s", item.id)
+        if item_logger:
+            item_logger.log(f"🔒 ORCHESTRATOR: Acquired merge lock for {item.id}")
         return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path, repo_path=repo_path, item_logger=item_logger)
 
 
@@ -143,13 +164,17 @@ def merge_worktree_to_dev(
     return merge_success
 
 
-def close_work_item_and_parents(item: BeadsWorkItem) -> None:
+def close_work_item_and_parents(item: BeadsWorkItem, item_logger: 'ItemLogger | None' = None) -> None:
     """Close work item and check if parents should be closed."""
     if item.is_ephemeral:
         logger.info("Skipping beads close for ephemeral item %s", item.id)
+        if item_logger:
+            item_logger.log(f"⏭️  ORCHESTRATOR: Skipping beads close for ephemeral item {item.id}")
         return
 
     logger.info(f"\n🔍 Checking if agent closed beads item {item.id}...")
+    if item_logger:
+        item_logger.log(f"🔍 ORCHESTRATOR: Checking if agent closed beads item {item.id}")
     try:
         check_result = _run_bd_with_retry(
             ["show", item.id, "--json"],
@@ -163,26 +188,36 @@ def close_work_item_and_parents(item: BeadsWorkItem) -> None:
 
         if item_data.get("status") in ["closed", "completed"]:
             logger.info("   ✅ Agent successfully closed the item")
+            if item_logger:
+                item_logger.log("✅ ORCHESTRATOR: Agent successfully closed the beads item")
         else:
             logger.warning("   ⚠️  Item not closed by agent, closing now...")
+            if item_logger:
+                item_logger.log(f"⚠️  ORCHESTRATOR: Item not closed by agent (status: {item_data.get('status')}) — closing now")
             close_item(item.id, "Completed by PokePoke orchestrator (agent did not close)")
     except Exception as e:
         logger.warning(f"   ⚠️  Could not check item status: {e}")
         logger.info("   Closing item as fallback...")
+        if item_logger:
+            item_logger.log(f"⚠️  ORCHESTRATOR: Could not check item status: {e} — closing as fallback")
         close_item(item.id, "Completed by PokePoke orchestrator")
 
     # Check parent hierarchy
-    check_parent_hierarchy(item)
+    check_parent_hierarchy(item, item_logger=item_logger)
 
 
-def check_parent_hierarchy(item: BeadsWorkItem) -> None:
+def check_parent_hierarchy(item: BeadsWorkItem, item_logger: 'ItemLogger | None' = None) -> None:
     """Check and close parent items if all children are complete."""
     parent_id = get_parent_id(item.id)
     if parent_id:
         logger.info(f"\n🔍 Checking parent {parent_id} completion status...")
+        if item_logger:
+            item_logger.log(f"🔍 ORCHESTRATOR: Checking parent {parent_id} completion status")
         close_parent_if_complete(parent_id)
 
         # Recursively check grandparents
         grandparent_id = get_parent_id(parent_id)
         if grandparent_id:
+            if item_logger:
+                item_logger.log(f"🔍 ORCHESTRATOR: Checking grandparent {grandparent_id} completion status")
             close_parent_if_complete(grandparent_id)

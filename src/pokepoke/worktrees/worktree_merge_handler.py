@@ -90,6 +90,11 @@ def handle_worktree_merge(
             "git status:\n%s",
             ctx.worktree_path, _diag,
         )
+        if ctx.item_logger:
+            ctx.item_logger.log_error(
+                f"🚨 ORCHESTRATOR: INVARIANT VIOLATION — worktree {ctx.worktree_path} has "
+                f"uncommitted changes at merge time. Halting orchestrator.\ngit status:\n{_diag}"
+            )
         tracker.fail_step("4", "CRITICAL: worktree dirty after cleanup phase — pipeline bug")
         tracker.finish_run("failed")
         add_uncleaned_worktree(
@@ -121,6 +126,8 @@ def handle_worktree_merge(
         tracker.complete_step("5", "0 commits — skip merge")
         tracker.begin_step("5a", "Cleaning up empty worktree (no lock needed)…")
         logger.info("⏭️  No commits in worktree for %s — skipping merge, cleaning up", ctx.agent_id)
+        if ctx.item_logger:
+            ctx.item_logger.log(f"⏭️  ORCHESTRATOR: No commits in worktree for {ctx.agent_id} — skipping merge, cleaning up")
         cleaned = cleanup_worktree(ctx.agent_id, force=True, repo_path=ctx.repo_path)
         tracker.complete_step("5a", "Worktree cleaned up")
         tracker.complete_step("11", "Done (no merge needed)")
@@ -137,6 +144,8 @@ def handle_worktree_merge(
         with merge_lock():
             tracker.complete_step("1", f"Acquired merge lock for {ctx.agent_id}")
             logger.info("Acquired merge lock for agent %s", ctx.agent_id)
+            if ctx.item_logger:
+                ctx.item_logger.log(f"🔒 ORCHESTRATOR: Acquired merge lock for {ctx.agent_id}")
             # Fall back to agent_id for cleanup parent if no parent_agent_id
             if not ctx.parent_agent_id:
                 ctx.parent_agent_id = ctx.agent_id
@@ -146,6 +155,8 @@ def handle_worktree_merge(
             return result
     except Timeout as e:
         logger.warning("Merge lock timeout for agent %s: %s", ctx.agent_id, e)
+        if ctx.item_logger:
+            ctx.item_logger.log_error(f"🔒 ORCHESTRATOR: Merge lock timeout for {ctx.agent_id}: {e}")
         tracker.fail_step("1", f"Lock timeout: {e}")
         tracker.finish_run("failed")
 
@@ -157,6 +168,8 @@ def handle_worktree_merge(
         return False, False
     except Exception as e:
         logger.error("Merge coordination error for agent %s: %s", ctx.agent_id, e, exc_info=True)
+        if ctx.item_logger:
+            ctx.item_logger.log_error(f"🔒 ORCHESTRATOR: Merge coordination error for {ctx.agent_id}: {e}")
         tracker.fail_step("1", f"Coordination error: {e}")
         tracker.finish_run("failed")
 
@@ -197,11 +210,15 @@ def perform_worktree_merge(  # noqa: C901
     # --- pre-merge readiness check ---
     tracker.begin_step("2", "Checking if main repo is clean…")
     logger.info("\n🔍 Checking if main repo is ready for merge...")
+    if ctx.item_logger:
+        ctx.item_logger.log("🔍 ORCHESTRATOR: Checking if main repo is ready for merge")
     is_ready, error_msg = check_main_repo_ready_for_merge(cwd=repo_cwd)
 
     if not is_ready:
         logger.error(f"\n⚠️  Cannot merge: {error_msg}")
         logger.info(f"   Worktree preserved at {WORKTREE_DIR}/{WORKTREE_TASK_PREFIX}{ctx.agent_id} - requires cleanup")
+        if ctx.item_logger:
+            ctx.item_logger.log(f"⚠️  ORCHESTRATOR: Main repo not ready for merge: {error_msg} — invoking cleanup agent")
 
         add_uncleaned_worktree(
             ctx.agent_id,
@@ -228,21 +245,29 @@ def perform_worktree_merge(  # noqa: C901
 
             if not cleanup_success:
                 logger.error("   Cleanup agent failed (attempt %d/%d).", attempt, _MAX_CLEANUP_RETRIES)
+                if ctx.item_logger:
+                    ctx.item_logger.log_error(f"❌ ORCHESTRATOR: Cleanup agent failed (attempt {attempt}/{_MAX_CLEANUP_RETRIES})")
                 tracker.fail_step("3b", f"Cleanup agent failed (attempt {attempt})")
                 continue
 
             tracker.complete_step("3b", f"Cleanup agent succeeded (attempt {attempt})")
             tracker.begin_step("3c", "Re-checking main repo…")
             logger.info("   Cleanup successful, retrying merge check...")
+            if ctx.item_logger:
+                ctx.item_logger.log(f"✅ ORCHESTRATOR: Cleanup agent succeeded (attempt {attempt}) — rechecking repo")
             is_ready, error_msg = check_main_repo_ready_for_merge(cwd=repo_cwd)
             if is_ready:
                 tracker.complete_step("3c", "Repo clean after cleanup")
                 logger.info("   ✅ Repo is ready after cleanup, continuing with merge.")
+                if ctx.item_logger:
+                    ctx.item_logger.log(f"✅ ORCHESTRATOR: Repo ready after cleanup attempt {attempt} — proceeding with merge")
                 remove_from_manifest(ctx.agent_id)
                 cleaned_up = True
                 break
             else:
                 logger.error("   Still failing after cleanup attempt %d: %s", attempt, error_msg)
+                if ctx.item_logger:
+                    ctx.item_logger.log_error(f"❌ ORCHESTRATOR: Repo still dirty after cleanup attempt {attempt}: {error_msg}")
                 tracker.fail_step("3c", f"Still dirty after attempt {attempt}: {error_msg}")
 
         if not cleaned_up:
@@ -256,6 +281,11 @@ def perform_worktree_merge(  # noqa: C901
                 "Last error: %s",
                 _MAX_CLEANUP_RETRIES, ctx.agent_id, error_msg,
             )
+            if ctx.item_logger:
+                ctx.item_logger.log_error(
+                    f"🚨 ORCHESTRATOR: Main repo uncleanable after {_MAX_CLEANUP_RETRIES} cleanup attempts. "
+                    f"Halting orchestrator. Last error: {error_msg}"
+                )
             tracker.finish_run("failed")
             request_shutdown()
             return False, False
@@ -267,6 +297,8 @@ def perform_worktree_merge(  # noqa: C901
     # --- worktree merge (worktree was already validated pre-lock) ---
     tracker.begin_step("8", f"Merging worktree for {ctx.agent_id}")
     logger.info(f"\n🔀 Merging worktree for {ctx.agent_id}...")
+    if ctx.item_logger:
+        ctx.item_logger.log(f"🔀 ORCHESTRATOR: Merging worktree for {ctx.agent_id} to default branch")
     merge_result = merge_worktree(ctx.agent_id, cleanup=True, repo_path=repo_cwd)
     merge_success = merge_result.success
     unmerged_files = merge_result.unmerged_files
@@ -278,6 +310,11 @@ def perform_worktree_merge(  # noqa: C901
             "Manual intervention required (git reset --hard HEAD~1).",
             ctx.agent_id,
         )
+        if ctx.item_logger:
+            ctx.item_logger.log_error(
+                f"🚨 ORCHESTRATOR: REPO CORRUPTION — Rollback failed for {ctx.agent_id}. "
+                "Manual intervention required (git reset --hard HEAD~1)"
+            )
 
     if merge_result.halt_required:
         from pokepoke.utils.shutdown import request_shutdown
@@ -286,6 +323,10 @@ def perform_worktree_merge(  # noqa: C901
             "Repo state preserved for manual investigation.",
             ctx.agent_id,
         )
+        if ctx.item_logger:
+            ctx.item_logger.log_error(
+                f"🚨 ORCHESTRATOR: Post-merge validation failed for {ctx.agent_id} — halting orchestrator"
+            )
         tracker.fail_step("9", "Post-merge invariant violation — halt requested")
         tracker.finish_run("failed")
         request_shutdown()
@@ -296,8 +337,12 @@ def perform_worktree_merge(  # noqa: C901
         repo_root_path = Path(repo_cwd) if repo_cwd else None
         if is_merge_in_progress(repo_path=repo_root_path):
             logger.error("\n❌ Worktree merge has conflicts!")
+            if ctx.item_logger:
+                ctx.item_logger.log_error(f"❌ ORCHESTRATOR: Worktree merge has conflicts for {ctx.agent_id}")
         else:
             logger.error("\n❌ Worktree merge failed!")
+            if ctx.item_logger:
+                ctx.item_logger.log_error(f"❌ ORCHESTRATOR: Worktree merge failed for {ctx.agent_id}")
             if not unmerged_files:
                 unmerged_files = get_unmerged_files(repo_path=repo_root_path)
 
@@ -307,6 +352,12 @@ def perform_worktree_merge(  # noqa: C901
                 logger.info(f"      - {f}")
             if len(unmerged_files) > 10:
                 logger.info(f"      ... and {len(unmerged_files) - 10} more")
+            if ctx.item_logger:
+                ctx.item_logger.log(
+                    f"⚠️  ORCHESTRATOR: {len(unmerged_files)} conflicted files: "
+                    + ", ".join(unmerged_files[:5])
+                    + (f" ... and {len(unmerged_files) - 5} more" if len(unmerged_files) > 5 else "")
+                )
 
         logger.info(f"   Worktree preserved at {WORKTREE_DIR}/{WORKTREE_TASK_PREFIX}{ctx.agent_id} - requires conflict resolution")
 
@@ -324,6 +375,9 @@ def perform_worktree_merge(  # noqa: C901
             )
 
         logger.info("   Invoking cleanup agent to resolve conflicts...")
+        if ctx.item_logger:
+            conflict_count = len(unmerged_files) if unmerged_files else 0
+            ctx.item_logger.log(f"🔧 ORCHESTRATOR: Invoking merge conflict cleanup agent ({conflict_count} conflicted files)")
         with cleanup_lock():
             # Don't wait for merge lock since we already hold it
             # Merge conflicts are on the main repo, not the worktree
@@ -339,13 +393,21 @@ def perform_worktree_merge(  # noqa: C901
 
         if success:
             logger.info("   Cleanup successful, retrying merge...")
+            if ctx.item_logger:
+                ctx.item_logger.log("🔄 ORCHESTRATOR: Conflict cleanup successful — retrying merge")
             if is_merge_in_progress(repo_path=repo_root_path):
                 logger.warning("   ⚠️  Merge still in progress after cleanup - aborting to reset state")
+                if ctx.item_logger:
+                    ctx.item_logger.log("⚠️  ORCHESTRATOR: Merge still in progress after cleanup — aborting to reset state")
                 abort_success, abort_error = abort_merge(repo_path=repo_root_path)
                 if not abort_success:
                     logger.error(f"   ❌ Failed to abort merge: {abort_error}")
+                    if ctx.item_logger:
+                        ctx.item_logger.log_error(f"❌ ORCHESTRATOR: Failed to abort merge: {abort_error}")
                     return False, False
                 logger.info("   ✅ Merge aborted, will retry")
+                if ctx.item_logger:
+                    ctx.item_logger.log("✅ ORCHESTRATOR: Merge aborted successfully — will retry")
 
             retry_result = merge_worktree(ctx.agent_id, cleanup=True, repo_path=repo_cwd)
             merge_success = retry_result.success
@@ -355,32 +417,57 @@ def perform_worktree_merge(  # noqa: C901
                     "local repo has a merge commit that could not be undone. Manual intervention required.",
                     ctx.agent_id,
                 )
+                if ctx.item_logger:
+                    ctx.item_logger.log_error(
+                        f"🚨 ORCHESTRATOR: REPO CORRUPTION during retry merge for {ctx.agent_id} — "
+                        "rollback failed, manual intervention required"
+                    )
             if merge_success:
                 remove_from_manifest(ctx.agent_id)
                 worktree_cleaned = not ctx.worktree_path.exists()
                 if not worktree_cleaned:
                     logger.error("Worktree directory persists after retry merge: %s", ctx.worktree_path)
+                    if ctx.item_logger:
+                        ctx.item_logger.log_error(f"⚠️  ORCHESTRATOR: Worktree directory persists after retry merge: {ctx.worktree_path}")
                     add_uncleaned_worktree(ctx.agent_id, str(ctx.worktree_path), "Worktree persists after successful retry merge")
                 logger.info("   Merged worktree" + (" and cleaned up" if worktree_cleaned else " (cleanup incomplete)"))
+                if ctx.item_logger:
+                    ctx.item_logger.log(f"✅ ORCHESTRATOR: Retry merge succeeded{' and cleaned up' if worktree_cleaned else ' (cleanup incomplete)'}")
                 return True, worktree_cleaned
             else:
                 logger.error("   Merge failed again after cleanup.")
+                if ctx.item_logger:
+                    ctx.item_logger.log_error("❌ ORCHESTRATOR: Merge failed again after conflict cleanup")
                 if is_merge_in_progress(repo_path=repo_root_path):
                     abort_success, abort_error = abort_merge(repo_path=repo_root_path)
                     if not abort_success:
                         logger.error("Failed to abort merge after retry failure for %s: %s", ctx.agent_id, abort_error)
                         logger.error(f"   ❌ Failed to abort merge: {abort_error}")
                         logger.warning("   ⚠️  Repository may be stuck in merge-in-progress state")
+                        if ctx.item_logger:
+                            ctx.item_logger.log_error(
+                                f"❌ ORCHESTRATOR: Failed to abort merge after retry failure for {ctx.agent_id}: {abort_error}. "
+                                "Repository may be stuck in merge-in-progress state"
+                            )
                 return False, False
         else:
             logger.error("   Cleanup failed.")
+            if ctx.item_logger:
+                ctx.item_logger.log_error("❌ ORCHESTRATOR: Merge conflict cleanup agent failed")
             if is_merge_in_progress(repo_path=repo_root_path):
                 logger.info("   Aborting merge to reset state...")
+                if ctx.item_logger:
+                    ctx.item_logger.log("🔄 ORCHESTRATOR: Aborting merge to reset state after cleanup failure")
                 abort_success, abort_error = abort_merge(repo_path=repo_root_path)
                 if not abort_success:
                     logger.error("Failed to abort merge after cleanup failure for %s: %s", ctx.agent_id, abort_error)
                     logger.error(f"   ❌ Failed to abort merge: {abort_error}")
                     logger.warning("   ⚠️  Repository may be stuck in merge-in-progress state")
+                    if ctx.item_logger:
+                        ctx.item_logger.log_error(
+                            f"❌ ORCHESTRATOR: Failed to abort merge after cleanup failure for {ctx.agent_id}: {abort_error}. "
+                            "Repository may be stuck in merge-in-progress state"
+                        )
             return False, False
 
     # Mark remaining merge steps as done for the success path
@@ -393,11 +480,15 @@ def perform_worktree_merge(  # noqa: C901
     worktree_cleaned = not ctx.worktree_path.exists()
     if not worktree_cleaned:
         logger.error("Worktree directory persists after merge: %s", ctx.worktree_path)
+        if ctx.item_logger:
+            ctx.item_logger.log_error(f"⚠️  ORCHESTRATOR: Worktree directory persists after merge: {ctx.worktree_path}")
         add_uncleaned_worktree(ctx.agent_id, str(ctx.worktree_path), "Worktree persists after successful merge")
     else:
         tracker.complete_step("10", "Worktree removed")
     tracker.complete_step("11", "Merge lock released")
     logger.info("   Merged worktree" + (" and cleaned up" if worktree_cleaned else " (cleanup incomplete)"))
+    if ctx.item_logger:
+        ctx.item_logger.log(f"✅ ORCHESTRATOR: Merge succeeded for {ctx.agent_id}{' and cleaned up' if worktree_cleaned else ' (cleanup incomplete)'}")
 
     # Invalidate warm sessions after successful merge (codebase may have changed)
     try:

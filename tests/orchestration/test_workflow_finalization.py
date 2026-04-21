@@ -125,7 +125,7 @@ class TestCloseWorkItemAndParents:
         close_work_item_and_parents(item)
 
         mock_close.assert_not_called()
-        mock_check_parents.assert_called_once_with(item)
+        mock_check_parents.assert_called_once_with(item, item_logger=None)
 
     @patch('pokepoke.worktrees.worktree_finalization.check_parent_hierarchy')
     @patch('pokepoke.worktrees.worktree_finalization.close_item')
@@ -154,7 +154,7 @@ class TestCloseWorkItemAndParents:
         close_work_item_and_parents(item)
 
         mock_close.assert_called_once()
-        mock_check_parents.assert_called_once_with(item)
+        mock_check_parents.assert_called_once_with(item, item_logger=None)
 
     @patch('pokepoke.worktrees.worktree_finalization.check_parent_hierarchy')
     @patch('pokepoke.worktrees.worktree_finalization.close_item')
@@ -180,7 +180,7 @@ class TestCloseWorkItemAndParents:
         close_work_item_and_parents(item)
 
         mock_close.assert_called_once()
-        mock_check_parents.assert_called_once_with(item)
+        mock_check_parents.assert_called_once_with(item, item_logger=None)
 
 
 class TestCheckParentHierarchy:

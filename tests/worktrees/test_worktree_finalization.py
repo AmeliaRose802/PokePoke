@@ -97,7 +97,7 @@ class TestFinalizeWorkItem:
         mock_merge.return_value = True
         item = _make_test_item()
         assert finalize_work_item(item, Path("/wt")) is True
-        mock_close.assert_called_once_with(item)
+        mock_close.assert_called_once_with(item, item_logger=None)
 
     @patch("pokepoke.worktrees.worktree_finalization.close_work_item_and_parents")
     @patch("pokepoke.worktrees.worktree_finalization.check_and_merge_worktree")
@@ -178,7 +178,7 @@ class TestCloseWorkItemAndParents:
         item = _make_test_item()
         mock_sub.run.return_value = Mock(stdout=json.dumps([{"status": "closed"}]))
         close_work_item_and_parents(item)
-        mock_hierarchy.assert_called_once_with(item)
+        mock_hierarchy.assert_called_once_with(item, item_logger=None)
 
     @patch("pokepoke.worktrees.worktree_finalization.check_parent_hierarchy")
     @patch("pokepoke.worktrees.worktree_finalization.close_item")
