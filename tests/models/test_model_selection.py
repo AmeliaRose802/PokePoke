@@ -96,11 +96,12 @@ class TestSelectGateModel:
         assert gate_model == "gpt-5"
 
     @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
     @patch('pokepoke.models.model_selection.get_config')
     def test_handles_no_candidates(
-        self, mock_get_config: Mock, mock_get_weights: Mock
+        self, mock_get_config: Mock, mock_get_available: Mock, mock_get_weights: Mock
     ) -> None:
-        """Test behavior when no candidate models are configured."""
+        """Test behavior when no candidate models are configured and no registry."""
         # Setup config with empty candidates
         mock_config = ProjectConfig()
         mock_config.models = ModelConfig(
@@ -110,6 +111,8 @@ class TestSelectGateModel:
         )
         mock_get_config.return_value = mock_config
         mock_get_weights.return_value = {}
+        # No registry data
+        mock_get_available.return_value = []
 
         # Select gate model
         gate_model = select_gate_model("claude-opus-4.6", "test-123")
@@ -178,11 +181,12 @@ class TestSelectModelForItem:
     """Test select_model_for_item function (existing functionality)."""
 
     @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
     @patch('pokepoke.models.model_selection.get_config')
     def test_synthesizes_candidates_when_none_configured(
-        self, mock_get_config: Mock, mock_get_weights: Mock
+        self, mock_get_config: Mock, mock_get_available: Mock, mock_get_weights: Mock
     ) -> None:
-        """When candidate_models is empty, synthesize from default + fallback."""
+        """When candidate_models is empty and no registry, synthesize from default + fallback."""
         mock_config = ProjectConfig()
         mock_config.models = ModelConfig(
             default="claude-opus-4.6",
@@ -191,6 +195,7 @@ class TestSelectModelForItem:
         )
         mock_get_config.return_value = mock_config
         mock_get_weights.return_value = {}
+        mock_get_available.return_value = []
 
         model = select_model_for_item(_make_item("test-123"))
 
@@ -198,11 +203,12 @@ class TestSelectModelForItem:
         mock_get_weights.assert_called_once()
 
     @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
     @patch('pokepoke.models.model_selection.get_config')
     def test_synthesized_candidates_deduped_when_default_equals_fallback(
-        self, mock_get_config: Mock, mock_get_weights: Mock
+        self, mock_get_config: Mock, mock_get_available: Mock, mock_get_weights: Mock
     ) -> None:
-        """When default == fallback, synthesized list has one entry."""
+        """When default == fallback and no registry, synthesized list has one entry."""
         mock_config = ProjectConfig()
         mock_config.models = ModelConfig(
             default="claude-opus-4.6",
@@ -211,6 +217,7 @@ class TestSelectModelForItem:
         )
         mock_get_config.return_value = mock_config
         mock_get_weights.return_value = {}
+        mock_get_available.return_value = []
 
         model = select_model_for_item(_make_item("test-123"))
 
@@ -470,8 +477,9 @@ class TestGetItemComplexity:
 class TestEconomyModeIntegration:
     """Test economy mode integration in select_model_for_item."""
 
+    @patch('pokepoke.models.model_sync.get_available_model_names')
     @patch('pokepoke.models.model_selection.get_config')
-    def test_economy_mode_disabled_by_default(self, mock_config: Mock) -> None:
+    def test_economy_mode_disabled_by_default(self, mock_config: Mock, mock_available: Mock) -> None:
         """Test that economy mode is disabled by default."""
         from pokepoke.config import ProjectConfig
 
@@ -479,6 +487,7 @@ class TestEconomyModeIntegration:
         # Default EconomyModeConfig has enabled=False
         assert cfg.economy_mode.enabled is False
         mock_config.return_value = cfg
+        mock_available.return_value = []
 
         # Should fall back to normal weighted selection
         model = select_model_for_item(_make_item("x", labels=["simple"]))
@@ -729,6 +738,110 @@ class TestFilterAvailableModels:
 
         # Should return all candidates
         assert filtered == candidates
+
+
+class TestRegistryCandidatePopulation:
+    """Test that registry-discovered models are used when candidate_models is empty."""
+
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_uses_registry_models_when_no_candidates_configured(
+        self, mock_config: Mock, mock_available: Mock, mock_weights: Mock
+    ) -> None:
+        """When candidate_models is empty, use registry-discovered models."""
+        cfg = ProjectConfig()
+        cfg.models = ModelConfig(
+            default="claude-opus-4.6",
+            fallback="claude-sonnet-4.5",
+            candidate_models=[]
+        )
+        mock_config.return_value = cfg
+
+        # Registry has discovered many models
+        mock_available.return_value = [
+            "claude-opus-4.6", "claude-sonnet-4.5", "gpt-5.2", "gpt-5.1-codex"
+        ]
+        mock_weights.return_value = {}
+
+        model = select_model_for_item(_make_item("x"))
+
+        # Should pick from registry models, not just default+fallback
+        assert model in ["claude-opus-4.6", "claude-sonnet-4.5", "gpt-5.2", "gpt-5.1-codex"]
+
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_falls_back_to_default_fallback_when_no_registry(
+        self, mock_config: Mock, mock_available: Mock, mock_weights: Mock
+    ) -> None:
+        """When candidate_models empty AND registry empty, use default+fallback."""
+        cfg = ProjectConfig()
+        cfg.models = ModelConfig(
+            default="claude-opus-4.6",
+            fallback="claude-sonnet-4.5",
+            candidate_models=[]
+        )
+        mock_config.return_value = cfg
+
+        # No registry data
+        mock_available.return_value = []
+        mock_weights.return_value = {}
+
+        model = select_model_for_item(_make_item("x"))
+
+        # Should fall back to default+fallback
+        assert model in ["claude-opus-4.6", "claude-sonnet-4.5"]
+
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_gate_model_uses_registry_when_no_candidates(
+        self, mock_config: Mock, mock_available: Mock, mock_weights: Mock
+    ) -> None:
+        """Gate model should also use registry models when candidate_models empty."""
+        cfg = ProjectConfig()
+        cfg.models = ModelConfig(
+            default="claude-opus-4.6",
+            fallback="claude-sonnet-4.5",
+            candidate_models=[]
+        )
+        mock_config.return_value = cfg
+
+        # Registry has many models
+        mock_available.return_value = [
+            "claude-opus-4.6", "claude-sonnet-4.5", "gpt-5.2"
+        ]
+        mock_weights.return_value = {}
+
+        gate_model = select_gate_model("claude-opus-4.6", "test-123")
+
+        # Should pick from registry models excluding work model
+        assert gate_model in ["claude-sonnet-4.5", "gpt-5.2"]
+        assert gate_model != "claude-opus-4.6"
+
+    @patch('pokepoke.models.model_selection.get_model_weights')
+    @patch('pokepoke.models.model_sync.get_available_model_names')
+    @patch('pokepoke.models.model_selection.get_config')
+    def test_explicit_candidates_not_affected(
+        self, mock_config: Mock, mock_available: Mock, mock_weights: Mock
+    ) -> None:
+        """When candidate_models is explicitly set, registry is only used for filtering."""
+        cfg = ProjectConfig()
+        cfg.models = ModelConfig(
+            candidate_models=["model-a", "model-b"]
+        )
+        cfg.assignment = AssignmentConfig(fallback="weighted")
+        mock_config.return_value = cfg
+
+        # Registry has more models than configured candidates
+        mock_available.return_value = ["model-a", "model-b", "model-c", "model-d"]
+        mock_weights.return_value = {}
+
+        model = select_model_for_item(_make_item("x"))
+
+        # Should only pick from explicitly configured candidates
+        assert model in ["model-a", "model-b"]
 
 
 class TestModelSelectionWithRegistry:
