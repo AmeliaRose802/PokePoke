@@ -6,7 +6,7 @@ references:
   - src/pokepoke/orchestration/work_item_selection.py
   - src/pokepoke/orchestration/work_item_session.py
 confidence: medium
-lastUpdated: 2026-03-31
+lastUpdated: 2026-04-21
 ---
 
 # Spec: Orchestration Workflow
@@ -30,3 +30,6 @@ lastUpdated: 2026-03-31
 - Each work item executes in isolated worktree to prevent conflicts.
 - Validation failures accumulate context for progressively better retry prompts.
 - Continuous mode loops after completion; single-shot mode exits after one item.
+- Work-agent `needs_clarification` outcomes are treated as human-required blockers:
+  the workflow marks the item `blocked` with clarification details and avoids
+  returning it to the ready queue.
