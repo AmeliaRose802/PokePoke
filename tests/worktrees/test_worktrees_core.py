@@ -298,6 +298,95 @@ class TestCreateWorktree:
             call_args = mock_run_git.call_args[0][0]
             assert 'develop' in call_args
 
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pathlib.Path.mkdir')
+    @patch('pokepoke.worktrees.worktrees._validate_worktree_integrity')
+    @patch('pokepoke.git.repo_state_guard.cleanup_lock_active')
+    def test_create_worktree_waits_for_cleanup_agent(
+        self,
+        mock_cleanup_active,
+        mock_validate,
+        mock_mkdir,
+        mock_run_git,
+        mock_lock,
+        mock_list,
+        mock_default_branch,
+    ) -> None:
+        """Block worktree creation while cleanup agent is active."""
+        mock_default_branch.return_value = 'main'
+        mock_list.return_value = []
+        mock_lock.return_value.__enter__ = Mock(return_value=None)
+        mock_lock.return_value.__exit__ = Mock(return_value=None)
+        mock_run_git.return_value = Mock(returncode=0, stdout='')
+        
+        # Simulate cleanup agent releasing lock after 2 checks
+        call_count = 0
+        def cleanup_active_side_effect():
+            nonlocal call_count
+            call_count += 1
+            return call_count <= 2
+        
+        mock_cleanup_active.side_effect = cleanup_active_side_effect
+
+        result = create_worktree('task-blocked')
+
+        # Should have waited for cleanup (called cleanup_lock_active multiple times)
+        assert mock_cleanup_active.call_count >= 2
+        # Should eventually create the worktree
+        assert result == (Path('worktrees') / 'task-task-blocked').resolve()
+        mock_run_git.assert_called_once()
+
+    @patch('pokepoke.worktrees.worktrees.get_default_branch')
+    @patch('pokepoke.worktrees.worktrees.list_worktrees')
+    @patch('pokepoke.worktrees.worktrees.with_worktree_lock')
+    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pathlib.Path.mkdir')
+    @patch('pokepoke.worktrees.worktrees._validate_worktree_integrity')
+    @patch('pokepoke.git.repo_state_guard.cleanup_lock_active')
+    @patch('time.sleep')  # Speed up the test
+    @patch('time.time')
+    def test_create_worktree_proceeds_after_cleanup_timeout(
+        self,
+        mock_time,
+        mock_sleep,
+        mock_cleanup_active,
+        mock_validate,
+        mock_mkdir,
+        mock_run_git,
+        mock_lock,
+        mock_list,
+        mock_default_branch,
+    ) -> None:
+        """Proceed with worktree creation after cleanup timeout."""
+        mock_default_branch.return_value = 'main'
+        mock_list.return_value = []
+        mock_lock.return_value.__enter__ = Mock(return_value=None)
+        mock_lock.return_value.__exit__ = Mock(return_value=None)
+        mock_run_git.return_value = Mock(returncode=0, stdout='')
+        
+        # Simulate cleanup agent still active (never releases)
+        mock_cleanup_active.return_value = True
+        
+        # Mock time to simulate timeout - return increasing values
+        call_count = [0]
+        def time_side_effect():
+            call_count[0] += 1
+            if call_count[0] <= 3:
+                return 0.0  # Initial calls
+            else:
+                return 601.0  # After initial, simulate timeout exceeded
+        
+        mock_time.side_effect = time_side_effect
+        
+        result = create_worktree('task-timeout')
+
+        # Should have created the worktree despite active cleanup
+        assert result == (Path('worktrees') / 'task-task-timeout').resolve()
+        mock_run_git.assert_called_once()
+
 
 class TestIsWorktreeMerged:
     """Tests for is_worktree_merged function."""

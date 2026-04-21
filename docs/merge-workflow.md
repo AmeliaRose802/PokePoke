@@ -146,6 +146,8 @@ flowchart TD
 
 Known-safe changes (`.beads/`, `worktrees/`) are auto-committed. Everything else triggers a cleanup agent.
 
+**CRITICAL SAFETY:** While step 3b (cleanup agent) is running, new agent spawns are **blocked**. The `create_worktree` function checks `cleanup_lock_active()` and waits (up to 10 minutes) for the cleanup agent to complete before creating new worktrees. This prevents conflicts when the cleanup agent is modifying the main repo working tree. If the cleanup agent doesn't complete within the timeout, the worktree creation proceeds with a warning logged.
+
 ## Merge Conflict Handling
 
 How conflicts are detected, auto-resolved where possible, and escalated to a cleanup agent when not. This is the detail for **step 8** (conflict branch) in the general flow.

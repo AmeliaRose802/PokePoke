@@ -220,6 +220,30 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
             if lock_wait > 0.1:
                 logger.info(f"Waited {lock_wait:.2f}s for worktree lock (item: {item_id})")
 
+            # Wait for cleanup agent to complete before creating new worktrees
+            # This prevents conflicts when cleanup agent is modifying main repo
+            from pokepoke.git.repo_state_guard import cleanup_lock_active
+            cleanup_wait_start = time.time()
+            max_cleanup_wait = 600.0  # 10 minutes
+            while cleanup_lock_active():
+                elapsed = time.time() - cleanup_wait_start
+                if elapsed >= max_cleanup_wait:
+                    logger.warning(
+                        f"Cleanup agent still running after {max_cleanup_wait:.0f}s wait for {item_id}. "
+                        "Proceeding with worktree creation despite active cleanup."
+                    )
+                    break
+                if elapsed < 5:
+                    # Don't log for the first few seconds
+                    time.sleep(2.0)
+                else:
+                    logger.info(f"Waiting for cleanup agent to complete before creating worktree for {item_id} ({elapsed:.0f}s elapsed)...")
+                    time.sleep(5.0)
+            
+            cleanup_wait_time = time.time() - cleanup_wait_start
+            if cleanup_wait_time > 0.1:
+                logger.info(f"Waited {cleanup_wait_time:.2f}s for cleanup agent to complete (item: {item_id})")
+
             # Double-check after acquiring lock
             existing = _find_existing_worktree(worktree_path, branch_name, item_id, repo_path=repo_cwd)
             if existing:
