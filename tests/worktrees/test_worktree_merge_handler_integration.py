@@ -181,7 +181,7 @@ class TestPerformWorktreeMergeIntegration:
         mock_check_ready,
         mock_cleanup_lock
     ):
-        """Test handling of merge conflicts."""
+        """Test handling of merge conflicts with single retry."""
         mock_check_ready.return_value = (True, '')
         mock_merge.return_value = MergeResult(success=False, unmerged_files=['file1.py', 'file2.py'])
         mock_conflict_agent.return_value = (True, None)
@@ -197,6 +197,7 @@ class TestPerformWorktreeMergeIntegration:
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        ctx.max_conflict_retries = 1
         success, _cleaned = perform_worktree_merge(ctx)
 
         assert success is False
@@ -501,6 +502,7 @@ class TestCleanupAgentInvocation:
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
+        ctx.max_conflict_retries = 1
         perform_worktree_merge(ctx)
 
         # Verify conflict agent was called

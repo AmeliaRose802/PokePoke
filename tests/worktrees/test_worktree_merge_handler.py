@@ -318,6 +318,7 @@ def test_perform_retry_merge_fails_aborts(
     mock_abort.return_value = (True, "")
 
     ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    ctx.max_conflict_retries = 1
     success, cleaned = perform_worktree_merge(ctx)
     assert success is False
     assert cleaned is False
@@ -750,3 +751,74 @@ def test_merge_conflict_cleanup_receives_item_logger(
 
     mock_invoke_conflict_cleanup.assert_called_once()
     assert mock_invoke_conflict_cleanup.call_args[1].get("item_logger") is sentinel_logger
+
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
+def test_conflict_retry_loop_succeeds_on_second_attempt(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging, mock_abort,
+) -> None:
+    """Retry loop succeeds on 2nd attempt after 1st retry merge still conflicts."""
+    mock_check.return_value = (True, "")
+    # Initial merge fails, 1st retry fails, 2nd retry succeeds
+    mock_merge.side_effect = [
+        MergeResult(success=False, unmerged_files=["a.py"]),
+        MergeResult(success=False, unmerged_files=["a.py"]),
+        MergeResult(success=True),
+    ]
+    # is_merge_in_progress: initial conflict, before retry1, abort between retries, before retry2
+    mock_is_merging.side_effect = [True, False, True, False]
+    mock_get_unmerged.return_value = ["a.py"]
+    mock_conflict_cleanup.return_value = (True, None)
+    mock_abort.return_value = (True, "")
+
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    ctx.max_conflict_retries = 3
+    success, cleaned = perform_worktree_merge(ctx)
+
+    assert success is True
+    assert mock_conflict_cleanup.call_count == 2
+    assert mock_merge.call_count == 3  # initial + 2 retries
+    # Verify 2nd attempt includes previous attempt context
+    second_call_args = mock_conflict_cleanup.call_args_list[1]
+    prompt = second_call_args[0][1]
+    assert "Previous attempt context" in prompt
+    assert "Attempt 1" in prompt
+
+
+@patch("pokepoke.git.merge_conflict.abort_merge")
+@patch("pokepoke.git.merge_conflict.is_merge_in_progress")
+@patch("pokepoke.git.merge_conflict.get_unmerged_files")
+@patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
+@patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
+@patch("pokepoke.worktrees.worktree_merge_handler.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
+def test_conflict_retry_loop_exhausts_all_attempts(
+    mock_check, mock_merge, mock_conflict_cleanup, mock_add, mock_remove,
+    mock_get_unmerged, mock_is_merging, mock_abort,
+) -> None:
+    """All conflict retry attempts exhausted returns failure."""
+    mock_check.return_value = (True, "")
+    # All merges fail
+    mock_merge.return_value = MergeResult(success=False, unmerged_files=["a.py"])
+    # is_merge_in_progress: initial, before retry1, abort1, before retry2, abort2, before retry3, final abort
+    mock_is_merging.side_effect = [True] + [False, True] * 2 + [False, True]
+    mock_get_unmerged.return_value = ["a.py"]
+    mock_conflict_cleanup.return_value = (True, None)
+    mock_abort.return_value = (True, "")
+
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    ctx.max_conflict_retries = 3
+    success, cleaned = perform_worktree_merge(ctx)
+
+    assert success is False
+    assert cleaned is False
+    assert mock_conflict_cleanup.call_count == 3
+    assert mock_merge.call_count == 4  # initial + 3 retries
