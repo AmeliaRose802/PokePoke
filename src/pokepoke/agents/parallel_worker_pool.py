@@ -1,16 +1,8 @@
 """ParallelWorkerPool: encapsulates ThreadPoolExecutor, semaphore, and futures tracking.
 
 Thread-safe: Shared mutable state protected by threading.Lock.
-
-CRITICAL FIX (PokePoke-82v1j): The collect_done_futures() function previously used
-concurrent.futures.wait() to check for completed futures. This could cause indefinite
-hangs even with a timeout when futures were in a bad state (deadlocked threads, zombie
-subprocesses, or hung system calls). The orchestrator would appear frozen with agents
-showing 0% CPU but never completing.
-
-Solution: Removed all blocking wait() calls and rely solely on non-blocking .done()
-polling. This ensures the polling loop never hangs and can always detect and handle
-stalled agents through the health check mechanism.
+Uses non-blocking .done() polling instead of concurrent.futures.wait()
+to prevent hangs from deadlocked threads or zombie subprocesses (PokePoke-82v1j).
 """
 
 from __future__ import annotations
@@ -26,6 +18,7 @@ from pokepoke.types import WorkItemResult
 from pokepoke.types_beads import BeadsWorkItem, RecordFn
 from pokepoke.types_stats import SessionStats
 from pokepoke.utils.logging_utils import RunLogger
+from pokepoke.utils.process_utils import kill_orphaned_copilot_processes
 
 logger = logging.getLogger(__name__)
 _Future = concurrent.futures.Future[WorkItemResult]
@@ -185,14 +178,26 @@ def _check_agent_health(
             for fut in stalled_futures:
                 if fut.cancel():
                     cancelled += 1
-                    item = _locked_pop(lock, futures, fut)
-                    if item:
-                        run_logger.log_orchestrator(
-                            f"Cancelled stalled agent for {item.id}",
-                            level="WARNING"
-                        )
-                        _safe_unassign(item.id, run_logger, "stalled-cancelled")
-                        future_start_times.pop(fut, None)
+                item = _locked_pop(lock, futures, fut)
+                if item:
+                    run_logger.log_orchestrator(
+                        f"Cancelled stalled agent for {item.id}",
+                        level="WARNING"
+                    )
+                    _safe_unassign(item.id, run_logger, "stalled-cancelled")
+                    future_start_times.pop(fut, None)
+            # Kill orphaned copilot process trees to reclaim memory.
+            # Stalled agents leave copilot.exe + child processes running
+            # even after their futures are removed.
+            try:
+                killed = kill_orphaned_copilot_processes()
+                if killed > 0:
+                    run_logger.log_orchestrator(
+                        f"Killed {killed} orphaned copilot process(es) after stall cleanup",
+                        level="WARNING"
+                    )
+            except Exception as e:
+                logger.debug(f"Failed to kill orphaned processes: {e}")
             if cancelled > 0:
                 run_logger.log_orchestrator(
                     f"Cancelled {cancelled} stalled agent(s) to break deadlock",

@@ -112,6 +112,21 @@ def _coordinate_shutdown() -> None:
     except Exception as e:
         logger.debug(f"Failed to signal merge queue shutdown: {e}")
 
+    # Kill all active copilot process trees so child processes (node, pwsh,
+    # conhost) don't survive the orchestrator shutdown.
+    try:
+        from pokepoke.utils.process_utils import (
+            get_active_pid_registry,
+            kill_process_tree,
+        )
+        registry = get_active_pid_registry()
+        for pid in registry.active_pids:
+            logger.info("Shutdown: killing copilot process tree PID %d", pid)
+            kill_process_tree(pid)
+        registry.clear()
+    except Exception as e:
+        logger.debug(f"Failed to kill copilot process trees on shutdown: {e}")
+
     # Calculate watchdog timeout based on active agents
     with _agent_count_lock:
         agent_count = _active_agent_count

@@ -80,7 +80,8 @@ def test_health_monitoring_cancels_multiple_stalled_agents():
         stalled_futures.append(fut)
 
     # Run health check (it will try to cancel stalled futures)
-    with patch("pokepoke.agents.parallel_worker_pool._safe_unassign"):
+    with patch("pokepoke.agents.parallel_worker_pool._safe_unassign"), \
+         patch("pokepoke.agents.parallel_worker_pool.kill_orphaned_copilot_processes", return_value=0):
         stalled_count = _check_agent_health(futures, future_start_times, run_logger, lock=None)
 
     assert stalled_count == 3

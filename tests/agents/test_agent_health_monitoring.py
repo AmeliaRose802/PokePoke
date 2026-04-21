@@ -2,7 +2,7 @@
 import threading
 import time
 from concurrent.futures import Future
-from unittest.mock import Mock
+from unittest.mock import Mock, patch
 
 from pokepoke.agents.parallel_worker_pool import (
     _AGENT_STALL_THRESHOLD,
@@ -51,7 +51,9 @@ class TestAgentHealthMonitoring:
         assert any("stalled" in str(call).lower() for call in calls)
         assert any("item-1" in str(call) for call in calls)
 
-    def test_check_agent_health_triggers_error_at_threshold(self):
+    @patch("pokepoke.agents.parallel_worker_pool.kill_orphaned_copilot_processes", return_value=0)
+    @patch("pokepoke.agents.parallel_worker_pool._safe_unassign")
+    def test_check_agent_health_triggers_error_at_threshold(self, mock_unassign, mock_kill):
         """Health check should trigger error when too many agents are stalled."""
         futures = {}
         start_times = {}

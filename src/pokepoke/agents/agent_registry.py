@@ -80,6 +80,11 @@ class AgentRecord:
 class AgentRegistry:
     """Tracks running agents and their log buffers."""
 
+    # Maximum archived attempts per agent_id to prevent unbounded memory growth.
+    _MAX_HISTORY_PER_AGENT = 5
+    # Maximum log lines kept per archived attempt (full logs are on disk).
+    _MAX_ARCHIVED_LOG_LINES = 50
+
     def __init__(
         self,
         lock: threading.RLock,
@@ -306,8 +311,10 @@ class AgentRegistry:
     def serialize_all(self) -> list[dict[str, Any]]:
         with self._lock:
             agents: list[dict[str, Any]] = []
+            # History entries: omit log_lines to keep poll payloads small.
+            # Full logs are available via get_detail() on demand.
             agents.extend(
-                attempt.to_dict(include_log_lines=True)
+                attempt.to_dict(include_log_lines=False)
                 for attempts in self._agent_history.values()
                 for attempt in attempts
             )
@@ -348,7 +355,11 @@ class AgentRegistry:
         return f"{agent_id}::v{safe_iteration}"
 
     def _archive_attempt(self, agent_id: str, attempt: AgentRecord) -> None:
-        """Persist a completed attempt so it remains visible after retries."""
+        """Persist a completed attempt so it remains visible after retries.
+
+        Only the tail of log_lines is kept — full logs live on disk.
+        History per agent is capped to prevent unbounded memory growth.
+        """
         snapshot = attempt.copy(
             paused=agent_id in self._paused_agents,
             is_history=True,
@@ -356,8 +367,15 @@ class AgentRegistry:
         )
         if snapshot.status == "running":
             snapshot.status = "failed"
+        # Trim log_lines to avoid accumulating large buffers in memory;
+        # the complete output is already persisted to the item log file.
+        if len(snapshot.log_lines) > self._MAX_ARCHIVED_LOG_LINES:
+            snapshot.log_lines = snapshot.log_lines[-self._MAX_ARCHIVED_LOG_LINES:]
         history = self._agent_history.setdefault(agent_id, [])
         history.append(snapshot)
+        # Evict oldest attempts when the per-agent cap is exceeded.
+        if len(history) > self._MAX_HISTORY_PER_AGENT:
+            del history[: len(history) - self._MAX_HISTORY_PER_AGENT]
 
     @staticmethod
     def _normalize_agent_type(agent_type: str | None) -> str | None:
