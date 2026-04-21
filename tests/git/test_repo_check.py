@@ -66,29 +66,32 @@ class TestCheckAndCommitMainRepo:
             # Should print info about beads sync
             assert any("Beads database changes" in str(call) for call in mock_print.call_args_list)
 
-    def test_worktree_changes_auto_commit(self):
-        """Test that worktree changes are automatically committed."""
+    def test_worktree_changes_treated_as_other(self):
+        """Test that worktree changes (if any) are treated as 'other' changes.
+
+        worktrees/ is gitignored so changes should never appear in git status.
+        If they do (e.g. force-added), they fall into the 'other' bucket and
+        get handled by the general auto-commit path.
+        """
         mock_logger = Mock()
         repo_path = Path("/fake/repo")
 
         with patch('subprocess.run') as mock_run:
-            # First call: git status showing worktree changes
-            # Subsequent calls: git add and git commit
+            # git status showing worktree file (force-added edge case)
+            # then git add -u + git commit via _try_auto_commit
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" D worktrees/task-1/file.py", stderr=""),
-                Mock(returncode=0),  # git add
-                Mock(returncode=0)   # git commit
+                Mock(returncode=0),  # git add -u
+                Mock(returncode=0),  # git commit
             ]
 
             result = check_and_commit_main_repo(repo_path, mock_logger)
 
             assert result is True
+            # Should go through _handle_other_changes → _try_auto_commit
             assert mock_run.call_count == 3
-            # Check git add was called
-            assert mock_run.call_args_list[1][0][0] == ["git", "add", "worktrees/"]
-            # Check git commit was called
-            assert "git" in mock_run.call_args_list[2][0][0]
-            assert "commit" in mock_run.call_args_list[2][0][0]
+            # git add -u (not git add worktrees/)
+            assert mock_run.call_args_list[1][0][0] == ["git", "add", "-u"]
 
     def test_git_status_failure_not_a_repo(self):
         """Test handling git status failure when not a git repo."""

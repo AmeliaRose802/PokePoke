@@ -2073,26 +2073,25 @@ class TestSyncAndEnsureCleanMainRepo:
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('and 5 more' in c for c in print_calls)
 
-    def test_worktree_changes_committed(self):
-        """Test worktree cleanup changes are auto-committed (lines 389-392)."""
+    def test_worktree_changes_ignored_by_gitignore(self):
+        """Test worktree changes don't appear because worktrees/ is gitignored.
+
+        Since worktrees/ is in .gitignore, git status --porcelain should never
+        report worktree directory changes. This test verifies the function works
+        correctly when no worktree entries appear in status output.
+        """
         from pokepoke.worktrees.worktrees import _sync_and_ensure_clean_main_repo
 
         with patch('pokepoke.worktrees.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
-             patch('pokepoke.worktrees.worktree_helpers.subprocess.run') as mock_run, \
-             patch('builtins.print') as mock_print:
+             patch('pokepoke.worktrees.worktree_helpers.run_git') as mock_git:
 
             mock_sync.return_value = Mock(returncode=0)
-            mock_run.side_effect = [
-                Mock(stdout=' D worktrees/task-old/.git\n', returncode=0),  # status
-                Mock(stdout='', returncode=0),  # git add worktrees/
-                Mock(stdout='', returncode=0),  # git commit
-            ]
+            # git status returns empty (worktrees/ ignored by .gitignore)
+            mock_git.return_value = Mock(stdout='', returncode=0)
 
             result = _sync_and_ensure_clean_main_repo('task/test-branch')
 
             assert result is True
-            print_calls = [str(c) for c in mock_print.call_args_list]
-            assert any('Committing worktree cleanup' in c for c in print_calls)
 
     def test_main_repo_check_fails(self):
         """Test CalledProcessError during main repo check (lines 395-397)."""

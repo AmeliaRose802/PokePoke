@@ -37,15 +37,15 @@ class TestCategorizeGitChangesEdgeCases:
         result = categorize_git_changes(lines)
         assert result["other"] == [" M src/foo.py"]
         assert result["beads"] == []
-        assert result["worktree"] == []
         assert result["untracked"] == []
 
     def test_all_empty_input(self) -> None:
         assert categorize_git_changes([]) == {
-            "beads": [], "worktree": [], "untracked": [], "other": [],
+            "beads": [], "untracked": [], "other": [],
         }
 
     def test_mixed_beads_worktree_untracked_other(self) -> None:
+        """worktrees/ paths land in 'other' since worktrees/ is gitignored."""
         lines = [
             " M .beads/issues.jsonl",
             " M worktrees/task-123/file.py",
@@ -54,17 +54,14 @@ class TestCategorizeGitChangesEdgeCases:
         ]
         result = categorize_git_changes(lines)
         assert result["beads"] == [" M .beads/issues.jsonl"]
-        assert result["worktree"] == [" M worktrees/task-123/file.py"]
         assert result["untracked"] == ["?? new_file.txt"]
-        assert result["other"] == [" M src/main.py"]
+        assert result["other"] == [" M worktrees/task-123/file.py", " M src/main.py"]
 
-    def test_untracked_worktree_path_is_untracked_not_worktree(self) -> None:
-        """Lines with ?? prefix containing worktree paths → untracked only."""
+    def test_untracked_worktree_path_is_untracked(self) -> None:
+        """Lines with ?? prefix containing worktree paths → untracked."""
         lines = ["?? worktrees/task-abc/leftover.txt"]
         result = categorize_git_changes(lines)
         assert result["untracked"] == ["?? worktrees/task-abc/leftover.txt"]
-        # Must NOT appear in worktree bucket (line starts with ??)
-        assert result["worktree"] == []
 
     def test_beads_untracked_goes_to_both_beads_and_untracked(self) -> None:
         """Untracked beads file appears in both beads and untracked."""
@@ -78,8 +75,6 @@ class TestCategorizeGitChangesEdgeCases:
         result = categorize_git_changes(lines)
         assert len(result["untracked"]) == 2
         assert result["other"] == []
-        assert result["beads"] == []
-        assert result["worktree"] == []
 
 
 # ---------------------------------------------------------------------------
@@ -451,7 +446,7 @@ class TestGetStatusPorcelainAndChanges:
         raw, changes = get_status_porcelain_and_changes()
         assert raw == ""
         assert changes == {
-            "beads": [], "worktree": [], "untracked": [], "other": [],
+            "beads": [], "untracked": [], "other": [],
         }
 
     @patch("pokepoke.git.git_helpers.subprocess.run")
@@ -466,9 +461,9 @@ class TestGetStatusPorcelainAndChanges:
         raw, changes = get_status_porcelain_and_changes()
         assert raw == stdout.strip()
         assert len(changes["beads"]) == 1
-        assert len(changes["worktree"]) == 1
         assert len(changes["untracked"]) == 1
-        assert len(changes["other"]) == 1
+        # worktrees/ entry falls into 'other' (no special worktree category)
+        assert len(changes["other"]) == 2
 
 
 # ---------------------------------------------------------------------------

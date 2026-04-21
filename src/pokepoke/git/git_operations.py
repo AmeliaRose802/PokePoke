@@ -5,11 +5,10 @@ import re
 import subprocess
 from pathlib import Path
 
-from pokepoke.utils.constants import BEADS_DIR, POKEPOKE_DIR, WORKTREE_DIR
+from pokepoke.utils.constants import BEADS_DIR, POKEPOKE_DIR
 
 # Pre-built path prefixes for string matching in git status output
 _BEADS_PATH = f"{BEADS_DIR}/"
-_WT_PATH = f"{WORKTREE_DIR}/"
 _POKEPOKE_PATH = str(POKEPOKE_DIR).replace("\\", "/") + "/"
 
 logger = logging.getLogger(__name__)
@@ -35,14 +34,18 @@ __all__ = [
 
 
 def categorize_git_changes(lines: list[str]) -> dict[str, list[str]]:
-    """Categorize git status --porcelain lines into beads, worktree, untracked, and other changes."""
+    """Categorize git status --porcelain lines into beads, untracked, and other changes.
+
+    Note: worktrees/ is gitignored and should never have tracked changes.
+    If tracked worktrees/ files appear in git status, they were likely force-added
+    before the gitignore rule existed and should be removed with git rm --cached.
+    """
     return {
         'beads': [line for line in lines if line and _BEADS_PATH in line],
-        'worktree': [line for line in lines if line and _WT_PATH in line and not line.startswith('??')],
         'untracked': [line for line in lines if line and line.startswith('??')],
         'other': [
             line for line in lines
-            if line and _BEADS_PATH not in line and _WT_PATH not in line and not line.startswith('??')
+            if line and _BEADS_PATH not in line and not line.startswith('??')
         ],
     }
 
@@ -128,7 +131,7 @@ def verify_main_repo_clean(cwd: str | None = None) -> tuple[bool, str, list[str]
             changes = categorize_git_changes(uncommitted.split('\n'))
             relevant_untracked = [
                 line for line in changes['untracked']
-                if _BEADS_PATH not in line and _WT_PATH not in line
+                if _BEADS_PATH not in line
             ]
             non_beads = changes['other'] + relevant_untracked
             return len(non_beads) == 0, uncommitted, non_beads
