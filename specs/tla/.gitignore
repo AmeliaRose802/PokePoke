@@ -1,0 +1,8 @@
+# TLC model checker output
+states/
+
+# TLC tooling (large JARs)
+tools/
+
+# Binary trace files
+*.bin
