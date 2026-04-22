@@ -259,12 +259,10 @@ def process_work_item(  # noqa: C901
 
             if not result.success:
                 copilot_failure_count += 1
-                is_timeout_failure = result.error and (
-                    "timeout" in result.error.lower() or "inactivity" in result.error.lower())
-                if is_timeout_failure and result.session_id:
+                if result.session_id:
                     resume_session_id = result.session_id
                     resume_output_summary = result.last_output_summary
-                    logger.info(f"\n📎 Session state saved for resume (session: {resume_session_id})")
+                    logger.info(f"\n📎 Session state saved for retry (session: {resume_session_id})")
                 else:
                     resume_session_id = None
                     resume_output_summary = None
