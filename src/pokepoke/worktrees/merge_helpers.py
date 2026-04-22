@@ -2,6 +2,7 @@
 
 import logging
 import subprocess
+from pathlib import Path
 
 from pokepoke.git.git_helpers import run_git as _run_git
 from pokepoke.git.git_operations import get_default_branch, sanitize_branch_name, validate_post_merge
@@ -115,3 +116,73 @@ def is_worktree_merged(item_id: str, target_branch: str | None = None, repo_path
         return any(branch_name in branch for branch in result.stdout.splitlines())
     except subprocess.CalledProcessError:
         return False
+
+
+def integrate_target_into_worktree(
+    worktree_path: Path,
+    target_branch: str,
+) -> MergeResult:
+    """Merge target branch INTO the worktree branch so conflicts resolve in isolation.
+
+    After a successful integration the worktree branch is a superset of the
+    target, making the subsequent merge to the target guaranteed conflict-free.
+    Master is never left dirty — only the expendable worktree is touched.
+    """
+    from pokepoke.git.git_operations import _auto_resolve_pokepoke_conflicts
+    from pokepoke.git.merge_conflict import abort_merge, get_unmerged_files, is_merge_in_progress
+
+    wt = str(worktree_path)
+    try:
+        _run_git(
+            ["git", "merge", target_branch, "--no-verify",
+             "-m", f"Integrate {target_branch} before merge to mainline"],
+            cwd=wt, timeout=120,
+        )
+        logger.info(
+            "✅ Pre-merge integration: %s merged into worktree branch", target_branch,
+        )
+        return MergeResult(success=True)
+    except subprocess.CalledProcessError:
+        unmerged = get_unmerged_files(repo_path=worktree_path)
+
+        # Auto-resolve .pokepoke/ runtime state conflicts
+        if is_merge_in_progress(repo_path=worktree_path) and unmerged:
+            remaining = _auto_resolve_pokepoke_conflicts(unmerged, cwd=wt)
+            if not remaining:
+                try:
+                    _run_git(
+                        ["git", "commit", "--no-verify", "--no-edit"],
+                        cwd=wt, timeout=120,
+                    )
+                    logger.info(
+                        "✅ Pre-merge integration: auto-resolved .pokepoke/ conflicts",
+                    )
+                    return MergeResult(success=True)
+                except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as exc:
+                    logger.warning(
+                        "Failed to complete integration after auto-resolving "
+                        ".pokepoke/ conflicts: %s", exc,
+                    )
+            unmerged = remaining
+
+        # Abort the merge in the worktree — master is untouched
+        if is_merge_in_progress(repo_path=worktree_path):
+            ok, msg = abort_merge(repo_path=worktree_path)
+            if ok:
+                logger.info("Aborted integration merge in worktree (master is clean)")
+            else:
+                logger.error(
+                    "Failed to abort integration merge in worktree: %s", msg,
+                )
+
+        logger.warning(
+            "❌ Pre-merge integration failed: %d conflict(s) in worktree "
+            "(master untouched)",
+            len(unmerged),
+        )
+        return MergeResult(success=False, unmerged_files=unmerged)
+    except subprocess.TimeoutExpired:
+        if is_merge_in_progress(repo_path=worktree_path):
+            abort_merge(repo_path=worktree_path)
+        logger.warning("❌ Pre-merge integration timed out in worktree")
+        return MergeResult(success=False)

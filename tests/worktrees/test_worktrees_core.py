@@ -10,6 +10,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.worktrees.worktrees import (
+    MergeResult,
     _run_git,
     cleanup_worktree,
     create_worktree,
@@ -449,10 +450,12 @@ class TestMergeWorktree:
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
+    @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     def test_merge_worktree_success(
         self,
         mock_execute,
+        mock_integrate,
         mock_sync,
         mock_is_clean,
         mock_default_branch,
@@ -463,6 +466,7 @@ class TestMergeWorktree:
         mock_default_branch.return_value = 'main'
         mock_is_clean.return_value = True
         mock_sync.return_value = True
+        mock_integrate.return_value = MergeResult(success=True)
         mock_execute.return_value = (True, '', [])
         mock_validate.return_value = True
         mock_cleanup.return_value = None
@@ -506,20 +510,20 @@ class TestMergeWorktree:
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
-    @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
+    @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
     def test_merge_worktree_conflict_files(
         self,
-        mock_execute,
+        mock_integrate,
         mock_sync,
         mock_is_clean,
         mock_default_branch,
     ) -> None:
-        """Return conflicted files when merge fails."""
+        """Return conflicted files when pre-merge integration fails."""
         mock_default_branch.return_value = 'main'
         mock_is_clean.return_value = True
         mock_sync.return_value = True
         conflict_files = ['src/a.py', 'src/b.py']
-        mock_execute.return_value = (False, 'Merge conflict', conflict_files)
+        mock_integrate.return_value = MergeResult(success=False, unmerged_files=conflict_files)
 
         success, conflicts = merge_worktree('item-1')
 
@@ -531,10 +535,12 @@ class TestMergeWorktree:
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
+    @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     def test_merge_worktree_cleanup(
         self,
         mock_execute,
+        mock_integrate,
         mock_sync,
         mock_is_clean,
         mock_default_branch,
@@ -545,6 +551,7 @@ class TestMergeWorktree:
         mock_default_branch.return_value = 'main'
         mock_is_clean.return_value = True
         mock_sync.return_value = True
+        mock_integrate.return_value = MergeResult(success=True)
         mock_execute.return_value = (True, '', [])
         mock_validate.return_value = True
         mock_cleanup.return_value = None

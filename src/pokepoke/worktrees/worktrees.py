@@ -21,6 +21,7 @@ from pokepoke.worktrees.merge_helpers import (
     is_worktree_merged as is_worktree_merged,  # re-export
 )
 from pokepoke.worktrees.merge_helpers import (
+    integrate_target_into_worktree,
     log_merge_failure,
     validate_post_merge_or_rollback,
 )
@@ -306,7 +307,6 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
     return worktree_path
 
 
-
 def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool = True, repo_path: str | None = None) -> MergeResult:
     """Merge a worktree's branch into the target branch and optionally clean up.
 
@@ -338,6 +338,17 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
 
     if not _sync_and_ensure_clean_main_repo(branch_name, cwd=repo_cwd):
         return MergeResult(success=False)
+
+    # Integrate target branch into worktree so conflicts resolve in isolation.
+    # After this the worktree branch is a superset of the target, making the
+    # subsequent merge guaranteed conflict-free.  Master is never left dirty.
+    integration = integrate_target_into_worktree(worktree_path, target_branch)
+    if not integration.success:
+        log_merge_failure(
+            f"Pre-merge integration: conflicts merging {target_branch} into worktree",
+            integration.unmerged_files,
+        )
+        return MergeResult(success=False, unmerged_files=integration.unmerged_files)
 
     # Execute merge sequence with proper error handling
     merge_success, merge_error, unmerged_files = execute_merge_sequence(branch_name, target_branch, cwd=repo_cwd)

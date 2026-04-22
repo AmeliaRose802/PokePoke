@@ -744,12 +744,15 @@ class TestMergeWorktree:
 
     def test_merge_worktree_with_non_beads_changes_commit_succeeds(self):
         """Test merge proceeds when non-beads changes are successfully committed before merge."""
+        from pokepoke.worktrees.worktrees import MergeResult as _MR
+
         with patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.run_bd_sync_with_retry') as mock_sync, \
              patch('pokepoke.worktrees.worktrees._run_git') as mock_git, \
              patch('pokepoke.worktrees.worktree_helpers.run_git') as mock_helper_git, \
              patch('pokepoke.worktrees.worktree_helpers.commit_all_changes', return_value=(True, '')), \
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=_MR(success=True)), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.cleanup_after_merge'), \
@@ -1748,13 +1751,14 @@ class TestMergeWorktreeConflicts:
 
     def test_merge_worktree_many_unmerged_files(self):
         """Test conflict reporting with >10 unmerged files (lines 192-196)."""
+        from pokepoke.worktrees.worktrees import MergeResult
 
         unmerged = [f"file{i}.py" for i in range(15)]
 
         with patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
-             patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(False, "conflicts", unmerged)), \
+             patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=MergeResult(success=False, unmerged_files=unmerged)), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
              patch('builtins.print') as mock_print:
 
@@ -1773,9 +1777,12 @@ class TestMergeWorktreeRollback:
 
     def test_post_merge_validation_failure_sets_halt_required(self):
         """Post-merge validation failure returns halt_required=True, no rollback."""
+        from pokepoke.worktrees.worktrees import MergeResult as _MR
+
         with patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=_MR(success=True)), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=False), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
@@ -1797,9 +1804,12 @@ class TestMergeWorktreeRollback:
 
     def test_post_merge_validation_exception_sets_halt_required(self):
         """Post-merge validation exception returns halt_required=True, no rollback."""
+        from pokepoke.worktrees.worktrees import MergeResult as _MR
+
         with patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=_MR(success=True)), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.merge_helpers.validate_post_merge', side_effect=subprocess.CalledProcessError(1, 'git', stderr='error')), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
@@ -1842,9 +1852,12 @@ class TestRollbackHelpers:
 
     def test_post_merge_validation_failure_halt_required(self):
         """When post-merge validation fails, halt_required is True (no rollback attempted)."""
+        from pokepoke.worktrees.worktrees import MergeResult as _MR
+
         with patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=_MR(success=True)), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=False), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
@@ -1859,9 +1872,12 @@ class TestRollbackHelpers:
 
     def test_post_merge_exception_halt_required(self):
         """When post-merge validation raises, halt_required is True (no rollback attempted)."""
+        from pokepoke.worktrees.worktrees import MergeResult as _MR
+
         with patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True), \
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
+             patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=_MR(success=True)), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.merge_helpers.validate_post_merge', side_effect=RuntimeError('boom')), \
              patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
