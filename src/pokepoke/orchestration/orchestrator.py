@@ -291,6 +291,9 @@ def _run_main_loop(ctx: _OrchestratorContext) -> int:  # noqa: C901
             if ctx.reclaimed_items:
                 remaining = [i for i in ctx.reclaimed_items if i.id != selected_item.id]
                 ctx.reclaimed_items = remaining or None
+        # NOTE: These ctx mutations are safe without a lock because _run_main_loop
+        # only executes when effective_parallel == 1 (single-threaded path).
+        # The parallel path (effective_parallel > 1) uses its own _LoopState, not ctx.
         ctx.total_requests += wi_result.request_count
         _record_item_result(selected_item, wi_result, ctx.session_stats, ctx.run_logger)
         ctx.items_completed = ctx.session_stats.items_completed
