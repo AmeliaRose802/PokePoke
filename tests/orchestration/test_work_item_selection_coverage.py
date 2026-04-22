@@ -412,3 +412,87 @@ class TestSelectMultipleItems:
         result = select_multiple_items([over_cap, ok_item], count=2)
         assert len(result) == 1
         assert result[0].id == "b"
+
+
+# ── Reclaimed Items Priority Tests ──────────────────────────────────
+
+
+class TestSelectWorkItemWithReclaimedItems:
+    """Tests for reclaimed items prioritization in select_work_item."""
+
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
+    def test_prioritizes_reclaimed_items_in_autonomous_mode(self, mock_hier, mock_assigned):
+        """Reclaimed items should be selected before ready items in autonomous mode."""
+        ready_items = [_item("ready-1"), _item("ready-2")]
+        # Reclaimed items arrive pre-sorted by priority from get_stale_in_progress_items
+        reclaimed_items = [_item("reclaimed-1", priority=1), _item("reclaimed-2", priority=2)]
+
+        # The function should pick reclaimed-1 (first item, already sorted by priority)
+        result = select_work_item(
+            ready_items, interactive=False, reclaimed_items=reclaimed_items
+        )
+
+        # Should select the first reclaimed item (pre-sorted by priority)
+        assert result is not None
+        assert result.id == "reclaimed-1"
+        # Hierarchical selection should NOT be called since we short-circuit to reclaimed
+        mock_hier.assert_not_called()
+
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
+    def test_skips_reclaimed_items_in_skip_ids(self, mock_hier, mock_assigned):
+        """Reclaimed items in skip_ids should be filtered out."""
+        ready_items = [_item("ready-1")]
+        reclaimed_items = [_item("reclaimed-1"), _item("reclaimed-2")]
+        mock_hier.return_value = _item("ready-1")
+
+        result = select_work_item(
+            ready_items, interactive=False,
+            skip_ids={"reclaimed-1", "reclaimed-2"},
+            reclaimed_items=reclaimed_items,
+        )
+
+        # All reclaimed items skipped, should fall through to ready items
+        assert result is not None
+        assert result.id == "ready-1"
+
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
+    def test_falls_back_to_ready_when_no_reclaimed(self, mock_hier, mock_assigned):
+        """When reclaimed_items is None or empty, should use ready items."""
+        ready_items = [_item("ready-1")]
+        mock_hier.return_value = _item("ready-1")
+
+        result = select_work_item(ready_items, interactive=False, reclaimed_items=None)
+
+        assert result is not None
+        assert result.id == "ready-1"
+        mock_hier.assert_called_once()
+
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    @patch("pokepoke.orchestration.work_item_selection.select_next_hierarchical_item")
+    def test_empty_reclaimed_list_uses_ready_items(self, mock_hier, mock_assigned):
+        """Empty reclaimed list should fall through to ready items."""
+        ready_items = [_item("ready-1")]
+        mock_hier.return_value = _item("ready-1")
+
+        result = select_work_item(ready_items, interactive=False, reclaimed_items=[])
+
+        assert result is not None
+        assert result.id == "ready-1"
+
+    @patch("pokepoke.orchestration.work_item_selection.is_assigned_to_current_user", return_value=True)
+    def test_returns_none_when_only_reclaimed_but_all_skipped(self, mock_assigned):
+        """Should return None when only reclaimed items exist but all are skipped."""
+        ready_items = []
+        reclaimed_items = [_item("reclaimed-1")]
+
+        result = select_work_item(
+            ready_items, interactive=False,
+            skip_ids={"reclaimed-1"},
+            reclaimed_items=reclaimed_items,
+        )
+
+        # In autonomous mode with no ready items, should return None
+        assert result is None

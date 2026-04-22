@@ -26,6 +26,7 @@ from pokepoke.orchestration.worker_context import (
 )
 from pokepoke.orchestration.workflow_helpers import (
     _apply_gate_feedback,
+    _combine_resume_contexts,
     _extract_agent_stats,
     _fail_result,
     _log_commit_status,
@@ -148,6 +149,23 @@ def process_work_item(  # noqa: C901
         _get_comments = cfg.beads_client.get_item_comments if cfg.beads_client else None
         prior_contexts = get_worker_contexts(item.id, get_comments_fn=_get_comments)
         previous_worker_context = format_worker_context_for_prompt(prior_contexts)
+
+        # Check for resume context from existing worktree (for reclaimed stale items)
+        worktree_resume_context: str | None = None
+        if item.status == "in_progress" and worktree_path and worktree_path.exists():
+            try:
+                from pokepoke.beads.stale_item_recovery import (
+                    build_resume_context,
+                    format_resume_context_for_prompt,
+                )
+                resume_ctx = build_resume_context(item, repo_path=pokepoke_root)
+                if resume_ctx:
+                    worktree_resume_context = format_resume_context_for_prompt(resume_ctx)
+                    logger.info("♻️  Loaded resume context from existing worktree (%d commits)",
+                               resume_ctx.get("commit_count", 0))
+            except Exception as e:
+                logger.debug("Failed to build worktree resume context: %s", e)
+
         _gt = get_gate_step_tracker()
         gate_resume_enabled = global_config.gate_reverify_resume_enabled
 
@@ -182,6 +200,12 @@ def process_work_item(  # noqa: C901
             from pokepoke.stats.metrics_context import agent_type_context
             prompt_template = selected_prompt_template or "beads-item"
             is_resume = resume_session_id is not None
+
+            # Combine worktree resume context with worker context
+            combined_context = _combine_resume_contexts(
+                worktree_resume_context, previous_worker_context
+            )
+
             if is_resume:
                 work_prompt = build_resume_prompt(
                     item,
@@ -192,7 +216,7 @@ def process_work_item(  # noqa: C901
                 work_prompt = build_prompt_from_work_item(
                     item, template_name=prompt_template,
                     retry_feedback=accumulated_feedback or None,
-                    previous_worker_context=previous_worker_context)
+                    previous_worker_context=combined_context)
             with agent_type_context("work"):
                 is_retry = work_agent_iteration > 1
                 if is_retry and not last_retry_was_gate_feedback:

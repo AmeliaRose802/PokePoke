@@ -177,3 +177,30 @@ def run_cleanup_with_timeout(
             break
 
     return result.success, cleanup_agent_runs
+
+
+def _combine_resume_contexts(
+    worktree_context: str | None,
+    worker_context: str | None,
+) -> str | None:
+    """Combine worktree resume context with worker context for the prompt.
+
+    Worktree context (from git history) takes precedence as it's more detailed
+    about what was actually committed. Worker context (from beads comments)
+    supplements with failure reasons and gate feedback.
+
+    Args:
+        worktree_context: Resume context from existing worktree commits.
+        worker_context: Previous worker context from beads comments.
+
+    Returns:
+        Combined context string, or None if both are empty.
+    """
+    if not worktree_context and not worker_context:
+        return None
+    if not worktree_context:
+        return worker_context
+    if not worker_context:
+        return worktree_context
+    # Both present - combine with worktree context first (more authoritative)
+    return f"{worktree_context}\n\n{worker_context}"

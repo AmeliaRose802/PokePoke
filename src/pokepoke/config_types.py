@@ -321,6 +321,8 @@ class ProjectConfig:
     # Startup cleanup configuration
     startup_cleanup_enabled: bool = True
     stale_worktree_commit_threshold: int = 20
+    # Stale item recovery: reclaim in_progress items from defunct agents at startup
+    stale_item_recovery_enabled: bool = True
     # Label-based prompt template selection
     prompt_templates: dict[str, str] = field(default_factory=dict)
 
