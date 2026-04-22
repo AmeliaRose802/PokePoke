@@ -3,6 +3,7 @@
 from __future__ import annotations
 
 import logging
+import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
@@ -151,22 +152,43 @@ def _run_conflict_cleanup_outside_lock(
     The cleanup agent runs with ``cwd`` set to the isolated worktree path so
     that any edits it makes affect ONLY the worktree's branch. The main
     repository is not touched while the merge lock is released.
+
+    Retries up to 3 times on transient failures (timeout, crash, SDK error)
+    with exponential backoff.
     """
-    tracker.begin_step("3b", "Invoking merge conflict cleanup agent (outside merge lock)…")
-    logger.info("   Invoking cleanup agent to resolve conflicts in isolated worktree...")
-    with cleanup_lock():
-        success, _ = invoke_merge_conflict_cleanup_agent(
-            ctx.agent_item,
-            conflict_info.conflict_details,
-            unmerged_files=conflict_info.unmerged_files,
-            cwd=str(ctx.worktree_path),
-            parent_agent_id=ctx.parent_agent_id,
-            wait_for_merge=False,
-            item_logger=ctx.item_logger,
-        )
-    if success:
-        tracker.complete_step("3b", "Merge conflict cleanup agent succeeded")
-        return True
-    tracker.fail_step("3b", "Merge conflict cleanup agent failed")
-    logger.error("   Cleanup failed.")
+    max_agent_retries = 3
+
+    for attempt in range(1, max_agent_retries + 1):
+        suffix = f" (attempt {attempt}/{max_agent_retries})" if max_agent_retries > 1 else ""
+        tracker.begin_step("3b", f"Invoking merge conflict cleanup agent{suffix} (outside merge lock)…")
+        logger.info("   Invoking cleanup agent to resolve conflicts in isolated worktree...%s", suffix)
+        with cleanup_lock():
+            success, _ = invoke_merge_conflict_cleanup_agent(
+                ctx.agent_item,
+                conflict_info.conflict_details,
+                unmerged_files=conflict_info.unmerged_files,
+                cwd=str(ctx.worktree_path),
+                parent_agent_id=ctx.parent_agent_id,
+                wait_for_merge=False,
+                item_logger=ctx.item_logger,
+            )
+        if success:
+            tracker.complete_step("3b", f"Merge conflict cleanup agent succeeded{suffix}")
+            return True
+
+        if attempt < max_agent_retries:
+            backoff = 2 ** attempt
+            logger.warning(
+                "   Cleanup agent failed%s — retrying in %ds...",
+                suffix, backoff,
+            )
+            if ctx.item_logger:
+                ctx.item_logger.log_error(
+                    f"⚠️  ORCHESTRATOR: Conflict cleanup failed{suffix} — retrying in {backoff}s"
+                )
+            tracker.fail_step("3b", f"Cleanup failed{suffix}, retrying in {backoff}s")
+            time.sleep(backoff)
+
+    tracker.fail_step("3b", f"Merge conflict cleanup agent failed after {max_agent_retries} attempts")
+    logger.error("   Cleanup failed after %d attempts.", max_agent_retries)
     return False

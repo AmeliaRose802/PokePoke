@@ -219,8 +219,8 @@ class TestCheckAndCommitMainRepo:
             # Should log that stash was successful
             mock_logger.log_orchestrator.assert_any_call("Uncommitted changes stashed successfully")
 
-    def test_all_fallbacks_fail_continues_anyway(self):
-        """Test that auto-commit + cleanup + stash failure still continues."""
+    def test_all_fallbacks_fail_blocks_dispatch(self):
+        """Test that auto-commit + cleanup + stash failure blocks dispatch."""
         mock_logger = Mock()
         repo_path = Path("/fake/repo")
 
@@ -244,11 +244,11 @@ class TestCheckAndCommitMainRepo:
 
             result = check_and_commit_main_repo(repo_path, mock_logger)
 
-            # Should STILL return True - workers use isolated worktrees
-            assert result is True
+            # Should return False — block dispatch when all strategies fail
+            assert result is False
             mock_logger.log_orchestrator.assert_any_call(
-                "Cleanup and stash both failed, but continuing (workers use worktrees)",
-                level="WARNING"
+                "All cleanup strategies failed — blocking dispatch until master is clean",
+                level="CRITICAL",
             )
 
     def test_cleanup_succeeds_on_second_retry(self):

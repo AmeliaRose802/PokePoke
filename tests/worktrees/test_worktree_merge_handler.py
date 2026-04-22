@@ -183,18 +183,20 @@ def test_handle_worktree_merge_conflict_cleanup_retry_succeeds(
 @patch("pokepoke.worktrees.worktree_cleanup.remove_from_manifest")
 @patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
 @patch("pokepoke.worktrees.merge_conflict_retry.invoke_merge_conflict_cleanup_agent")
+@patch("pokepoke.worktrees.merge_conflict_retry.time")
 @patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
 def test_handle_worktree_merge_conflict_cleanup_failure(
     mock_check_ready,
     mock_merge_worktree,
+    mock_time,
     mock_invoke_conflict_cleanup,
     mock_add_manifest,
     mock_remove_manifest,
     mock_is_merge_in_progress,
     mock_abort_merge,
 ) -> None:
-    """If conflict cleanup fails we should abort and report failure."""
+    """If conflict cleanup fails after all retries we should abort and report failure."""
     mock_check_ready.return_value = (True, "")
     mock_merge_worktree.return_value = MergeResult(success=False, unmerged_files=["conflict.txt"])
     mock_invoke_conflict_cleanup.return_value = (False, None)
@@ -208,7 +210,8 @@ def test_handle_worktree_merge_conflict_cleanup_failure(
     mock_merge_worktree.assert_called_once()
     mock_add_manifest.assert_called_once()
     mock_remove_manifest.assert_not_called()
-    mock_invoke_conflict_cleanup.assert_called_once()
+    # Cleanup agent retries 3 times on failure
+    assert mock_invoke_conflict_cleanup.call_count == 3
     mock_abort_merge.assert_called_once()
 
 
@@ -609,6 +612,10 @@ def _mock_cleanup_lock(monkeypatch):
     """Ensure cleanup lock is a no-op for tests."""
     monkeypatch.setattr(
         "pokepoke.worktrees.worktree_merge_handler.cleanup_lock",
+        lambda: nullcontext(),
+    )
+    monkeypatch.setattr(
+        "pokepoke.worktrees.merge_conflict_retry.cleanup_lock",
         lambda: nullcontext(),
     )
 

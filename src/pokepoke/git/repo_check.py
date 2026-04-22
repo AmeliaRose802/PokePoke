@@ -322,7 +322,8 @@ def _handle_other_changes(repo_path: Path, changes: dict[str, list[str]], run_lo
     """Handle non-beads, non-worktree uncommitted changes.
 
     Tries auto-commit → fast reset → cleanup agent → restore → stash.
-    Always returns True (workers use isolated worktrees, so we continue).
+    Returns False when all strategies fail, blocking agent dispatch to prevent
+    wasting resources on a dirty master that will cause merge failures.
     """
     run_logger.log_orchestrator("Main repository has uncommitted changes", level="WARNING")
     for line in changes['other'][:10]:
@@ -356,9 +357,10 @@ def _handle_other_changes(repo_path: Path, changes: dict[str, list[str]], run_lo
         return True
 
     run_logger.log_orchestrator(
-        "Cleanup and stash both failed, but continuing (workers use worktrees)", level="WARNING",
+        "All cleanup strategies failed — blocking dispatch until master is clean",
+        level="CRITICAL",
     )
-    return True
+    return False
 
 
 def check_and_commit_main_repo(repo_path: Path, run_logger: 'RunLogger') -> bool:
