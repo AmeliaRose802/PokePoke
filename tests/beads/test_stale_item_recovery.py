@@ -50,6 +50,8 @@ class TestIsPokePokAgentName:
         assert is_pokepoke_agent_name("pokepoke_swift_pika_a7f3")
         assert is_pokepoke_agent_name("pokepoke_clever_bulba_1234")
         assert is_pokepoke_agent_name("pokepoke_mighty_char_abcd")
+        assert is_pokepoke_agent_name("pokepoke_swift_pika_a7f3-cobra-worker-1")
+        assert is_pokepoke_agent_name("pokepoke_swift_pika_a7f3-rainbow_boa-worker-12")
         assert is_pokepoke_agent_name("POKEPOKE_SWIFT_PIKA_A7F3")  # Case insensitive
 
     def test_invalid_names(self) -> None:
@@ -80,6 +82,36 @@ class TestGetStaleInProgressItems:
         ]
         result = get_stale_in_progress_items("pokepoke_current_agent_1234", items)
         assert result == []
+
+    def test_excludes_current_run_worker_assignees(self) -> None:
+        """Should not reclaim items assigned to this run's worker names."""
+        base = "pokepoke_swift_pika_a7f3"
+        items = [
+            _make_item("item-1", assignee=f"{base}-cobra-worker-1"),
+            _make_item("item-2", assignee=f"{base}-rainbow_boa-worker-2"),
+            _make_item("item-3", assignee="pokepoke_clever_bulba_1234-cobra-worker-1"),
+        ]
+        result = get_stale_in_progress_items(base, items)
+        assert [item.id for item in result] == ["item-3"]
+
+    def test_excludes_explicit_current_worker_names(self) -> None:
+        """Explicit current_worker_names should be excluded from reclamation."""
+        base = "pokepoke_swift_pika_a7f3"
+        current_workers = {
+            f"{base}-cobra-worker-1",
+            "custom-worker-name",
+        }
+        items = [
+            _make_item("item-1", assignee=f"{base}-cobra-worker-1"),
+            _make_item("item-2", assignee="custom-worker-name"),
+            _make_item("item-3", assignee="pokepoke_clever_bulba_1234-cobra-worker-1"),
+        ]
+        result = get_stale_in_progress_items(
+            base,
+            items,
+            current_worker_names=current_workers,
+        )
+        assert [item.id for item in result] == ["item-3"]
 
     def test_returns_stale_items(self) -> None:
         """Should return items assigned to defunct PokePoke agents."""

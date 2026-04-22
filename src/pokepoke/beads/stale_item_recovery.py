@@ -17,9 +17,21 @@ from pokepoke.types import BeadsWorkItem
 
 logger = logging.getLogger(__name__)
 
-# Pattern for PokePoke-generated agent names: pokepoke_{adjective}_{creature}_{hex}
-# See pokepoke.agents.agent_names for the generation logic
-_POKEPOKE_AGENT_PATTERN = re.compile(r"^pokepoke_[a-z]+_[a-z]+_[a-f0-9]{4}$", re.IGNORECASE)
+# Pattern for orchestrator root agent names:
+#   pokepoke_{adjective}_{creature}_{hex}
+# See pokepoke.agents.agent_names for generation logic.
+_POKEPOKE_BASE_AGENT_PATTERN = re.compile(
+    r"^pokepoke_[a-z]+_[a-z]+_[a-f0-9]{4}$",
+    re.IGNORECASE,
+)
+
+# Pattern for parallel worker names:
+#   {base_agent_name}-{snake_type}-worker-{counter}
+# Example: pokepoke_swift_pika_a7f3-cobra-worker-1
+_POKEPOKE_WORKER_AGENT_PATTERN = re.compile(
+    r"^pokepoke_[a-z]+_[a-z]+_[a-f0-9]{4}-[a-z_]+-worker-\d+$",
+    re.IGNORECASE,
+)
 
 
 def is_pokepoke_agent_name(name: str | None) -> bool:
@@ -33,23 +45,48 @@ def is_pokepoke_agent_name(name: str | None) -> bool:
     """
     if not name:
         return False
-    return bool(_POKEPOKE_AGENT_PATTERN.match(name))
+    return bool(
+        _POKEPOKE_BASE_AGENT_PATTERN.match(name)
+        or _POKEPOKE_WORKER_AGENT_PATTERN.match(name)
+    )
+
+
+def _is_current_run_worker_assignee(
+    assignee: str,
+    current_agent_name: str,
+    current_worker_names: set[str] | None,
+) -> bool:
+    """Return True when assignee belongs to this orchestrator run.
+
+    We treat both exact known worker names and any worker with the current
+    run's base prefix as current-run ownership.
+    """
+    lowered = assignee.lower()
+    if lowered == current_agent_name.lower():
+        return True
+    if current_worker_names and lowered in current_worker_names:
+        return True
+    return lowered.startswith(f"{current_agent_name.lower()}-")
 
 
 def get_stale_in_progress_items(
     current_agent_name: str,
     in_progress_items: list[BeadsWorkItem] | None = None,
+    *,
+    current_worker_names: set[str] | None = None,
 ) -> list[BeadsWorkItem]:
     """Identify in-progress items assigned to defunct PokePoke agents.
 
     An item is considered stale if:
     1. It has status 'in_progress'
     2. It's assigned to a PokePoke-style agent name
-    3. That agent name is NOT the current orchestrator's agent
+    3. That agent name is NOT a worker from the current orchestrator run
 
     Args:
         current_agent_name: This orchestrator's agent name.
         in_progress_items: List of in_progress items (fetched if None).
+        current_worker_names: Optional set of current run worker names to
+            exclude from reclamation.
 
     Returns:
         List of stale items that can be reclaimed, sorted by priority.
@@ -60,6 +97,11 @@ def get_stale_in_progress_items(
 
     if not in_progress_items:
         return []
+    normalized_workers = (
+        {name.lower() for name in current_worker_names}
+        if current_worker_names
+        else None
+    )
 
     stale_items: list[BeadsWorkItem] = []
     for item in in_progress_items:
@@ -70,8 +112,10 @@ def get_stale_in_progress_items(
             stale_items.append(item)
             continue
 
-        # Skip if assigned to current agent (we're already working on it)
-        if assignee.lower() == current_agent_name.lower():
+        # Skip if assigned to this orchestrator run (base or worker agent).
+        if _is_current_run_worker_assignee(
+            assignee, current_agent_name, normalized_workers,
+        ):
             continue
 
         # Check if this is a PokePoke agent name from a previous run
@@ -235,6 +279,7 @@ def recover_stale_items_for_orchestrator(
     agent_name: str,
     enabled: bool,
     log_orchestrator: Any = None,
+    current_worker_names: set[str] | None = None,
 ) -> list[BeadsWorkItem]:
     """Discover stale in_progress items and log a one-line summary.
 
@@ -245,6 +290,8 @@ def recover_stale_items_for_orchestrator(
         agent_name: Current orchestrator's agent name.
         enabled: If False, recovery is skipped and [] is returned.
         log_orchestrator: Optional callable (message: str) for run log.
+        current_worker_names: Optional set of worker names currently active in
+            this run. Used to avoid reclaiming our own in-progress items.
 
     Returns:
         List of stale items (sorted by priority) that should be prioritized.
@@ -253,7 +300,10 @@ def recover_stale_items_for_orchestrator(
         logger.debug("Stale item recovery is disabled")
         return []
     try:
-        stale_items = get_stale_in_progress_items(agent_name)
+        stale_items = get_stale_in_progress_items(
+            agent_name,
+            current_worker_names=current_worker_names,
+        )
         if not stale_items:
             logger.debug("No stale in-progress items found")
             return []
