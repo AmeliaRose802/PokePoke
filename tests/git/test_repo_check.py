@@ -933,6 +933,9 @@ class TestCleanupRetriesWithConflictMarkers:
             assert call_kwargs['cwd'] == str(repo_path)
             assert call_kwargs['unmerged_files'] == ["src/file.py"]
             assert call_kwargs['wait_for_merge'] is False
+            # Verify item_logger is created and passed
+            mock_logger.start_item_log.assert_called_once()
+            assert call_kwargs['item_logger'] is mock_logger.start_item_log.return_value
             mock_cleanup.assert_not_called()
 
     def test_uses_generic_agent_when_no_markers(self):
@@ -960,6 +963,9 @@ class TestCleanupRetriesWithConflictMarkers:
             call_kw = mock_cleanup.call_args
             assert call_kw[1]['cwd'] == str(repo_path)
             assert call_kw[1]['wait_for_merge'] is False
+            # Verify item_logger is created and passed
+            mock_logger.start_item_log.assert_called_once()
+            assert call_kw[1]['item_logger'] is mock_logger.start_item_log.return_value
             mock_merge.assert_not_called()
 
     def test_switches_agent_type_between_retries(self):

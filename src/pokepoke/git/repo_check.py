@@ -227,16 +227,22 @@ def _run_cleanup_retries(repo_path: Path, run_logger: 'RunLogger') -> bool:
             labels=["cleanup", "auto-generated"],
         )
 
+        item_logger = run_logger.start_item_log(
+            cleanup_item.id, cleanup_item.title, agent_name="cleanup",
+        )
+
         with cleanup_lock():
             if use_merge_agent:
                 cleanup_success, _ = invoke_merge_conflict_cleanup_agent(
                     cleanup_item,
                     error_msg="Residual conflict markers found in working tree (MERGE_HEAD absent)",
                     unmerged_files=conflict_files, cwd=str(repo_path), wait_for_merge=False,
+                    item_logger=item_logger,
                 )
             else:
                 cleanup_success, _ = invoke_cleanup_agent(
                     cleanup_item, cwd=str(repo_path), wait_for_merge=False,
+                    item_logger=item_logger,
                 )
 
         if cleanup_success:
