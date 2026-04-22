@@ -27,7 +27,6 @@ import type {
   MergeFlowState,
   ModelHistoryEntry,
   ModelPerformanceSummary,
-  PipelineState,
   ProgressState,
   ProjectConfig,
   PromptDetail,
@@ -133,7 +132,6 @@ interface PyWebViewAPI {
   get_gate_rejection_stats(): Promise<GateRejectionStats>;
   get_merge_flow_state(): Promise<MergeFlowState>;
   get_gate_flow_state(): Promise<MergeFlowState>;
-  get_pipeline_state(): Promise<PipelineState>;
 
   // First-time setup wizard API
   check_setup_status(): Promise<SetupStatus>;
@@ -204,7 +202,6 @@ export interface BridgeStateBase {
   getGateRejectionStats: () => Promise<GateRejectionStats | null>;
   getMergeFlowState: () => Promise<MergeFlowState | null>;
   getGateFlowState: () => Promise<MergeFlowState | null>;
-  getPipelineState: () => Promise<PipelineState | null>;
   requestStopAfterCurrent: () => Promise<void>;
   cancelStopAfterCurrent: () => Promise<void>;
   addWorkItemLabel: (label: string) => Promise<void>;
@@ -323,9 +320,6 @@ export function useBridge(): BridgeState {
 
   const getGateFlowState = useCallback(
     async () => callApiNullable<MergeFlowState>(() => window.pywebview!.api.get_gate_flow_state()), []);
-
-  const getPipelineState = useCallback(
-    async () => callApiNullable<PipelineState>(() => window.pywebview!.api.get_pipeline_state()), []);
 
   const requestStopAfterCurrent = useCallback(async (): Promise<void> => {
     if (!window.pywebview?.api) return;
@@ -520,7 +514,6 @@ export function useBridge(): BridgeState {
     getGateRejectionStats,
     getMergeFlowState,
     getGateFlowState,
-    getPipelineState,
     requestStopAfterCurrent,
     cancelStopAfterCurrent,
     addWorkItemLabel,

@@ -16,7 +16,6 @@ import { ConnectionIndicator } from "./components/ConnectionIndicator";
 import { ErrorBoundary } from "./components/ErrorBoundary";
 import { LogPanel } from "./components/LogPanel";
 import { LogsLocationBox } from "./components/LogsLocationBox";
-import { PipelineView } from "./components/PipelineView";
 import { PromptEditor } from "./components/PromptEditor";
 import { SessionFlowchartView } from "./components/SessionFlowchartView";
 import { SettingsPage } from "./components/SettingsPage";
@@ -92,7 +91,7 @@ function App() {
     setShowSettings(false);
   }, []);
 
-  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats, getMergeFlowState, getGateFlowState, getPipelineState } = bridge;
+  const { getModelHistory, getProcessDiagnostics, getConcurrencyTimeline, getGateRejectionStats } = bridge;
 
   const handleSpawnAgent = useCallback(async () => {
     const result = await bridge.spawnAgent();
@@ -324,14 +323,7 @@ function App() {
           ) : null}
           </ErrorBoundary>
 
-          {/* Unified pipeline visualization (gate → merge) */}
-          <ErrorBoundary>
-            <PipelineView
-              getPipelineState={getPipelineState}
-              getMergeFlowState={getMergeFlowState}
-              getGateFlowState={getGateFlowState}
-            />
-          </ErrorBoundary>
+
         </div>
 
         {/* Resize handle */}
