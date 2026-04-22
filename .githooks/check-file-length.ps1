@@ -95,14 +95,16 @@ function Test-FileLengths {
     }
     
     if ($violations.Count -gt 0) {
-        Write-Host "❌ $($violations.Count) file(s) exceed $Limit lines:" -ForegroundColor Red
+        Write-Host "❌ $($violations.Count) file(s) exceed $Limit non-blank lines:" -ForegroundColor Red
         $violations | ForEach-Object {
-            Write-Host "  $($_.File): $($_.Lines) lines (+$($_.Excess))" -ForegroundColor Red
+            Write-Host "  $($_.File): $($_.Lines) non-blank lines (+$($_.Excess))" -ForegroundColor Red
         }
+        Write-Host "  NOTE: Blank lines are NOT counted. Do NOT delete blank lines to reduce length." -ForegroundColor Yellow
+        Write-Host "  Instead, extract functions/classes into separate modules." -ForegroundColor Yellow
         return $false
     }
     
-    Write-Host "PASS: File length <$Limit lines ($passedCount files)" -ForegroundColor Green
+    Write-Host "PASS: File length <$Limit non-blank lines ($passedCount files)" -ForegroundColor Green
     return $true
 }
 

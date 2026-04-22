@@ -41,6 +41,7 @@ This repository uses a **multi-layered defense-in-depth protection system** to p
 - `check-code-quality.ps1` - Code quality enforcement (NO BYPASS)
 - `check-compile-warnings.ps1` - Zero warnings policy (NO BYPASS)
 - `check-file-length.ps1` - File length limits (NO BYPASS)
+  - **NOTE:** Blank lines are NOT counted toward the file length limit. Do NOT delete blank lines to reduce file length. Maintain good whitespace and readability.
 - `check-build.ps1` - Build verification
 - `check-mcp-health.ps1` - MCP server health check
 - `check-skipped-tests.ps1` - No skipped tests allowed
