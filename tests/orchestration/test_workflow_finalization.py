@@ -37,10 +37,10 @@ class TestFinalizeWorkItem:
 
 
 class TestMergeWorktreeToDev:
-    """Test merge_worktree_to_dev function (delegates to perform_worktree_merge)."""
+    """Test merge_worktree_to_dev function (delegates to handle_worktree_merge)."""
 
-    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
-    def test_successful_merge(self, mock_perform: Mock) -> None:
+    @patch('pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge')
+    def test_successful_merge(self, mock_handle: Mock) -> None:
         """Test successful worktree merge."""
         item = BeadsWorkItem(
             id="task-1",
@@ -51,45 +51,45 @@ class TestMergeWorktreeToDev:
             issue_type="task"
         )
 
-        mock_perform.return_value = (True, True)
+        mock_handle.return_value = (True, True)
 
         result = merge_worktree_to_dev(item)
 
         assert result is True
-        mock_perform.assert_called_once()
+        mock_handle.assert_called_once()
 
-    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
-    def test_merge_fails_autofix_succeeds(self, mock_perform: Mock) -> None:
-        """Test merge returns True when perform_worktree_merge succeeds."""
+    @patch('pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge')
+    def test_merge_fails_autofix_succeeds(self, mock_handle: Mock) -> None:
+        """Test merge returns True when handle_worktree_merge succeeds."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
-        mock_perform.return_value = (True, True)
+        mock_handle.return_value = (True, True)
 
         result = merge_worktree_to_dev(item)
         assert result is True
 
-    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
-    def test_repo_not_ready_autofix_fails(self, mock_perform: Mock) -> None:
+    @patch('pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge')
+    def test_repo_not_ready_autofix_fails(self, mock_handle: Mock) -> None:
         """Test when merge fails."""
         item = BeadsWorkItem(id="task-1", title="Task 1", description="", status="open", priority=1, issue_type="task")
-        mock_perform.return_value = (False, False)
+        mock_handle.return_value = (False, False)
 
         result = merge_worktree_to_dev(item)
         assert result is False
 
-    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
-    def test_repo_not_ready_autofix_succeeds(self, mock_perform: Mock) -> None:
+    @patch('pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge')
+    def test_repo_not_ready_autofix_succeeds(self, mock_handle: Mock) -> None:
         """Test merge returns True after successful recovery."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
-        mock_perform.return_value = (True, True)
+        mock_handle.return_value = (True, True)
 
         result = merge_worktree_to_dev(item)
         assert result is True
 
-    @patch('pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge')
-    def test_merge_fails_autofix_fails(self, mock_perform: Mock) -> None:
+    @patch('pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge')
+    def test_merge_fails_autofix_fails(self, mock_handle: Mock) -> None:
         """Test when merge fails and recovery fails."""
         item = BeadsWorkItem(id="task-1", title="T", description="", status="open", priority=1, issue_type="task")
-        mock_perform.return_value = (False, False)
+        mock_handle.return_value = (False, False)
 
         result = merge_worktree_to_dev(item)
         assert result is False

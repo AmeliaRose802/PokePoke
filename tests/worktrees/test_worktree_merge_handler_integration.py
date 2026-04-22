@@ -11,6 +11,7 @@ import pytest
 
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktrees.worktree_merge_handler import (
+    _ConflictResolutionNeeded,
     WorktreeMergeContext,
     handle_worktree_merge,
     perform_worktree_merge,
@@ -171,6 +172,7 @@ class TestPerformWorktreeMergeIntegration:
         assert cleaned is False
 
     @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.merge_conflict.abort_merge')
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
     @patch('pokepoke.worktrees.merge_conflict_retry.invoke_merge_conflict_cleanup_agent')
@@ -179,12 +181,14 @@ class TestPerformWorktreeMergeIntegration:
         mock_conflict_agent,
         mock_merge,
         mock_check_ready,
+        mock_abort,
         mock_cleanup_lock
     ):
         """Test handling of merge conflicts."""
         mock_check_ready.return_value = (True, '')
         mock_merge.return_value = MergeResult(success=False, unmerged_files=['file1.py', 'file2.py'])
         mock_conflict_agent.return_value = (True, None)
+        mock_abort.return_value = (True, "")
         mock_cleanup_lock.return_value.__enter__ = Mock()
         mock_cleanup_lock.return_value.__exit__ = Mock(return_value=False)
 
@@ -197,14 +201,11 @@ class TestPerformWorktreeMergeIntegration:
             repo_root=Path('C:/repos'),
             parent_agent_id=None
         )
-        ctx.max_conflict_retries = 1
-        success, _cleaned = perform_worktree_merge(ctx)
-
-        assert success is False
-        mock_conflict_agent.assert_called_once()
-        # Verify conflict files were passed to agent
-        call_args = mock_conflict_agent.call_args
-        assert 'file1.py' in str(call_args)
+        result = perform_worktree_merge(ctx)
+        assert isinstance(result, _ConflictResolutionNeeded)
+        assert "file1.py" in result.conflict_details
+        assert result.unmerged_files == ['file1.py', 'file2.py']
+        mock_conflict_agent.assert_not_called()
 
     @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
@@ -243,7 +244,7 @@ class TestPerformWorktreeMergeIntegration:
 
         assert success is False
         assert cleaned is False
-        mock_add_uncleaned.assert_called_once()
+        mock_add_uncleaned.assert_not_called()
 
     @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
@@ -475,6 +476,9 @@ class TestCleanupAgentInvocation:
         assert call_args[1]['parent_agent_id'] == parent_id
 
     @patch('pokepoke.worktrees.worktree_merge_handler.cleanup_lock')
+    @patch('pokepoke.git.merge_conflict.abort_merge', return_value=(True, ""))
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=True)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=['src/file1.py', 'src/file2.py', 'tests/test_file.py'])
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
     @patch('pokepoke.worktrees.merge_conflict_retry.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.worktrees.worktree_merge_handler.merge_worktree')
@@ -483,6 +487,9 @@ class TestCleanupAgentInvocation:
         mock_merge,
         mock_conflict_agent,
         mock_check_ready,
+        _mock_get_unmerged,
+        _mock_is_merging,
+        _mock_abort,
         mock_cleanup_lock
     ):
         """Test that conflict cleanup agent receives list of conflicted files."""
@@ -503,7 +510,7 @@ class TestCleanupAgentInvocation:
             parent_agent_id=None
         )
         ctx.max_conflict_retries = 1
-        perform_worktree_merge(ctx)
+        handle_worktree_merge(ctx)
 
         # Verify conflict agent was called
         mock_conflict_agent.assert_called_once()

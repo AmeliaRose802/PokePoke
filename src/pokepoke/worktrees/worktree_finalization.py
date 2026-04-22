@@ -16,7 +16,6 @@ from pokepoke.git.git_operations import get_default_branch
 from pokepoke.types import BeadsWorkItem
 from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 
-from .coordination import merge_lock
 from .worktrees import cleanup_worktree
 
 if TYPE_CHECKING:
@@ -111,15 +110,13 @@ def check_and_merge_worktree(
             item_logger.log_error(f"❌ ORCHESTRATOR: Unexpected error checking commit count for {item.id}: {e} — aborting merge")
         return False
 
-    # Acquire merge lock to serialize with other parallel agents
-    logger.info("Waiting for merge lock for item %s", item.id)
-    if item_logger:
-        item_logger.log(f"🔒 ORCHESTRATOR: Waiting for merge lock for {item.id}")
-    with merge_lock():
-        logger.info("Acquired merge lock for item %s", item.id)
-        if item_logger:
-            item_logger.log(f"🔒 ORCHESTRATOR: Acquired merge lock for {item.id}")
-        return merge_worktree_to_dev(item, parent_agent_id=parent_agent_id, worktree_path=worktree_path, repo_path=repo_path, item_logger=item_logger)
+    return merge_worktree_to_dev(
+        item,
+        parent_agent_id=parent_agent_id,
+        worktree_path=worktree_path,
+        repo_path=repo_path,
+        item_logger=item_logger,
+    )
 
 
 def merge_worktree_to_dev(
@@ -132,8 +129,8 @@ def merge_worktree_to_dev(
 ) -> bool:
     """Merge worktree to the default development branch.
 
-    Delegates to perform_worktree_merge (the single source of truth for
-    merge-attempt-cleanup-retry logic).
+    Delegates to handle_worktree_merge (single source of truth for merge
+    lock coordination plus merge-attempt-cleanup-retry logic).
 
     Args:
         item: Work item being merged.
@@ -142,7 +139,7 @@ def merge_worktree_to_dev(
         worktree_path: Worktree directory (defaults to worktrees/task-{id}).
         repo_path: Target repo root for git operations.
     """
-    from .worktree_merge_handler import WorktreeMergeContext, perform_worktree_merge
+    from .worktree_merge_handler import WorktreeMergeContext, handle_worktree_merge
 
     effective_repo_root = repo_root if repo_root is not None else (Path(repo_path) if repo_path else Path.cwd())
     effective_worktree_path = (
@@ -160,7 +157,7 @@ def merge_worktree_to_dev(
         repo_path=repo_path,
         item_logger=item_logger,
     )
-    merge_success, _ = perform_worktree_merge(ctx)
+    merge_success, _ = handle_worktree_merge(ctx)
     return merge_success
 
 

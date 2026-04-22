@@ -9,7 +9,6 @@ Tests cover:
 """
 
 import json
-from contextlib import nullcontext
 from pathlib import Path
 from unittest.mock import Mock, patch
 
@@ -38,55 +37,55 @@ def _make_test_item(item_id: str = "task-1") -> BeadsWorkItem:
 
 
 class TestMergeWorktreeToDevDelegation:
-    """Test that merge_worktree_to_dev correctly delegates to perform_worktree_merge."""
+    """Test that merge_worktree_to_dev delegates to handle_worktree_merge."""
 
-    @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
-    def test_delegates_to_perform_worktree_merge(self, mock_perform: Mock) -> None:
+    @patch("pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge")
+    def test_delegates_to_handle_worktree_merge(self, mock_handle: Mock) -> None:
         """Verify delegation and bool return."""
-        mock_perform.return_value = (True, True)
+        mock_handle.return_value = (True, True)
         item = _make_test_item()
         result = merge_worktree_to_dev(item)
         assert result is True
-        mock_perform.assert_called_once()
-        call_args = mock_perform.call_args
+        mock_handle.assert_called_once()
+        call_args = mock_handle.call_args
         ctx = call_args[0][0]
         assert ctx.agent_id == item.id
         assert ctx.agent_item is item
 
-    @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
-    def test_returns_false_on_merge_failure(self, mock_perform: Mock) -> None:
-        mock_perform.return_value = (False, False)
+    @patch("pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge")
+    def test_returns_false_on_merge_failure(self, mock_handle: Mock) -> None:
+        mock_handle.return_value = (False, False)
         assert merge_worktree_to_dev(_make_test_item()) is False
 
-    @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
-    def test_passes_parent_agent_id(self, mock_perform: Mock) -> None:
-        mock_perform.return_value = (True, True)
+    @patch("pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge")
+    def test_passes_parent_agent_id(self, mock_handle: Mock) -> None:
+        mock_handle.return_value = (True, True)
         merge_worktree_to_dev(_make_test_item(), parent_agent_id="parent-1")
-        ctx = mock_perform.call_args[0][0]
+        ctx = mock_handle.call_args[0][0]
         assert ctx.parent_agent_id == "parent-1"
 
-    @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
-    def test_uses_explicit_repo_root(self, mock_perform: Mock) -> None:
-        mock_perform.return_value = (True, True)
+    @patch("pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge")
+    def test_uses_explicit_repo_root(self, mock_handle: Mock) -> None:
+        mock_handle.return_value = (True, True)
         repo = Path("C:/my-repo")
         merge_worktree_to_dev(_make_test_item(), repo_root=repo)
-        ctx = mock_perform.call_args[0][0]
+        ctx = mock_handle.call_args[0][0]
         assert ctx.repo_root == repo
 
-    @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
-    def test_uses_explicit_worktree_path(self, mock_perform: Mock) -> None:
-        mock_perform.return_value = (True, True)
+    @patch("pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge")
+    def test_uses_explicit_worktree_path(self, mock_handle: Mock) -> None:
+        mock_handle.return_value = (True, True)
         wt = Path("C:/worktrees/task-task-1")
         merge_worktree_to_dev(_make_test_item(), worktree_path=wt)
-        ctx = mock_perform.call_args[0][0]
+        ctx = mock_handle.call_args[0][0]
         assert ctx.worktree_path == wt
 
-    @patch("pokepoke.worktrees.worktree_merge_handler.perform_worktree_merge")
-    def test_defaults_worktree_path_from_repo_root(self, mock_perform: Mock) -> None:
-        mock_perform.return_value = (True, True)
+    @patch("pokepoke.worktrees.worktree_merge_handler.handle_worktree_merge")
+    def test_defaults_worktree_path_from_repo_root(self, mock_handle: Mock) -> None:
+        mock_handle.return_value = (True, True)
         repo = Path("C:/my-repo")
         merge_worktree_to_dev(_make_test_item("abc"), repo_root=repo)
-        ctx = mock_perform.call_args[0][0]
+        ctx = mock_handle.call_args[0][0]
         assert ctx.worktree_path == repo / "worktrees" / "task-abc"
 class TestFinalizeWorkItem:
     """Test finalize_work_item function (lines 21-29)."""
@@ -105,8 +104,6 @@ class TestFinalizeWorkItem:
         mock_merge.return_value = False
         assert finalize_work_item(_make_test_item(), Path("/wt")) is False
         mock_close.assert_not_called()
-
-
 class TestCheckAndMergeWorktree:
     """Test check_and_merge_worktree function."""
 
@@ -245,12 +242,3 @@ class TestCheckParentHierarchy:
         mock_get_parent.return_value = None
         check_parent_hierarchy(_make_test_item())
         mock_close.assert_not_called()
-
-
-@pytest.fixture(autouse=True)
-def _mock_merge_lock(monkeypatch):
-    """Ensure merge lock does not hit filesystem during tests."""
-    monkeypatch.setattr(
-        "pokepoke.worktrees.worktree_finalization.merge_lock",
-        lambda: nullcontext(),
-    )
