@@ -332,10 +332,19 @@ def perform_worktree_merge(  # noqa: C901
     tracker.begin_step("8", f"Merging worktree for {ctx.agent_id}")
     logger.info(f"\n🔀 Merging worktree for {ctx.agent_id}...")
     merge_result = merge_worktree(ctx.agent_id, cleanup=True, repo_path=repo_cwd)
-    merge_success = merge_result.success
-    unmerged_files = merge_result.unmerged_files
+    # Support both object and 2-tuple return styles (legacy support / mocks)
+    if isinstance(merge_result, tuple):
+        merge_success = bool(merge_result[0])
+        unmerged_files = list(merge_result[1]) if len(merge_result) > 1 and merge_result[1] is not None else []
+        rollback_failed = False
+        halt_required = False
+    else:
+        merge_success = getattr(merge_result, "success", False)
+        unmerged_files = getattr(merge_result, "unmerged_files", [])
+        rollback_failed = getattr(merge_result, "rollback_failed", False)
+        halt_required = getattr(merge_result, "halt_required", False)
 
-    if merge_result.rollback_failed:
+    if rollback_failed:
         logger.critical(
             "🚨 REPO CORRUPTION: Rollback failed for %s — "
             "local repo has a merge commit that could not be undone. "
@@ -343,7 +352,7 @@ def perform_worktree_merge(  # noqa: C901
             ctx.agent_id,
         )
 
-    if merge_result.halt_required:
+    if halt_required:
         from pokepoke.utils.shutdown import request_shutdown
         logger.critical(
             "🚨 Post-merge validation failed for %s — halting orchestrator. "
