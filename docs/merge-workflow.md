@@ -8,6 +8,7 @@ The full sequence from "agent work complete" to "worktree cleaned up", including
 
 **Color key:**
 - 🟦 Blue = **holding merge lock** (serialized, one agent at a time)
+- 🟪 Purple = **pre-merge integration** (in worktree, under lock — master untouched)
 - ⬜ Default = **no lock held** (pre-lock or post-release)
 - 🟥 Red = **failure exit** (lock released on exit)
 - 🟩 Green = **success terminal**
@@ -34,11 +35,14 @@ flowchart TD
     RECHECK -- Yes --> SYNC
     RECHECK -- No --> FAIL_DIRTY(["FAIL — add to<br/>uncleaned manifest"])
 
-    SYNC["6. Sync & prepare main<br/>bd sync + commit stragglers"] --> CHECKOUT["7. git checkout target_branch"]
-    CHECKOUT --> MERGE["8. git merge --no-ff branch_name"]
+    SYNC["6. Sync & prepare main<br/>bd sync + commit stragglers"] --> INTEGRATE["6b. Integrate target into worktree<br/>git merge target_branch in worktree<br/>(master untouched)"]
 
-    MERGE -- Success --> VALIDATE["9. Post-merge validation<br/>correct branch? clean status?"]
-    MERGE -- Conflict --> CONFLICT_FLOW[["Handle conflicts<br/>see Conflict Handling below"]]
+    INTEGRATE -- "Clean merge or<br/>.pokepoke/ auto-resolved" --> CHECKOUT["7. git checkout target_branch"]
+    INTEGRATE -- "Conflict" --> INTEGRATE_FAIL[["Handle integration conflicts<br/>see Conflict Handling below"]]
+
+    CHECKOUT --> MERGE["8. git merge --no-ff branch_name<br/>(guaranteed conflict-free)"]
+
+    MERGE --> VALIDATE["9. Post-merge validation<br/>correct branch? clean status?"]
 
     VALIDATE -- Pass --> CLEANUP_WT["10. git worktree remove --force<br/>git branch -D branch_name"]
     VALIDATE -- Fail --> ROLLBACK_V["git reset --hard HEAD~1"]
@@ -57,9 +61,12 @@ flowchart TD
     style SYNC fill:#4a90d9,stroke:#333,color:#fff
     style CHECKOUT fill:#4a90d9,stroke:#333,color:#fff
     style MERGE fill:#4a90d9,stroke:#333,color:#fff
-    style CONFLICT_FLOW fill:#4a90d9,stroke:#333,color:#fff
     style VALIDATE fill:#4a90d9,stroke:#333,color:#fff
     style CLEANUP_WT fill:#4a90d9,stroke:#333,color:#fff
+
+    %% Pre-merge integration (purple) — in worktree, under lock
+    style INTEGRATE fill:#8e44ad,stroke:#333,color:#fff
+    style INTEGRATE_FAIL fill:#8e44ad,stroke:#333,color:#fff
 
     %% Failure exits (red) — lock released on exit
     style FAIL_DIRTY fill:#e74c3c,stroke:#333,color:#fff
@@ -72,7 +79,9 @@ flowchart TD
     style RELEASE_NOLOCK fill:#27ae60,stroke:#333,color:#fff
 ```
 
-Steps 4, 5, and 5a run **before** lock acquisition — they are read-only operations on the worktree (isolated per-agent, no shared state). Dirty worktrees and empty branches fail/skip fast without blocking the merge queue. Steps 1–11 (blue) execute under the lock. PokePoke does not push to remote — the user decides when to `git push`.
+Steps 4, 5, and 5a run **before** lock acquisition — they are read-only operations on the worktree (isolated per-agent, no shared state). Dirty worktrees and empty branches fail/skip fast without blocking the merge queue. Steps 1–11 (blue/purple) execute under the lock. PokePoke does not push to remote — the user decides when to `git push`.
+
+**Key safety invariant:** Step 6b integrates the target branch INTO the worktree branch *before* the actual merge to master (step 8). After successful integration, the worktree branch is a superset of the target, so step 8 is **guaranteed conflict-free**. If integration fails, only the worktree is dirty — master is never touched. This prevents the catastrophic scenario where `git merge` on master leaves it in a conflicted state.
 
 ## Uncommitted Files on Worktree
 
@@ -146,63 +155,74 @@ Known-safe `.beads/` changes are auto-committed. Everything else triggers a clea
 
 ## Merge Conflict Handling
 
-How conflicts are detected, auto-resolved where possible, and escalated to a cleanup agent when not. This is the detail for **step 8** (conflict branch) in the general flow.
+How conflicts are detected and resolved during the **pre-merge integration step** (step 6b in the general flow). Conflicts are resolved in the expendable worktree — master is never left in a conflicted state.
 
 ```mermaid
 flowchart TD
-    MERGE["8. git merge --no-ff branch_name"] -- "Exit code ≠ 0" --> DETECT["8a. Detect conflict state"]
+    INTEGRATE["6b. git merge target_branch<br/>in worktree (cwd=worktree)"] -- "Exit code ≠ 0" --> DETECT["6b-a. Detect conflict state<br/>in worktree"]
+    INTEGRATE -- "Exit code 0" --> SUCCESS_CLEAN(["Integration clean<br/>continue to step 7"])
 
-    DETECT --> CHECK_HEAD{"8b. MERGE_HEAD<br/>file exists?"}
+    DETECT --> CHECK_HEAD{"6b-b. MERGE_HEAD<br/>in worktree?"}
     CHECK_HEAD -- No --> GENERIC_FAIL(["Generic merge failure<br/>not a conflict"])
-    CHECK_HEAD -- Yes --> PARSE["8c. Parse git status --porcelain<br/>for conflict markers"]
+    CHECK_HEAD -- Yes --> PARSE["6b-c. Parse git status --porcelain<br/>for conflict markers in worktree"]
 
-    PARSE --> TYPES["8d. Identify conflict types:<br/>UU = both modified<br/>AA = both added<br/>DD = both deleted<br/>AU/UA = add vs modify<br/>DU/UD = delete vs modify"]
+    PARSE --> POKEPOKE_CHECK{"6b-d. All conflicts<br/>in .pokepoke/ only?"}
 
-    TYPES --> POKEPOKE_CHECK{"8e. All conflicts<br/>in .pokepoke/ only?"}
+    POKEPOKE_CHECK -- Yes --> AUTO_RESOLVE["6b-e. Auto-resolve .pokepoke/<br/>git checkout --ours -- file<br/>git add -- file"]
+    AUTO_RESOLVE --> COMMIT_MERGE["6b-f. git commit --no-verify --no-edit<br/>complete integration in worktree"]
+    COMMIT_MERGE --> SUCCESS_AUTO(["Integration succeeded<br/>continue to step 7"])
 
-    POKEPOKE_CHECK -- Yes --> AUTO_RESOLVE["8f. Auto-resolve .pokepoke/<br/>git checkout --ours -- file<br/>git add -- file"]
-    AUTO_RESOLVE --> COMMIT_MERGE["8g. git commit --no-edit<br/>complete merge"]
-    COMMIT_MERGE --> SUCCESS(["Merge succeeded<br/>continue to step 9"])
+    POKEPOKE_CHECK -- No --> PARTIAL_AUTO["6b-g. Auto-resolve .pokepoke/<br/>conflicts if any"]
+    PARTIAL_AUTO --> ABORT_WT["6b-h. git merge --abort<br/>in worktree only<br/>(master untouched)"]
 
-    POKEPOKE_CHECK -- No --> PARTIAL_AUTO["8h. Auto-resolve .pokepoke/<br/>conflicts if any"]
-    PARTIAL_AUTO --> ABORT_MERGE["8i. git merge --abort<br/>rollback to pre-merge state"]
+    ABORT_WT --> SIGNAL["6b-i. Return ConflictResolutionNeeded<br/>with conflicted file list"]
+    SIGNAL --> RELEASE_LOCK["Release merge lock<br/>(other agents can merge)"]
 
-    ABORT_MERGE --> INVOKE_AGENT["8j. Invoke merge conflict<br/>cleanup agent with:<br/>conflicted file list<br/>merge error details<br/>conflict count"]
+    RELEASE_LOCK --> INVOKE_AGENT["6b-j. Invoke merge conflict<br/>cleanup agent with:<br/>cwd = worktree path<br/>conflicted file list<br/>merge error details"]
 
-    INVOKE_AGENT -- "Agent fixes conflicts" --> RETRY["8k. Retry merge_worktree<br/>cleanup=True"]
-    RETRY -- Success --> SUCCESS
-    RETRY -- Fails again --> FINAL_ABORT["8l. git merge --abort again"]
+    INVOKE_AGENT -- "Agent fixes conflicts" --> RELOCK["Re-acquire merge lock"]
+    INVOKE_AGENT -- "Agent fails" --> FAIL(["FAIL — worktree preserved<br/>for manual intervention"])
 
-    INVOKE_AGENT -- "Agent fails / timeout" --> FINAL_ABORT
+    RELOCK --> RETRY["6b-k. Retry full merge_worktree<br/>(integration + merge to master)"]
+    RETRY -- Success --> SUCCESS_RETRY(["Merge succeeded"])
+    RETRY -- "Fails again<br/>(attempts remain)" --> FRESH["6b-l. Fresh integration<br/>to discover new conflicts"]
+    RETRY -- "All retries exhausted" --> FAIL
+    FRESH --> SIGNAL
 
-    FINAL_ABORT --> UNCLEANED["8m. Add to uncleaned<br/>worktree manifest"]
-    UNCLEANED --> FAIL(["FAIL — worktree<br/>preserved for<br/>manual intervention"])
+    %% Worktree integration (purple) — under lock
+    style INTEGRATE fill:#8e44ad,stroke:#333,color:#fff
+    style DETECT fill:#8e44ad,stroke:#333,color:#fff
+    style CHECK_HEAD fill:#8e44ad,stroke:#333,color:#fff
+    style PARSE fill:#8e44ad,stroke:#333,color:#fff
+    style POKEPOKE_CHECK fill:#8e44ad,stroke:#333,color:#fff
+    style PARTIAL_AUTO fill:#8e44ad,stroke:#333,color:#fff
+    style ABORT_WT fill:#8e44ad,stroke:#333,color:#fff
+    style SIGNAL fill:#8e44ad,stroke:#333,color:#fff
 
-    %% Lock held throughout (blue)
-    style MERGE fill:#4a90d9,stroke:#333,color:#fff
-    style DETECT fill:#4a90d9,stroke:#333,color:#fff
-    style CHECK_HEAD fill:#4a90d9,stroke:#333,color:#fff
-    style PARSE fill:#4a90d9,stroke:#333,color:#fff
-    style TYPES fill:#4a90d9,stroke:#333,color:#fff
-    style POKEPOKE_CHECK fill:#4a90d9,stroke:#333,color:#fff
-    style PARTIAL_AUTO fill:#4a90d9,stroke:#333,color:#fff
-    style ABORT_MERGE fill:#4a90d9,stroke:#333,color:#fff
-    style INVOKE_AGENT fill:#4a90d9,stroke:#333,color:#fff
+    %% Outside lock (default)
+    style RELEASE_LOCK fill:#fff,stroke:#333,color:#333
+    style INVOKE_AGENT fill:#fff,stroke:#333,color:#333
+
+    %% Re-locked (blue)
+    style RELOCK fill:#4a90d9,stroke:#333,color:#fff
     style RETRY fill:#4a90d9,stroke:#333,color:#fff
-    style FINAL_ABORT fill:#4a90d9,stroke:#333,color:#fff
-    style UNCLEANED fill:#4a90d9,stroke:#333,color:#fff
+    style FRESH fill:#4a90d9,stroke:#333,color:#fff
 
     %% Auto-resolve (yellow)
     style AUTO_RESOLVE fill:#f1c40f,stroke:#333,color:#333
     style COMMIT_MERGE fill:#f1c40f,stroke:#333,color:#333
 
     %% Terminals
-    style SUCCESS fill:#27ae60,stroke:#333,color:#fff
+    style SUCCESS_CLEAN fill:#27ae60,stroke:#333,color:#fff
+    style SUCCESS_AUTO fill:#27ae60,stroke:#333,color:#fff
+    style SUCCESS_RETRY fill:#27ae60,stroke:#333,color:#fff
     style FAIL fill:#e74c3c,stroke:#333,color:#fff
     style GENERIC_FAIL fill:#e74c3c,stroke:#333,color:#fff
 ```
 
-`.pokepoke/` conflicts (yellow) are always auto-resolved with "ours" strategy since the orchestrator regenerates those files. All other steps (blue) execute under the merge lock.
+**Key design principle:** Conflicts happen in the worktree (purple), never on master. The cleanup agent runs **outside** the merge lock (white) so other agents can merge while conflict resolution is in progress. The retry loop re-acquires the lock (blue) only for the actual merge attempt. Up to 3 retries are attempted (configurable via `max_conflict_retries`).
+
+`.pokepoke/` conflicts (yellow) are always auto-resolved with "ours" strategy since the orchestrator regenerates those files.
 
 ## Retry and Rollback Summary
 
@@ -211,13 +231,14 @@ flowchart LR
     subgraph "Retry Strategies"
         B[Git Status] -->|"3 retries<br/>0.5s, 1s, 2s"| B1[index.lock recovery]
         C[Beads Sync] -->|"3 retries"| C1[Pre-merge sync]
-        D[Merge Conflicts] -->|"1 retry"| D1[Cleanup agent + re-merge]
+        D[Integration Conflicts] -->|"3 retries"| D1[Cleanup agent in worktree + re-integrate + re-merge]
         E[Main Repo Dirty] -->|"1 retry"| E1[Cleanup agent + re-check]
     end
 
     subgraph "Rollback Actions"
         R1[Post-merge validation fail] --> R1a[git reset --hard HEAD~1]
-        R3[Merge conflict] --> R3a[git merge --abort]
+        R2[Integration conflict] --> R2a[git merge --abort in worktree<br/>master untouched]
+        R3[Merge conflict on master] --> R3a[git merge --abort]
     end
 ```
 
@@ -228,7 +249,9 @@ flowchart LR
 | Worktree merge | `src/pokepoke/worktrees/worktrees.py` |
 | Finalization | `src/pokepoke/worktrees/worktree_finalization.py` |
 | Merge handler | `src/pokepoke/worktrees/worktree_merge_handler.py` |
+| Merge helpers & integration | `src/pokepoke/worktrees/merge_helpers.py` |
 | Helpers | `src/pokepoke/worktrees/worktree_helpers.py` |
+| Conflict retry loop | `src/pokepoke/worktrees/merge_conflict_retry.py` |
 | Merge execution | `src/pokepoke/git/git_operations.py` |
 | Conflict detection | `src/pokepoke/git/merge_conflict.py` |
 | Cleanup agents | `src/pokepoke/agents/cleanup_agents.py` |
