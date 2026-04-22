@@ -16,6 +16,17 @@ Clean any codebase by eliminating tech debt. Every line of code is potential dWe
 - Strip unnecessary abstractions and over-engineering
 - Purge commented-out code and debug statements
 
+#### Dead Code Detection Tools
+
+Don't just eyeball it — use automated tools to find dead code:
+
+- **`vulture`**: Run `vulture src/` to scan for unused functions, variables, classes, and imports. Review its output and delete confirmed dead code. Use `--min-confidence 80` to reduce false positives.
+- **`ruff`**: Already configured in this project. Rules like `F401` (unused imports) and `F841` (unused variables) catch low-hanging fruit automatically.
+- **Find All References**: Use the IDE's "Find All References" or `usages` tool on suspect symbols. Zero references (outside its own definition) = dead code.
+- **Coverage reports**: Functions with 0% coverage are likely unused or untested dead weight. Check `coverage.json` or run `pytest --cov` to identify them.
+
+Run these tools **before** manual inspection to prioritize what to delete.
+
 ### Simplification
 
 - Replace complex patterns with simpler alternatives
