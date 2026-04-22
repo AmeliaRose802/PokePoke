@@ -199,6 +199,37 @@ def _build_work_item_context(item: BeadsWorkItem, heading: str, extra: str = "")
     return context
 
 
+def _verify_cleanup_postcondition(
+    cwd: str | None,
+    agent_id: str,
+    item_logger: ItemLogger | None,
+) -> bool:
+    """Check that the repo is clean after a cleanup agent exits.
+
+    Returns True if the working directory has no uncommitted non-beads changes,
+    False otherwise.  A cleanup agent that exits 0 but leaves the repo dirty
+    is treated as a failure so callers can retry.
+    """
+    from pokepoke.git.git_operations import has_uncommitted_changes
+
+    try:
+        if has_uncommitted_changes(cwd=cwd):
+            logger.warning(
+                "Cleanup agent %s exited successfully but repo still has "
+                "uncommitted changes — treating as failure",
+                agent_id,
+            )
+            if item_logger:
+                item_logger.log_error(
+                    f"⚠️  ORCHESTRATOR: {agent_id} exited 0 but repo still dirty"
+                )
+            return False
+    except Exception as exc:
+        # git status failure is transient — don't override a successful agent
+        logger.debug("Post-condition check failed for %s: %s", agent_id, exc)
+    return True
+
+
 def _run_agent_with_ui(
     agent_id: str,
     agent_label: str,
@@ -233,14 +264,20 @@ def _run_agent_with_ui(
                 item_logger=item_logger,
             )
 
-        status = "success" if copilot_result.success else "failed"
+        # Post-condition: verify repo is actually clean after agent exits.
+        # The agent can exit 0 without committing (e.g. pre-commit hook rejected).
+        agent_success = copilot_result.success
+        if agent_success:
+            agent_success = _verify_cleanup_postcondition(cwd, agent_id, item_logger)
+
+        status = "success" if agent_success else "failed"
         terminal_ui.ui.push_agent_status(
             agent_id, agent_label, iteration=1, status=status,
             parent_agent_id=parent_agent_id,
             agent_type=agent_type_key,
         )
 
-        return copilot_result.success, copilot_result.stats
+        return agent_success, copilot_result.stats
     except Exception as e:
         logger.warning(f"Cleanup agent failed with error: {e}", exc_info=True)
         terminal_ui.ui.push_agent_status(

@@ -22,6 +22,13 @@ from pokepoke.types import AgentStats, BeadsWorkItem
 from pokepoke.types_agent import CopilotResult
 
 
+@pytest.fixture(autouse=True)
+def _mock_cleanup_postcondition():
+    """Mock has_uncommitted_changes so the post-condition check doesn't hit real git."""
+    with patch('pokepoke.git.git_operations.has_uncommitted_changes', return_value=False):
+        yield
+
+
 class TestCleanupAgents:
     """Test cleanup agent functions."""
 
@@ -554,6 +561,156 @@ class TestRunAgentWithUiException:
                 "test-1", "Test Agent", "cleanup",
                 item, "prompt", None, None,
             )
+
+
+class TestCleanupPostcondition:
+    """Test that cleanup agents verify repo is clean after agent exits."""
+
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_uncommitted_changes', return_value=True)
+    def test_cleanup_agent_fails_when_repo_still_dirty(
+        self, mock_dirty, mock_invoke, mock_context, mock_get_dir, mock_merge_active,
+    ):
+        """Agent exits 0 but repo still dirty → treated as failure."""
+        mock_dir = MagicMock()
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_get_dir.return_value = mock_dir
+        mock_context.return_value = ("/cur/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1", success=True, output="Done", attempt_count=1,
+        )
+
+        item = BeadsWorkItem(
+            id="123", title="T", description="D",
+            issue_type="task", priority=1, status="in_progress",
+        )
+
+        success, _stats = invoke_cleanup_agent(item)
+
+        assert success is False
+        mock_dirty.assert_called_once()
+
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_uncommitted_changes', return_value=False)
+    def test_cleanup_agent_succeeds_when_repo_clean(
+        self, mock_dirty, mock_invoke, mock_context, mock_get_dir, mock_merge_active,
+    ):
+        """Agent exits 0 and repo is clean → success."""
+        mock_dir = MagicMock()
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_get_dir.return_value = mock_dir
+        mock_context.return_value = ("/cur/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1", success=True, output="Done", attempt_count=1,
+        )
+
+        item = BeadsWorkItem(
+            id="123", title="T", description="D",
+            issue_type="task", priority=1, status="in_progress",
+        )
+
+        success, _stats = invoke_cleanup_agent(item)
+
+        assert success is True
+
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    def test_postcondition_skipped_when_agent_fails(
+        self, mock_invoke, mock_context, mock_get_dir, mock_merge_active,
+    ):
+        """Agent exits non-zero → postcondition not checked."""
+        mock_dir = MagicMock()
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_get_dir.return_value = mock_dir
+        mock_context.return_value = ("/cur/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1", success=False, output="Failed", attempt_count=1,
+        )
+
+        item = BeadsWorkItem(
+            id="123", title="T", description="D",
+            issue_type="task", priority=1, status="in_progress",
+        )
+
+        success, _stats = invoke_cleanup_agent(item)
+
+        assert success is False
+
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_uncommitted_changes', return_value=True)
+    def test_merge_conflict_cleanup_fails_when_repo_still_dirty(
+        self, mock_dirty, mock_invoke, mock_context, mock_get_dir, mock_merge_active,
+    ):
+        """Merge conflict cleanup exits 0 but repo dirty → failure."""
+        mock_dir = MagicMock()
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Merge fix {merge_error}"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_get_dir.return_value = mock_dir
+        mock_context.return_value = ("/cur/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1", success=True, output="Fixed", attempt_count=1,
+        )
+
+        item = BeadsWorkItem(
+            id="123", title="T", description="D",
+            issue_type="task", priority=1, status="in_progress",
+        )
+
+        success, _stats = invoke_merge_conflict_cleanup_agent(item, "Merge error")
+
+        assert success is False
+        mock_dirty.assert_called_once()
+
+    @patch('pokepoke.agents.cleanup_agents.merge_lock_active', return_value=False)
+    @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
+    @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
+    @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
+    @patch('pokepoke.git.git_operations.has_uncommitted_changes', side_effect=Exception("git broken"))
+    def test_postcondition_git_error_does_not_override_success(
+        self, mock_dirty, mock_invoke, mock_context, mock_get_dir, mock_merge_active,
+    ):
+        """If git status fails during post-check, don't override a successful agent."""
+        mock_dir = MagicMock()
+        mock_file = Mock()
+        mock_file.exists.return_value = True
+        mock_file.read_text.return_value = "Instructions {cwd} {branch} {is_worktree}"
+        mock_dir.__truediv__.return_value = mock_file
+        mock_get_dir.return_value = mock_dir
+        mock_context.return_value = ("/cur/dir", "main", False)
+        mock_invoke.return_value = CopilotResult(
+            work_item_id="task-1", success=True, output="Done", attempt_count=1,
+        )
+
+        item = BeadsWorkItem(
+            id="123", title="T", description="D",
+            issue_type="task", priority=1, status="in_progress",
+        )
+
+        success, _stats = invoke_cleanup_agent(item)
+
+        assert success is True
 
 
 class TestMergeWaitLogic:
