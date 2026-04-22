@@ -30,7 +30,7 @@ Analyze this work item AND the codebase to determine why it keeps failing, then 
 1. **Specific scope** — each sub-task must target specific files or modules. Never create vague tasks like "implement core logic" or "add tests".
 2. **Independently completable** — each sub-task must be completable on its own and pass all quality gates (tests, lint, build).
 3. **Meaningful title** — at least 10 characters, clearly describing the concrete change (e.g. "Add input validation to WorkItemSelector.select()" not "Add validation").
-4. **Ordered for serial execution** — the system will automatically create `blocks` relationships in beads between consecutive siblings (child 1 blocks child 2, child 2 blocks child 3, etc.) so only one runs at a time. List sub-tasks in the order they should execute — foundational changes first, dependent changes later.
+4. **Dependency-aware execution** — include a `depends_on` array for each sub-task, listing the **titles of other subtasks** that must complete first. Use `[]` when a sub-task has no dependencies so it can run in parallel.
 5. **Actionable description** — each description should mention the target file(s), what to change, and what tests to add or update.
 
 ### What NOT to do
@@ -42,17 +42,21 @@ Analyze this work item AND the codebase to determine why it keeps failing, then 
 
 ## Output Format
 
-You MUST output a JSON array (inside a fenced code block) with objects containing `title` and `description` fields. Example:
+You MUST output a JSON array (inside a fenced code block) with objects containing `title`, `description`, and `depends_on` fields. Example:
 
 ```json
 [
   {
     "title": "Add retry logic to BeadsQueryClient.fetch_ready()",
-    "description": "In src/pokepoke/beads/beads_query.py, wrap the bd ready call with exponential backoff (max 3 retries). Add tests in tests/beads/test_beads_query.py covering timeout, transient error, and success-on-retry scenarios."
+    "description": "In src/pokepoke/beads/beads_query.py, wrap the bd ready call with exponential backoff (max 3 retries). Add tests in tests/beads/test_beads_query.py covering timeout, transient error, and success-on-retry scenarios.",
+    "depends_on": []
   },
   {
     "title": "Extract WorkItemFilter from select_multiple_items()",
-    "description": "In src/pokepoke/orchestration/work_item_selection.py, extract the label-overlap and conflict-risk filtering into a new WorkItemFilter class. Update tests in tests/orchestration/test_work_item_selection.py to cover the extracted class."
+    "description": "In src/pokepoke/orchestration/work_item_selection.py, extract the label-overlap and conflict-risk filtering into a new WorkItemFilter class. Update tests in tests/orchestration/test_work_item_selection.py to cover the extracted class.",
+    "depends_on": [
+      "Add retry logic to BeadsQueryClient.fetch_ready()"
+    ]
   }
 ]
 ```
