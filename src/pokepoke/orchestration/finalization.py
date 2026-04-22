@@ -108,10 +108,15 @@ def _handle_success(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
         ctx.item.id, ctx.selected_model, dur, success, gate_passed,
         item_stats, ctx.request_count,
     ) if success else None
+    # When gate passed but merge failed, mark as merge-stage failure so
+    # the orchestrator can skip work+gate on retry and go straight to merge.
+    failure_stage = "merge" if (not success and ctx.gate_success) else None
+    failure_reason = "Finalization failed (merge or close failed)" if (not success and ctx.gate_success) else None
     return WorkItemResult(
         success=success, request_count=ctx.request_count, stats=item_stats,
         cleanup_agent_runs=ctx.cleanup_agent_runs, gate_agent_runs=ctx.gate_agent_runs,
         model_completion=model_completion,
+        failure_stage=failure_stage, failure_reason=failure_reason,
     ), success
 
 

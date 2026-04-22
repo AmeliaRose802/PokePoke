@@ -3,7 +3,7 @@
 import logging
 import time
 from pathlib import Path
-from typing import TYPE_CHECKING
+from typing import TYPE_CHECKING, Any
 
 from pokepoke.agents.cleanup_agents import run_cleanup_loop
 from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_banner
@@ -18,6 +18,95 @@ if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger, RunLogger
 
 logger = logging.getLogger(__name__)
+
+
+def _load_resume_contexts(
+    item: BeadsWorkItem, worktree_path: Path | None, repo_root: Path,
+) -> str | None:
+    """Load resume context from an existing worktree for reclaimed stale items."""
+    if not (item.status == "in_progress" and worktree_path and worktree_path.exists()):
+        return None
+    try:
+        from pokepoke.beads.stale_item_recovery import (
+            build_resume_context,
+            format_resume_context_for_prompt,
+        )
+        resume_ctx = build_resume_context(item, repo_path=repo_root)
+        if resume_ctx:
+            formatted = format_resume_context_for_prompt(resume_ctx)
+            logger.info("♻️  Loaded resume context from existing worktree (%d commits)",
+                        resume_ctx.get("commit_count", 0))
+            return formatted
+    except Exception as e:
+        logger.debug("Failed to build worktree resume context: %s", e)
+    return None
+
+
+def _handle_fail_fast_outcome(
+    outcome: Any,
+    item: BeadsWorkItem,
+    comment_fn: "Any",
+    block_fn: "Any",
+    session: "Any",
+    run_logger: "RunLogger | None",
+    item_logger: "ItemLogger | None",
+    request_count: int,
+    accumulated_stats: AgentStats,
+    cleanup_agent_runs: int,
+    gate_agent_runs: int,
+    gt: "Any",
+) -> tuple[WorkItemResult | None, str | None]:
+    """Handle a fail-fast work agent outcome.
+
+    Returns ``(result, too_large_context)``:
+    - *result* is a WorkItemResult when the caller should return immediately
+      (needs_clarification), or ``None`` when the caller should break.
+    - *too_large_context* is set when the caller should invoke ``_maybe_decompose``.
+    """
+    reason = outcome.reason or outcome.status
+    gt.complete_step("2")
+    gt.fail_step("FF", f"{outcome.status}: {reason}")
+    gt.finish_run("failed")
+    comment_fn(item.id, f"Work agent returned '{outcome.status}': {reason}")
+    logger.info("Work agent fail-fast: status=%s reason=%s — skipping gate", outcome.status, reason)
+    if outcome.status == "needs_clarification":
+        block_reason = f"Needs clarification before work can continue: {reason}"
+        if not block_fn(item.id, block_reason):
+            comment_fn(item.id, f"Failed to auto-block item after needs_clarification: {reason}")
+        if session is not None:
+            session._assigned = False
+        _log_failure(run_logger, item_logger, request_count)
+        return _fail_result(
+            request_count=request_count, stats=accumulated_stats,
+            cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
+            failure_reason=f"Blocked pending clarification: {reason}",
+        ), None
+    too_large_ctx: str | None = None
+    if outcome.status == "too_large":
+        context_parts = [f"Work agent reason: {reason}"]
+        if outcome.suggested_split:
+            context_parts.append("Suggested split: " + "; ".join(outcome.suggested_split))
+        too_large_ctx = "\n".join(context_parts)
+    return None, too_large_ctx
+
+
+def _check_sdk_invariant(
+    backend_provider: str, result: CopilotResult, item_id: str,
+) -> bool:
+    """Return True (should break) if the SDK invariant is violated."""
+    if backend_provider == "copilot" and result.session_id is None:
+        from pokepoke.utils.shutdown import request_shutdown
+        logger.critical(
+            "🚨 INVARIANT VIOLATION: Copilot SDK returned session_id=None for %s. "
+            "This indicates a bug in the SDK plumbing — all exit paths should assign session_id. "
+            "Halting orchestrator to avoid masking the root cause.\n"
+            "  success=%s  error=%s  output_len=%s",
+            item_id, result.success, result.error,
+            len(result.output) if result.output else 0,
+        )
+        request_shutdown()
+        return True
+    return False
 
 
 def _log_failure(
@@ -148,6 +237,114 @@ def _maybe_decompose(
         if decomp_result.success:
             logger.info("\n🔀 Item %s decomposed into %d sub-tasks",
                         item.id, len(decomp_result.child_ids))
+
+
+def try_merge_retry_fast_path(
+    item: BeadsWorkItem,
+    worktree_path: Path,
+    worktree_cwd: str,
+    selected_model: str,
+    start_time: float,
+    accumulated_stats: AgentStats,
+    run_logger: "RunLogger | None",
+    item_logger: "ItemLogger | None",
+    base_agent_id: str,
+    run_beta_test: bool,
+    repo_path: str | None,
+) -> WorkItemResult | None:
+    """Attempt the merge-retry fast-path.
+
+    Returns a WorkItemResult if the fast-path was taken (success or failure),
+    or None if normal pipeline should proceed.
+    """
+    from pokepoke.beads.beads_metadata import clear_merge_retry
+    from pokepoke.git.git_operations import has_commits_ahead
+
+    # Import via workflow module so test patches at workflow._finalize_item_result take effect
+    from pokepoke.orchestration.workflow import ResultContext, _finalize_item_result
+
+    is_merge_retry = bool((item.metadata or {}).get('merge_retry'))
+    if not (is_merge_retry and worktree_path and worktree_path.exists()):
+        return None
+
+    commits_ahead = has_commits_ahead(cwd=worktree_cwd)
+    if commits_ahead <= 0:
+        logger.info(
+            "⚠️  merge_retry set for %s but worktree has 0 commits — "
+            "falling through to normal pipeline", item.id,
+        )
+        clear_merge_retry(item.id)
+        return None
+
+    logger.info(
+        "\n⚡ Merge-retry fast-path: %s has %d validated commit(s) "
+        "— skipping work+gate, going straight to merge",
+        item.id, commits_ahead,
+    )
+    if item_logger:
+        item_logger.log(
+            f"⚡ ORCHESTRATOR: Merge-retry fast-path for {item.id} "
+            f"({commits_ahead} commits) — skipping work+gate"
+        )
+    clear_merge_retry(item.id)
+    merge_result = CopilotResult(
+        work_item_id=item.id, success=True, attempt_count=0, session_id=None,
+    )
+    final_result, finalized = _finalize_item_result(ResultContext(
+        result=merge_result, item=item, worktree_path=worktree_path,
+        selected_model=selected_model, start_time=start_time,
+        request_count=0, accumulated_stats=accumulated_stats,
+        cleanup_agent_runs=0, gate_agent_runs=0,
+        gate_success=True, run_logger=run_logger, item_logger=item_logger,
+        base_agent_id=base_agent_id, run_beta_test=run_beta_test,
+        repo_path=repo_path,
+    ))
+    if not finalized and final_result.failure_stage == "merge":
+        from pokepoke.beads.beads_metadata import set_merge_retry
+        set_merge_retry(item.id)
+    # Tag result so caller knows whether session should be cleared
+    final_result._merge_retry_finalized = finalized  # type: ignore[attr-defined]
+    return final_result
+
+
+def _finalize_and_flag_merge_retry(
+    *,
+    result: CopilotResult,
+    item: BeadsWorkItem,
+    worktree_path: Path | None,
+    selected_model: str,
+    start_time: float,
+    request_count: int,
+    accumulated_stats: AgentStats,
+    cleanup_agent_runs: int,
+    gate_agent_runs: int,
+    gate_success: bool,
+    run_logger: "RunLogger | None",
+    item_logger: "ItemLogger | None",
+    base_agent_id: str,
+    run_beta_test: bool,
+    repo_path: str | None,
+) -> tuple[WorkItemResult, bool]:
+    """Finalize work item result and set merge_retry flag if merge failed.
+
+    Returns (WorkItemResult, finalized_successfully).
+    """
+    # Import via workflow module so test patches at workflow._finalize_item_result take effect
+    from pokepoke.orchestration.workflow import ResultContext, _finalize_item_result
+
+    final_result, finalized = _finalize_item_result(ResultContext(
+        result=result, item=item, worktree_path=worktree_path,
+        selected_model=selected_model, start_time=start_time,
+        request_count=request_count, accumulated_stats=accumulated_stats,
+        cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
+        gate_success=gate_success, run_logger=run_logger, item_logger=item_logger,
+        base_agent_id=base_agent_id, run_beta_test=run_beta_test, repo_path=repo_path,
+    ))
+    if not finalized and final_result.failure_stage == "merge":
+        from pokepoke.beads.beads_metadata import set_merge_retry
+        set_merge_retry(item.id)
+        logger.info("📌 Flagged %s for merge-retry on next pickup", item.id)
+    return final_result, finalized
 
 
 def run_cleanup_with_timeout(

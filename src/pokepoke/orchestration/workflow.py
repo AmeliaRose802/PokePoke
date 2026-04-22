@@ -14,7 +14,12 @@ from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.models.copilot_sdk import build_prompt_from_work_item
 from pokepoke.models.model_selection import get_assignment_for_item, select_model_for_item
 from pokepoke.models.sdk_helpers import build_resume_prompt
-from pokepoke.orchestration.finalization import ResultContext, _finalize_item_result
+from pokepoke.orchestration.finalization import (
+    ResultContext as ResultContext,
+)
+from pokepoke.orchestration.finalization import (
+    _finalize_item_result as _finalize_item_result,
+)
 from pokepoke.orchestration.gate_agent_loop import GateLoopContext, run_gate_loop
 from pokepoke.orchestration.gate_step_tracker import get_gate_step_tracker
 from pokepoke.orchestration.work_item_selection import select_work_item  # noqa: F401  # re-exported
@@ -26,15 +31,20 @@ from pokepoke.orchestration.worker_context import (
 )
 from pokepoke.orchestration.workflow_helpers import (
     _apply_gate_feedback,
+    _check_sdk_invariant,
     _combine_resume_contexts,
     _extract_agent_stats,
     _fail_result,
+    _finalize_and_flag_merge_retry,
+    _handle_fail_fast_outcome,
+    _load_resume_contexts,
     _log_commit_status,
     _log_failure,
     _maybe_decompose,
     _maybe_retry_copilot,
     run_cleanup_with_timeout,
     setup_worktree,
+    try_merge_retry_fast_path,
 )
 from pokepoke.protocols import BeadsClient
 from pokepoke.stats.metrics_context import set_current_repo_name, set_current_work_item_id
@@ -49,7 +59,6 @@ logger = logging.getLogger(__name__)
 _FAIL_FAST_STATUSES = frozenset({"blocked", "needs_clarification", "too_large"})
 _LOCK_TIMEOUT_PER_AGENT, _BACKOFF_BASE_SECONDS, _BACKOFF_MAX_SECONDS = 120.0, 30, 240
 
-
 @dataclass
 class WorkItemConfig:
     """Configuration bundle for optional process_work_item parameters."""
@@ -60,11 +69,8 @@ class WorkItemConfig:
     beads_client: BeadsClient | None = None
 
 def process_work_item(  # noqa: C901
-    item: BeadsWorkItem,
-    interactive: bool,
-    run_logger: 'RunLogger | None' = None,
-    agent_id: str | None = None,
-    config: WorkItemConfig | None = None,
+    item: BeadsWorkItem, interactive: bool, run_logger: 'RunLogger | None' = None,
+    agent_id: str | None = None, config: WorkItemConfig | None = None,
 ) -> WorkItemResult:
     """Process a single work item with timeout protection."""
     register_agent()
@@ -75,8 +81,7 @@ def process_work_item(  # noqa: C901
     _defer = cfg.beads_client.defer_item if cfg.beads_client else defer_item
     _session: WorkItemSession | None = None
     try:
-        start_time = time.time()
-        timeout_seconds = cfg.timeout_hours * 3600
+        start_time, timeout_seconds = time.time(), cfg.timeout_hours * 3600
         request_count = cleanup_agent_runs = gate_agent_runs = 0
         global_config = get_config()
         selected_model = select_model_for_item(item)
@@ -84,20 +89,17 @@ def process_work_item(  # noqa: C901
         base_agent_id = agent_id or item.id
         backend_provider = global_config.ai_backend.provider
         worktree_lock_timeout = max(float(global_config.command_timeout), _LOCK_TIMEOUT_PER_AGENT * max(1, int(global_config.max_parallel_agents)))
-
         set_current_work_item_id(item.id)
-        repo_name = Path(cfg.repo_path).name if cfg.repo_path else Path.cwd().name
-        set_current_repo_name(repo_name)
+        set_current_repo_name(Path(cfg.repo_path).name if cfg.repo_path else Path.cwd().name)
 
         terminal_ui.ui.push_agent_status(base_agent_id, get_agent_name(default="pokepoke"),
             iteration=1, status="running", model=selected_model,
             work_item_id=item.id, work_item_title=item.title, agent_type="work")
 
-        logger.info(f"\n🚀 Processing work item: {item.id} — {item.title}")
-        logger.info(f"   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {f'{cfg.timeout_hours}h' if cfg.timeout_hours > 0 else 'unlimited'}\n")
+        timeout_str = f'{cfg.timeout_hours}h' if cfg.timeout_hours > 0 else 'unlimited'
+        logger.info(f"\n🚀 Processing work item: {item.id} — {item.title}\n   🤖 Model: {selected_model} | 🧠 Backend: {backend_provider} | ⏱️  Timeout: {timeout_str}\n")
 
         item_logger = run_logger.start_item_log(item.id, item.title) if run_logger else None
-
         max_gate_rejections = global_config.max_gate_rejections_per_item
 
         if interactive:
@@ -110,38 +112,29 @@ def process_work_item(  # noqa: C901
 
         logger.info("\n\U0001f512 Claiming work item...")
         if not _assign(item.id):
-
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason="Failed to assign work item")
         _session = WorkItemSession(item_id=item.id, agent_name=get_agent_name(default="pokepoke"))
         _session._assigned = True
         worktree_path = setup_worktree(item, lock_timeout=worktree_lock_timeout,
             run_logger=run_logger, item_logger=item_logger, repo_path=cfg.repo_path)
-
         if worktree_path is None:
-
             _log_failure(run_logger, item_logger)
             return _fail_result(failure_reason="Failed to create worktree")
         _session.worktree_path = str(worktree_path)
-        _session._worktree_created = True
-        _session._branch_created = True
+        _session._worktree_created = _session._branch_created = True
         pokepoke_root = Path(cfg.repo_path) if cfg.repo_path else Path.cwd()
         worktree_cwd = str(worktree_path)
         last_feedback = ""
         accumulated_feedback: list[str] = []
-        accumulated_stats = AgentStats()
-        gate_success = False
+        accumulated_stats, gate_success = AgentStats(), False
         timeout_restart_count = copilot_failure_count = 0
         backoff_delay = _BACKOFF_BASE_SECONDS
         work_agent_iteration = 1
         gate_rejection_count = int((item.metadata or {}).get('gate_rejection_count', 0))
-        gate_resume_session_id: str | None = None
-        gate_resume_output_summary: str | None = None
-        gate_resume_feedback: str | None = None
-        last_retry_was_gate_feedback = False
-        current_work_agent_id = base_agent_id
-        resume_session_id: str | None = None
-        resume_output_summary: str | None = None
+        gate_resume_session_id = gate_resume_output_summary = gate_resume_feedback = None
+        last_retry_was_gate_feedback, current_work_agent_id = False, base_agent_id
+        resume_session_id = resume_output_summary = None
         result = CopilotResult(work_item_id=item.id, success=False,
             error="Session aborted due to application shutdown", attempt_count=0)
 
@@ -151,23 +144,24 @@ def process_work_item(  # noqa: C901
         previous_worker_context = format_worker_context_for_prompt(prior_contexts)
 
         # Check for resume context from existing worktree (for reclaimed stale items)
-        worktree_resume_context: str | None = None
-        if item.status == "in_progress" and worktree_path and worktree_path.exists():
-            try:
-                from pokepoke.beads.stale_item_recovery import (
-                    build_resume_context,
-                    format_resume_context_for_prompt,
-                )
-                resume_ctx = build_resume_context(item, repo_path=pokepoke_root)
-                if resume_ctx:
-                    worktree_resume_context = format_resume_context_for_prompt(resume_ctx)
-                    logger.info("♻️  Loaded resume context from existing worktree (%d commits)",
-                               resume_ctx.get("commit_count", 0))
-            except Exception as e:
-                logger.debug("Failed to build worktree resume context: %s", e)
+        worktree_resume_context = _load_resume_contexts(item, worktree_path, pokepoke_root)
 
         _gt = get_gate_step_tracker()
         gate_resume_enabled = global_config.gate_reverify_resume_enabled
+
+        # ── Merge-retry fast-path ──────────────────────────────────────
+        # If a previous attempt passed the gate but failed only at merge,
+        # the worktree already has validated, committed work. Skip work +
+        # gate agents and jump directly to finalization (merge step).
+        fast_result = try_merge_retry_fast_path(
+            item, worktree_path, worktree_cwd, selected_model, start_time,
+            accumulated_stats, run_logger, item_logger, base_agent_id,
+            cfg.run_beta_test, cfg.repo_path,
+        )
+        if fast_result is not None:
+            if getattr(fast_result, '_merge_retry_finalized', False):
+                _session = None
+            return fast_result
 
         while not is_shutting_down():
             elapsed = time.time() - start_time
@@ -257,18 +251,7 @@ def process_work_item(  # noqa: C901
                 accumulated_stats.accumulate(current_stats)
 
             # Invariant: Copilot SDK backend always sets session_id on all exit paths.
-            # If missing, something went fundamentally wrong in SDK plumbing — don't mask it.
-            if backend_provider == "copilot" and result.session_id is None:
-                from pokepoke.utils.shutdown import request_shutdown
-                logger.critical(
-                    "🚨 INVARIANT VIOLATION: Copilot SDK returned session_id=None for %s. "
-                    "This indicates a bug in the SDK plumbing — all exit paths should assign session_id. "
-                    "Halting orchestrator to avoid masking the root cause.\n"
-                    "  success=%s  error=%s  output_len=%s",
-                    item.id, result.success, result.error,
-                    len(result.output) if result.output else 0,
-                )
-                request_shutdown()
+            if _check_sdk_invariant(backend_provider, result, item.id):
                 break
 
             is_process_crash = result.error and (
@@ -304,35 +287,18 @@ def process_work_item(  # noqa: C901
 
             outcome = result.work_agent_outcome
             if outcome and outcome.status in _FAIL_FAST_STATUSES:
-                reason = outcome.reason or outcome.status
-                _gt.complete_step("2")
-                _gt.fail_step("FF", f"{outcome.status}: {reason}")
-                _gt.finish_run("failed")
-                _comment(item.id, f"Work agent returned '{outcome.status}': {reason}")
-                logger.info("Work agent fail-fast: status=%s reason=%s — skipping gate", outcome.status, reason)
-                if outcome.status == "needs_clarification":
-                    block_reason = f"Needs clarification before work can continue: {reason}"
-                    if not _block(item.id, block_reason):
-                        _comment(item.id, f"Failed to auto-block item after needs_clarification: {reason}")
-                    if _session is not None:
-                        # Item is intentionally blocked; don't unassign back to open in failure cleanup.
-                        _session._assigned = False
-                    _log_failure(run_logger, item_logger, request_count)
+                ff_result, too_large_ctx = _handle_fail_fast_outcome(
+                    outcome, item, _comment, _block, _session,
+                    run_logger, item_logger, request_count,
+                    accumulated_stats, cleanup_agent_runs, gate_agent_runs, _gt,
+                )
+                if ff_result is not None:
                     terminal_ui.ui.set_current_agent(None)
-                    return _fail_result(
-                        request_count=request_count,
-                        stats=accumulated_stats,
-                        cleanup_agent_runs=cleanup_agent_runs,
-                        gate_agent_runs=gate_agent_runs,
-                        failure_reason=f"Blocked pending clarification: {reason}",
-                    )
-                if outcome.status == "too_large":
-                    context_parts = [f"Work agent reason: {reason}"]
-                    if outcome.suggested_split:
-                        context_parts.append("Suggested split: " + "; ".join(outcome.suggested_split))
+                    return ff_result
+                if too_large_ctx:
                     _maybe_decompose(
                         item, copilot_failure_count, gate_rejection_count, global_config,
-                        too_large_context="\n".join(context_parts),
+                        too_large_context=too_large_ctx,
                     )
                 break
 
@@ -410,14 +376,14 @@ def process_work_item(  # noqa: C901
                 add_comment_fn=_comment,
             )
 
-        final_result, finalized = _finalize_item_result(ResultContext(
+        final_result, finalized = _finalize_and_flag_merge_retry(
             result=result, item=item, worktree_path=worktree_path,
             selected_model=selected_model, start_time=start_time,
             request_count=request_count, accumulated_stats=accumulated_stats,
             cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
             gate_success=gate_success, run_logger=run_logger, item_logger=item_logger,
             base_agent_id=base_agent_id, run_beta_test=cfg.run_beta_test, repo_path=cfg.repo_path,
-        ))
+        )
         if finalized:
             _session = None  # Finalization succeeded — skip cleanup
         return final_result

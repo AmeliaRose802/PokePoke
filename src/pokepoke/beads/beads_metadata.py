@@ -1,12 +1,37 @@
-"""Beads metadata management - track attempts and gate rejections."""
+"""Beads metadata management - track attempts, gate rejections, and merge retry."""
 
 import json
 import logging
 import subprocess
+from typing import Any
 
 from .beads_query import _parse_beads_json, _run_bd
 
 logger = logging.getLogger(__name__)
+
+
+def _get_metadata(item_id: str) -> dict[str, Any] | None:
+    """Fetch the metadata dict for an item. Returns None on failure."""
+    try:
+        result = _run_bd(['show', item_id, '--json'], check=False)
+        data = _parse_beads_json(result.stdout)
+        if data is None:
+            return None
+        item = data[0] if isinstance(data, list) else data
+        metadata = item.get('metadata', {})
+        return metadata if isinstance(metadata, dict) else {}
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired,
+            json.JSONDecodeError, ValueError, TypeError):
+        return None
+
+
+def _set_metadata(item_id: str, metadata: dict[str, Any]) -> bool:
+    """Write the metadata dict for an item. Returns True on success."""
+    try:
+        _run_bd(['update', item_id, '--metadata', json.dumps(metadata)])
+        return True
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        return False
 
 
 def get_total_attempts(item_id: str) -> int:
@@ -116,3 +141,26 @@ def increment_gate_rejection_count(item_id: str) -> int:
     except (subprocess.CalledProcessError, subprocess.TimeoutExpired, json.JSONDecodeError, ValueError, TypeError) as e:
         logger.warning(f"Failed to increment gate_rejection_count for {item_id}: {e}")
         return -1
+
+
+def set_merge_retry(item_id: str) -> bool:
+    """Mark the item for merge-only retry (gate already passed)."""
+    metadata = _get_metadata(item_id)
+    if metadata is None:
+        logger.warning("Failed to fetch metadata for %s when setting merge_retry", item_id)
+        return False
+    metadata['merge_retry'] = True
+    if _set_metadata(item_id, metadata):
+        logger.info("Set merge_retry flag for %s", item_id)
+        return True
+    logger.warning("Failed to set merge_retry for %s", item_id)
+    return False
+
+
+def clear_merge_retry(item_id: str) -> bool:
+    """Clear the merge-retry flag (after successful merge or before re-running work)."""
+    metadata = _get_metadata(item_id)
+    if metadata is None:
+        return False
+    metadata.pop('merge_retry', None)
+    return _set_metadata(item_id, metadata)

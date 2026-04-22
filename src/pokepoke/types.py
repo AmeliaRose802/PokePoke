@@ -56,6 +56,7 @@ class WorkItemResult:
     gate_agent_runs: int = 0
     model_completion: ModelCompletionRecord | None = None
     failure_reason: str | None = None
+    failure_stage: str | None = None  # "merge" when gate passed but merge failed
 
 # Re-exported from types_agent for backwards compatibility
 from pokepoke.types_agent import CopilotResult as CopilotResult
