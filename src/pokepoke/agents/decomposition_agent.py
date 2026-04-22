@@ -1,6 +1,6 @@
 """Decomposition agent — breaks failing work items into SDK-analysed sub-tasks.
 
-Creates children with blocking deps (serial execution), label propagation,
+Creates children with agent-defined blocking deps, label propagation,
 title validation, and dedup checking.
 """
 
@@ -8,9 +8,15 @@ import json
 import logging
 import re
 import subprocess
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 
 import pokepoke.constants as _c
+from pokepoke.agents.decomposition_helpers import (
+    build_dependency_edges,
+    extract_first_json_array,
+    filter_known_dependencies,
+    normalize_dependency_titles,
+)
 from pokepoke.beads.beads_query import _parse_beads_json, _run_bd
 from pokepoke.types import BeadsWorkItem
 
@@ -38,6 +44,7 @@ class SubTask:
     description: str
     priority: int
     issue_type: str = "task"
+    depends_on: list[str] = field(default_factory=list)
 
 
 @dataclass
@@ -85,18 +92,9 @@ def _build_decomposition_prompt(
 
 
 def _parse_subtasks_from_output(output: str, default_priority: int) -> list[SubTask]:
-    """Parse a JSON array of {title, description} from SDK output."""
-    # Try to find a JSON array (possibly inside a fenced code block)
-    match = re.search(r'\[.*?\]', output, re.DOTALL)
-    if not match:
-        return []
-
-    try:
-        data = json.loads(match.group(0))
-    except json.JSONDecodeError:
-        return []
-
-    if not isinstance(data, list):
+    """Parse a JSON array of {title, description, depends_on?} from SDK output."""
+    data = extract_first_json_array(output)
+    if data is None:
         return []
 
     subtasks: list[SubTask] = []
@@ -105,6 +103,7 @@ def _parse_subtasks_from_output(output: str, default_priority: int) -> list[SubT
             continue
         title = str(entry.get("title", "")).strip()[:80]
         description = str(entry.get("description", "")).strip()
+        depends_on = normalize_dependency_titles(entry.get("depends_on", []))
         if not _is_valid_title(title):
             logger.info("🔀 Rejected subtask with invalid title: '%s'", title)
             continue
@@ -112,6 +111,7 @@ def _parse_subtasks_from_output(output: str, default_priority: int) -> list[SubT
             title=title,
             description=description,
             priority=default_priority,
+            depends_on=depends_on,
         ))
     return subtasks
 
@@ -307,7 +307,7 @@ def run_decomposition(
     *,
     too_large_context: str | None = None,
 ) -> DecompositionResult:
-    """Decompose a failing item via SDK analysis, creating serialised child tasks."""
+    """Decompose a failing item via SDK analysis, creating child tasks."""
     logger.info(
         "\n🔀 Decomposition Agent: item %s failed %d times — breaking into sub-tasks",
         item.id, failure_count,
@@ -341,6 +341,8 @@ def run_decomposition(
             success=False, parent_id=item.id, child_ids=[], reason=reason,
         )
 
+    filter_known_dependencies(subtasks, item.id, logger)
+
     # Labels to propagate from parent (excluding the decomposition label itself)
     parent_labels = [
         lbl for lbl in (item.labels or [])
@@ -351,7 +353,7 @@ def run_decomposition(
 
     child_ids: list[str] = []
     created_items: list[tuple[str, str]] = []
-    prev_child_id: str | None = None
+    created_subtasks: list[tuple[str, SubTask]] = []
     failed_subtasks: list[str] = []
 
     for subtask in subtasks:
@@ -361,12 +363,9 @@ def run_decomposition(
             extra_labels=parent_labels,
         )
         if child_id:
-            # Add blocking relationship: previous sibling blocks this one
-            if prev_child_id:
-                _add_blocking_dependency(prev_child_id, child_id)
             child_ids.append(child_id)
             created_items.append((child_id, subtask.title))
-            prev_child_id = child_id
+            created_subtasks.append((child_id, subtask))
             logger.info("   ✅ Created child: %s — %s", child_id, subtask.title)
         else:
             logger.warning("   ❌ Failed to create child: %s", subtask.title)
@@ -398,6 +397,9 @@ def run_decomposition(
         return DecompositionResult(
             success=False, parent_id=item.id, child_ids=[], reason=reason,
         )
+
+    for blocker_id, blocked_id in build_dependency_edges(created_subtasks, item.id, logger):
+        _add_blocking_dependency(blocker_id, blocked_id)
 
     # Record created items in session stats so the dashboard ADDED counter updates
     from pokepoke.beads.sdk_beads_tracker import record_items_created
