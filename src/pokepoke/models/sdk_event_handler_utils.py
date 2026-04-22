@@ -8,6 +8,42 @@ from typing import TYPE_CHECKING, Any
 if TYPE_CHECKING:
     from .sdk_event_handler import SdkSessionStats
 
+
+class LineBuffer:
+    """Accumulates streaming chunks and emits complete lines.
+
+    Subprocess tool output arrives in arbitrary-sized chunks that may split
+    mid-word.  This buffer reassembles them into complete lines (terminated
+    by ``\\n``) so that display and logging output is human-readable.
+    """
+
+    __slots__ = ("_partial",)
+
+    def __init__(self) -> None:
+        self._partial: str = ""
+
+    def add(self, text: str) -> list[str]:
+        """Add a chunk and return any complete lines ready for output.
+
+        Each returned string ends with ``\\n``.  Partial content is held
+        until the next chunk completes the line or :meth:`flush` is called.
+        """
+        self._partial += text
+        lines: list[str] = []
+        while "\n" in self._partial:
+            line, self._partial = self._partial.split("\n", 1)
+            lines.append(line + "\n")
+        return lines
+
+    def flush(self) -> str | None:
+        """Return any remaining partial content, or *None* if empty."""
+        if self._partial:
+            remaining = self._partial
+            self._partial = ""
+            return remaining
+        return None
+
+
 _STREAMING_ATTRS = (
     "stdout",
     "stderr",

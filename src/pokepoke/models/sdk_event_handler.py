@@ -12,7 +12,7 @@ from pokepoke.config import FALLBACK_MODEL, get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.utils.hung_command_detector import HungCommandDetector
 
-from .sdk_event_handler_utils import iter_streaming_chunks, record_tool_output
+from .sdk_event_handler_utils import LineBuffer, iter_streaming_chunks, record_tool_output
 
 logger = logging.getLogger(__name__)
 
@@ -72,6 +72,7 @@ class _EventHandler:
         self._stale_idle_count = 0
         self._last_idle_pending: int | None = None
         self._rate_limit_detected = False
+        self._line_buffer = LineBuffer()
 
     @property
     def rate_limit_detected(self) -> bool:
@@ -97,6 +98,7 @@ class _EventHandler:
         self._received_deltas = False
         self._stale_idle_count = 0
         self._last_idle_pending = None
+        self._line_buffer = LineBuffer()
         with self._pending_tools_lock:
             self._pending_tools.clear()
             self._stats['tool_start_times'].clear()
@@ -182,6 +184,7 @@ class _EventHandler:
                 self._hung.record_powershell_start(shell_id)
 
     def _on_tool_complete(self, event: Any) -> None:
+        self._flush_line_buffer()
         terminal_ui.ui.set_style(None)
         with self._pending_tool_calls_lock:
             self._stats['pending_tool_calls'] = max(0, self._stats['pending_tool_calls'] - 1)
@@ -240,10 +243,13 @@ class _EventHandler:
             return
         for source, text in stream_chunks:
             prefix = "[stderr] " if source == "stderr" else ""
-            logger.info(f"{prefix}{text}")
-            self._output_lines.append(text)
-            if self._item_logger:
-                self._item_logger.log_copilot_output(text)
+            # Buffer chunks into complete lines before emitting.
+            complete_lines = self._line_buffer.add(text)
+            for line in complete_lines:
+                logger.info(f"{prefix}{line}")
+                self._output_lines.append(line)
+                if self._item_logger:
+                    self._item_logger.log_copilot_output(line)
             record_tool_output(self._stats, text)
 
     def _on_usage(self, event: Any) -> None:
@@ -322,14 +328,24 @@ class _EventHandler:
                 pass
         self._stats['idle_task'] = asyncio.create_task(check_still_idle())
 
+    def _flush_line_buffer(self) -> None:
+        """Emit any remaining partial line from the streaming buffer."""
+        remaining = self._line_buffer.flush()
+        if remaining:
+            self._output_lines.append(remaining)
+            if self._item_logger:
+                self._item_logger.log_copilot_output(remaining)
+
     def _on_noop(self, _event: Any) -> None:
         """Ignore informational events needing no processing."""
 
     def _on_session_end(self, _event: Any) -> None:
+        self._flush_line_buffer()
         logger.info("[SDK] Agent signaled complete")
         self._done.set()
 
     def _on_session_error(self, event: Any) -> None:
+        self._flush_line_buffer()
         error_msg = getattr(event.data, 'message', 'Unknown error') if hasattr(event, 'data') else 'Unknown error'
         logger.error(f"\n[SDK] ERROR: {error_msg}")
         if self._item_logger:

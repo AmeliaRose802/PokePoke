@@ -26,7 +26,7 @@ def _make_event(event_type: str, **data_fields: object) -> SimpleNamespace:
     )
 
 
-def test_tool_output_streams_are_logged_incrementally() -> None:
+def test_tool_output_streams_are_line_buffered() -> None:
     loop = asyncio.new_event_loop()
     try:
         asyncio.set_event_loop(loop)
@@ -46,9 +46,46 @@ def test_tool_output_streams_are_logged_incrementally() -> None:
         handler(_make_event("tool.output", stdout="line one\n"))
         handler(_make_event("tool.output", stderr="line two"))
 
+        # "line one\n" is complete -> emitted immediately
+        # "line two" has no newline -> held in buffer
+        assert output_lines == ["line one\n"]
+        assert logger.chunks == ["line one\n"]
+
+        # Session end flushes the remaining partial line
+        handler(_make_event("session.end"))
         assert output_lines == ["line one\n", "line two"]
         assert logger.chunks == ["line one\n", "line two"]
         assert errors == []
+    finally:
+        asyncio.set_event_loop(None)
+        loop.close()
+
+
+def test_tool_output_chunks_reassembled_into_lines() -> None:
+    """Chunks that split mid-word are reassembled into complete lines."""
+    loop = asyncio.new_event_loop()
+    try:
+        asyncio.set_event_loop(loop)
+        done = asyncio.Event()
+        output_lines: list[str] = []
+        errors: list[str] = []
+        logger = DummyLogger()
+
+        handler, _ = create_event_handler(
+            done, output_lines, errors, item_logger=logger, idle_timeout=0.1,
+        )
+
+        # Simulate chunks arriving mid-word
+        handler(_make_event("tool.output", stdout="worktree_"))
+        handler(_make_event("tool.output", stdout="removal.py path "))
+        handler(_make_event("tool.output", stdout="boundary\nvalidation,"))
+        handler(_make_event("tool.output", stdout=" symlink protection\n"))
+
+        assert output_lines == [
+            "worktree_removal.py path boundary\n",
+            "validation, symlink protection\n",
+        ]
+        assert logger.chunks == output_lines
     finally:
         asyncio.set_event_loop(None)
         loop.close()
