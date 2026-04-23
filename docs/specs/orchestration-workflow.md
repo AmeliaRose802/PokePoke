@@ -1,6 +1,7 @@
 ---
 description: Main autonomous workflow loop coordinating work item selection, agent execution, validation, and retry with corrective feedback.
 references:
+  - src/pokepoke/beads/stale_item_recovery.py
   - src/pokepoke/agents/decomposition_agent.py
   - src/pokepoke/orchestration/orchestrator.py
   - src/pokepoke/orchestration/gate_agent_loop.py
@@ -18,6 +19,7 @@ lastUpdated: 2026-04-22
 - Implement autonomous development workflow that processes beads items without human intervention.
 - Coordinate work item selection, worktree creation, agent execution, validation, and retry loops.
 - Reuse the previous gate-agent session for re-verification after a gate rejection when the feature flag enables it.
+- Reclaim stale `in_progress` items from previous orchestrator runs before selecting new ready items.
 - In scope: workflow state machine, retry logic, work item lifecycle.
 - Out of scope: agent implementations, git operations, validation rules.
 
@@ -27,6 +29,7 @@ lastUpdated: 2026-04-22
 - `gate_agent_loop.py`: Gate retry loop, including crash/timeout retries and reverify-session reuse.
 - `decomposition_agent.py`: Creates decomposed children and applies `blocks` dependencies exactly from the agent-provided dependency graph.
 - `work_item_selection.py`: Queries beads for ready items, filters and ranks by priority.
+- `stale_item_recovery.py`: Identifies reclaimable stale `in_progress` items by PokePoke base/worker naming patterns and excludes current-run workers.
 - `work_item_session.py`: Manages per-item execution session with isolated state.
 - `gate_session_tracker.py`: Persists fresh vs resumed gate-session stats for comparison output.
 
@@ -34,6 +37,7 @@ lastUpdated: 2026-04-22
 ## Design Decisions
 - Infinite retry loop with intelligent corrective prompts until validation passes.
 - Work items processed in priority order; ties broken by creation date.
+- Reclaimed stale items are prioritized ahead of fresh ready items so existing worktree progress is reused first.
 - Each work item executes in isolated worktree to prevent conflicts.
 - Validation failures accumulate context for progressively better retry prompts.
 - Continuous mode loops after completion; single-shot mode exits after one item.
