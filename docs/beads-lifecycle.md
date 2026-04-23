@@ -315,7 +315,7 @@ sequenceDiagram
     Note over W2: Worker-4 did redundant work<br/>on already-merged branch
 ```
 
-**Mitigation (planned):** In-memory `completed_this_session` set — the poll loop checks this set before re-scheduling any item returned by `bd ready` or `get_in_progress_items()`. See beads issue `PokePoke-jcdl0`.
+**Mitigation (fixed):** Removed the `get_in_progress_items()` call from the poll loop entirely (PokePoke-jcdl0). The poll loop now only dispatches items from `bd ready`. Crash recovery for orphaned in-progress items from dead sessions is handled once at startup by `recover_stale_items_for_orchestrator()`.
 
 ## Key Files
 

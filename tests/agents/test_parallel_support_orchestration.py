@@ -95,6 +95,27 @@ class TestRunPreflightAndRepoChecks:
         assert ok is False  # None signals system error
         assert result == []
 
+    @patch("pokepoke.agents.parallel_support.handle_preflight_checks", return_value=(True, False))
+    def test_poll_does_not_query_in_progress_items(self, _preflight):
+        """Regression: poll loop must NOT re-dispatch in-progress items (PokePoke-jcdl0).
+
+        Crash recovery is handled at startup by recover_stale_items_for_orchestrator,
+        not in the per-cycle poll. Querying in-progress items every cycle caused a race
+        where completed-but-not-yet-closed items were re-scheduled.
+        """
+        run_logger = MagicMock()
+        repo_fn = Mock(return_value=True)
+        ready_items = [_make_item("r1")]
+        ready_fn = Mock(return_value=ready_items)
+
+        with patch("pokepoke.beads.beads_query.get_in_progress_items") as mock_ip:
+            ok, _failures, result = run_preflight_and_repo_checks(
+                "/repo", run_logger, 0, 5, repo_fn, ready_fn,
+            )
+        assert ok is True
+        assert result == ready_items
+        mock_ip.assert_not_called()
+
 
 class TestCheckLoopExit:
     """Tests for check_loop_exit."""

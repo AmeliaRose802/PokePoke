@@ -319,23 +319,6 @@ def run_preflight_and_repo_checks(
     if ready_items is None:
         run_logger.log_orchestrator("Failed to query beads for work items - system error", level="ERROR")
         return False, consecutive_preflight_failures, []
-    try:
-        from pokepoke.beads.beads_query import get_in_progress_items
-        in_progress = get_in_progress_items()
-        if in_progress:
-            ready_ids = {item.id for item in ready_items}
-            resumed = [it for it in in_progress if it.id not in ready_ids]
-            if resumed:
-                from pokepoke.beads.beads_manifest_utils import unassign_with_retry
-                for it in resumed:
-                    assignee = getattr(it, 'assignee', None) or ''
-                    if assignee.lower().startswith('pokepoke_'):
-                        with contextlib.suppress(Exception):
-                            unassign_with_retry(it.id)
-                run_logger.log_polling(f"Resuming {len(resumed)} in-progress item(s)")
-                ready_items = resumed + ready_items
-    except Exception as e:
-        run_logger.log_orchestrator(f"Failed to fetch in-progress items: {e}", level="WARNING")
     return True, consecutive_preflight_failures, ready_items
 
 def check_loop_exit(
