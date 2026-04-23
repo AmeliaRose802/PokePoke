@@ -377,6 +377,7 @@ class MaintenanceScheduler:
                         agent_cfg.prompt_file,
                         repo_root=pokepoke_repo,
                         needs_worktree=agent_cfg.needs_worktree,
+                        needs_shell=agent_cfg.needs_shell,
                         merge_changes=agent_cfg.merge_changes,
                         model=agent_cfg.model,
                         item_logger=maint_logger,

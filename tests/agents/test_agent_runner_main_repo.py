@@ -11,8 +11,8 @@ from pokepoke.types_agent import CopilotResult
 class TestRunMainRepoAgent:
     """Test _run_main_repo_agent function."""
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.invoke_copilot')
     def test_successful_main_repo_agent(
         self,
         mock_invoke: Mock,
@@ -66,7 +66,7 @@ class TestRunMainRepoAgent:
             agent_item, prompt="cleanup prompt", deny_write=False, model=None, cwd=None, item_logger=None, add_parent_dir=False
         )
 
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.simple_runners.invoke_copilot')
     def test_failed_main_repo_agent(self, mock_invoke: Mock) -> None:
         """Test failed main repo agent returns None."""
         from pokepoke.agents.agent_runner import _run_main_repo_agent
@@ -102,8 +102,8 @@ class TestRunMainRepoAgent:
         stats = _run_main_repo_agent(config, "cleanup prompt")
         assert stats is None
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.invoke_copilot')
     def test_main_repo_agent_write_access_not_denied(
         self,
         mock_invoke: Mock,
@@ -145,8 +145,8 @@ class TestRunMainRepoAgent:
         _, kwargs = mock_invoke.call_args
         assert kwargs['deny_write'] is False
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.invoke_copilot')
     def test_main_repo_agent_with_model(
         self,
         mock_invoke: Mock,

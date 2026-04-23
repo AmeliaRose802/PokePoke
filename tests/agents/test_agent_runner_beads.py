@@ -14,8 +14,8 @@ from pokepoke.types_agent import CopilotResult
 class TestRunBeadsOnlyAgent:
     """Test _run_beads_only_agent function."""
 
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.invoke_copilot')
     def test_successful_beads_agent(
         self,
         mock_invoke: Mock,
@@ -71,7 +71,7 @@ class TestRunBeadsOnlyAgent:
             add_parent_dir=False,
         )
 
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.simple_runners.invoke_copilot')
     def test_failed_beads_agent(self, mock_invoke: Mock) -> None:
         """Test failed beads-only agent."""
         agent_item = BeadsWorkItem(
@@ -106,7 +106,7 @@ class TestRunBeadsOnlyAgent:
 
         assert stats is None
 
-    @patch('pokepoke.agents.agent_runner.invoke_copilot')
+    @patch('pokepoke.agents.simple_runners.invoke_copilot')
     def test_successful_agent_no_parseable_stats_returns_default_stats(self, mock_invoke: Mock) -> None:
         """Test that a successful agent with no parseable stats returns default AgentStats, not None.
 

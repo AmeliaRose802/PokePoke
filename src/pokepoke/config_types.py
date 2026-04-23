@@ -43,6 +43,7 @@ class MaintenanceAgentConfig:
     prompt_file: str = ""
     frequency: int = 5
     needs_worktree: bool = False
+    needs_shell: bool = False
     merge_changes: bool = True
     model: str | None = None
     enabled: bool = True
@@ -63,6 +64,7 @@ class MaintenanceConfig:
                 prompt_file="tech-debt.md",
                 frequency=5,
                 needs_worktree=False,
+                needs_shell=True,
             ),
             MaintenanceAgentConfig(
                 name="Janitor",
@@ -90,6 +92,7 @@ class MaintenanceConfig:
                 prompt_file="code-reviewer.md",
                 frequency=5,
                 needs_worktree=False,
+                needs_shell=True,
                 model="gpt-5.1-codex",
             ),
             MaintenanceAgentConfig(

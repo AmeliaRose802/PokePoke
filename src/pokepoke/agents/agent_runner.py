@@ -17,11 +17,15 @@ from pokepoke.agents.cleanup_agents import (
     run_cleanup_loop,
 )
 from pokepoke.agents.gate_agent_executor import run_gate_agent
+from pokepoke.agents.simple_runners import (
+    _extract_stats,
+    _run_beads_only_agent,
+    _run_main_repo_agent,
+)
 from pokepoke.beads.reconciliation import worktree_branch_has_commits
 from pokepoke.desktop import terminal_ui
 from pokepoke.models.ai_backends import invoke_copilot
 from pokepoke.stats.metrics_context import agent_type_context
-from pokepoke.stats.stats import parse_agent_stats
 from pokepoke.types import AgentStats, BeadsWorkItem
 from pokepoke.types_agent import CopilotResult
 from pokepoke.utils.constants import STATUS_IN_PROGRESS
@@ -39,15 +43,6 @@ if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
 
 __all__ = ['aggregate_cleanup_stats', 'invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent', 'run_beta_tester', 'run_cleanup_loop', 'run_gate_agent', 'run_maintenance_agent', 'run_worktree_cleanup']
-
-
-def _extract_stats(result: CopilotResult) -> AgentStats | None:
-    """Extract stats from a CopilotResult, preferring SDK-captured stats."""
-    if result.stats:
-        return result.stats
-    if result.output:
-        return parse_agent_stats(result.output)
-    return None
 
 
 @dataclass
@@ -79,6 +74,7 @@ def run_maintenance_agent(
     *,
     repo_root: Path | None = None,
     needs_worktree: bool = True,
+    needs_shell: bool = False,
     merge_changes: bool = True,
     model: str | None = None,
     item_logger: 'ItemLogger | None' = None,
@@ -133,6 +129,8 @@ def run_maintenance_agent(
     )
 
     if not needs_worktree:
+        if needs_shell:
+            return _run_main_repo_agent(config, agent_prompt)
         return _run_beads_only_agent(config, agent_prompt)
 
     return _run_worktree_agent(
@@ -140,33 +138,6 @@ def run_maintenance_agent(
         merge_changes=merge_changes,
         parent_agent_id=parent_agent_id
     )
-
-def _run_simple_agent(
-    config: AgentRunnerConfig,
-    agent_prompt: str,
-    *,
-    deny_write: bool = True,
-    cwd: str | None = None,
-    add_parent_dir: bool = False,
-) -> AgentStats | None:
-    """Run a simple agent in the main repo with configurable write access."""
-    logger.info("Running %s (%s)%s", config.agent_name, "no write" if deny_write else "write enabled", f", model={config.model}" if config.model else "")
-    normalized = config.agent_name.lower().replace(" ", "_")
-    with agent_type_context(normalized):
-        result = invoke_copilot(config.agent_item, prompt=agent_prompt, deny_write=deny_write, model=config.model, cwd=cwd, item_logger=config.item_logger, add_parent_dir=add_parent_dir)
-    if result.success:
-        logger.info("%s completed", config.agent_name)
-        return _extract_stats(result) or AgentStats()
-    logger.error("%s failed: %s", config.agent_name, result.error)
-    return None
-
-def _run_beads_only_agent(config: AgentRunnerConfig, agent_prompt: str, cwd: str | None = None) -> AgentStats | None:
-    """Run a beads-only maintenance agent in the main repo."""
-    return _run_simple_agent(config, agent_prompt, deny_write=True, cwd=cwd)
-
-def _run_main_repo_agent(config: AgentRunnerConfig, agent_prompt: str, cwd: str | None = None, add_parent_dir: bool = False) -> AgentStats | None:
-    """Run a maintenance agent in the main repo WITH write access."""
-    return _run_simple_agent(config, agent_prompt, deny_write=False, cwd=cwd, add_parent_dir=add_parent_dir)
 
 def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:
     """Run worktree cleanup agent to merge/delete stale worktrees."""

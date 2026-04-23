@@ -21,7 +21,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.handle_worktree_merge')  # Mock the extracted function
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')  # Patch at module level
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('os.chdir')
     @patch('os.getcwd')
@@ -254,7 +254,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
@@ -316,7 +316,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.invoke_merge_conflict_cleanup_agent')
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
@@ -427,7 +427,7 @@ class TestRunWorktreeAgent:
     @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
     @patch('pokepoke.agents.agent_runner.invoke_cleanup_agent')
     @patch('pokepoke.git.git_operations.check_main_repo_ready_for_merge')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('os.chdir')
     @patch('os.getcwd')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
@@ -501,7 +501,7 @@ class TestWorktreeAgentMergeChangeFalse:
     """Test _run_worktree_agent with merge_changes=False (lines 281-284)."""
 
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
@@ -531,7 +531,7 @@ class TestWorktreeAgentMergeChangeFalse:
         mock_cleanup.assert_called_once_with("maint-test", force=True)
 
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
@@ -563,7 +563,7 @@ class TestWorktreeAgentFinallyCleanupException:
 
     @patch('pokepoke.agents.agent_runner.add_uncleaned_worktree')
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
@@ -598,7 +598,7 @@ class TestWorktreeAgentCleanupFailureSetsResultFalse:
     @patch('pokepoke.agents.agent_runner.worktree_branch_has_commits')
     @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
     @patch('pokepoke.agents.agent_runner.cleanup_worktree')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')
@@ -862,7 +862,7 @@ class TestWorktreeAgentSandbox:
     """Test that work agents are sandboxed without --add-dir parent repo access."""
 
     @patch('pokepoke.agents.agent_runner.handle_worktree_merge')
-    @patch('pokepoke.agents.agent_runner.parse_agent_stats')
+    @patch('pokepoke.agents.simple_runners.parse_agent_stats')
     @patch('pokepoke.agents.agent_runner.run_cleanup_loop')
     @patch('pokepoke.agents.agent_runner.invoke_copilot')
     @patch('pokepoke.agents.agent_runner.create_worktree')

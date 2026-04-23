@@ -130,6 +130,64 @@ class TestRunMaintenanceAgent:
         assert "failed to start" in caplog.text
 
 
+class TestNeedsShellAgent:
+    """Test needs_shell routes through _run_main_repo_agent."""
+
+    @patch('pokepoke.agents.agent_runner._run_main_repo_agent')
+    @patch('pathlib.Path.read_text')
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.cwd')
+    def test_needs_shell_routes_to_main_repo_agent(
+        self,
+        mock_cwd: Mock,
+        mock_exists: Mock,
+        mock_read: Mock,
+        mock_run_main: Mock,
+    ) -> None:
+        """needs_shell=True without worktree should use _run_main_repo_agent."""
+        mock_cwd.return_value = Path("/fake/repo")
+        mock_exists.return_value = True
+        mock_read.return_value = "Agent instructions"
+        mock_run_main.return_value = AgentStats()
+
+        stats = run_maintenance_agent(
+            "Tech Debt",
+            "tech-debt.md",
+            needs_worktree=False,
+            needs_shell=True,
+        )
+
+        assert stats is not None
+        mock_run_main.assert_called_once()
+
+    @patch('pokepoke.agents.agent_runner._run_beads_only_agent')
+    @patch('pathlib.Path.read_text')
+    @patch('pathlib.Path.exists')
+    @patch('pathlib.Path.cwd')
+    def test_no_shell_routes_to_beads_only(
+        self,
+        mock_cwd: Mock,
+        mock_exists: Mock,
+        mock_read: Mock,
+        mock_run_beads: Mock,
+    ) -> None:
+        """needs_shell=False (default) without worktree should use _run_beads_only_agent."""
+        mock_cwd.return_value = Path("/fake/repo")
+        mock_exists.return_value = True
+        mock_read.return_value = "Agent instructions"
+        mock_run_beads.return_value = AgentStats()
+
+        stats = run_maintenance_agent(
+            "Code Review",
+            "code-reviewer.md",
+            needs_worktree=False,
+            needs_shell=False,
+        )
+
+        assert stats is not None
+        mock_run_beads.assert_called_once()
+
+
 class TestMaintenanceAgentPromptMissing:
     """Test run_maintenance_agent prompt file not found (lines 139-140)."""
 
