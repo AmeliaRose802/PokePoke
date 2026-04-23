@@ -60,6 +60,15 @@ describe("SettingsPage", () => {
     expect(screen.getByText("Loading configuration…")).toBeInTheDocument();
   });
 
+  it("should show error if getConfig times out", async () => {
+    mockGetConfig.mockImplementation(() => new Promise(() => {})); // never resolves
+    render(<SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />);
+    // Wait for timeout (10s)
+    await waitFor(() => {
+      expect(screen.getByText("Could not load configuration.")).toBeInTheDocument();
+    }, { timeout: 11000 });
+  });
+
   it("should load and display configuration", async () => {
     render(<SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />);
 

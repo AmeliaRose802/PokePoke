@@ -46,7 +46,10 @@ export function SettingsPage({ getConfig, saveConfig, getAvailableModels, onClos
   // Load config on mount
   useEffect(() => {
     let active = true;
-    getConfig().then((resp) => {
+    // Add timeout to getConfig
+    const timeoutMs = 10000;
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+    Promise.race([getConfig(), timeoutPromise]).then((resp) => {
       if (!active) return;
       setLoading(false);
       if (!resp) return;
