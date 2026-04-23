@@ -160,7 +160,7 @@ def _run_conflict_cleanup_outside_lock(
 
     for attempt in range(1, max_agent_retries + 1):
         suffix = f" (attempt {attempt}/{max_agent_retries})" if max_agent_retries > 1 else ""
-        tracker.begin_step("3b", f"Invoking merge conflict cleanup agent{suffix} (outside merge lock)…")
+        tracker.begin_step("8C", f"Invoking merge conflict cleanup agent{suffix} (outside merge lock)…")
         logger.info("   Invoking cleanup agent to resolve conflicts in isolated worktree...%s", suffix)
         with cleanup_lock():
             success, _ = invoke_merge_conflict_cleanup_agent(
@@ -173,7 +173,7 @@ def _run_conflict_cleanup_outside_lock(
                 item_logger=ctx.item_logger,
             )
         if success:
-            tracker.complete_step("3b", f"Merge conflict cleanup agent succeeded{suffix}")
+            tracker.complete_step("8C", f"Merge conflict cleanup agent succeeded{suffix}")
             return True
 
         if attempt < max_agent_retries:
@@ -186,9 +186,9 @@ def _run_conflict_cleanup_outside_lock(
                 ctx.item_logger.log_error(
                     f"⚠️  ORCHESTRATOR: Conflict cleanup failed{suffix} — retrying in {backoff}s"
                 )
-            tracker.fail_step("3b", f"Cleanup failed{suffix}, retrying in {backoff}s")
+            tracker.fail_step("8C", f"Cleanup failed{suffix}, retrying in {backoff}s")
             time.sleep(backoff)
 
-    tracker.fail_step("3b", f"Merge conflict cleanup agent failed after {max_agent_retries} attempts")
+    tracker.fail_step("8C", f"Merge conflict cleanup agent failed after {max_agent_retries} attempts")
     logger.error("   Cleanup failed after %d attempts.", max_agent_retries)
     return False

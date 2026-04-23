@@ -40,6 +40,8 @@ MERGE_STEPS: list[dict[str, str]] = [
     {"id": "6", "label": "Sync & prepare main"},
     {"id": "7", "label": "Checkout target branch"},
     {"id": "8", "label": "Merge --no-ff branch"},
+    {"id": "8C", "label": "Merge conflict cleanup"},
+    {"id": "1r", "label": "Re-acquire merge lock"},
     {"id": "9", "label": "Post-merge validation"},
     {"id": "10", "label": "Worktree remove + branch delete"},
     {"id": "11", "label": "Release merge lock — DONE"},
@@ -64,6 +66,9 @@ MERGE_EDGES: list[dict[str, str]] = [
     {"from": "6", "to": "7"},
     {"from": "7", "to": "8"},
     {"from": "8", "to": "9", "label": "Success"},
+    {"from": "8", "to": "8C", "label": "Conflict"},
+    {"from": "8C", "to": "1r"},
+    {"from": "1r", "to": "8"},
     {"from": "9", "to": "10", "label": "Pass"},
     {"from": "10", "to": "11"},
 ]

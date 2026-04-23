@@ -107,6 +107,7 @@ def _map_source_to_tests(
             "tests/models/test_copilot_sdk_integration.py",
         ],
         "sdk_beads_tracker": ["tests/utils/test_sdk_event_handler.py"],
+        "merge_conflict_retry": ["tests/worktrees/test_worktree_merge_handler.py"],
     }
 
     for src_file in staged_source:
