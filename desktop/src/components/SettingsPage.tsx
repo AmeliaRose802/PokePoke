@@ -46,29 +46,38 @@ export function SettingsPage({ getConfig, saveConfig, getAvailableModels, onClos
   // Load config on mount
   useEffect(() => {
     let active = true;
-    getConfig().then((resp) => {
-      if (!active) return;
-      setLoading(false);
-      if (!resp) return;
-      setConfig(resp.config);
-      const models = resp.config.models ?? {};
-      const abTesting = isAbTestingEnabled(models);
-      setAbTestingEnabled(abTesting);
-      setDefaultModel(models.default ?? "");
-      setFallbackModel(models.fallback ?? "");
-      setCandidateModels(models.candidate_models ?? []);
-      const mcpServer = resp.config.mcp_server ?? {};
-      setMcpEnabled(mcpServer.enabled ?? false);
-      setMcpName(mcpServer.name ?? "");
-      setMcpRestartScript(mcpServer.restart_script ?? "");
-      setMaxParallelAgents(Math.max(1, resp.config.max_parallel_agents ?? 1));
+    // Add timeout to getConfig
+    const timeoutMs = 10000;
+    const timeoutPromise = new Promise<null>((resolve) => setTimeout(() => resolve(null), timeoutMs));
+    Promise.race([getConfig(), timeoutPromise])
+      .then((resp) => {
+        if (!active) return;
+        setLoading(false);
+        if (!resp) return;
+        setConfig(resp.config);
+        const models = resp.config.models ?? {};
+        const abTesting = isAbTestingEnabled(models);
+        setAbTestingEnabled(abTesting);
+        setDefaultModel(models.default ?? "");
+        setFallbackModel(models.fallback ?? "");
+        setCandidateModels(models.candidate_models ?? []);
+        const mcpServer = resp.config.mcp_server ?? {};
+        setMcpEnabled(mcpServer.enabled ?? false);
+        setMcpName(mcpServer.name ?? "");
+        setMcpRestartScript(mcpServer.restart_script ?? "");
+        setMaxParallelAgents(Math.max(1, resp.config.max_parallel_agents ?? 1));
 
-      // Load maintenance agents
-      const maintenance = resp.config.maintenance;
-      if (maintenance && Array.isArray(maintenance.agents)) {
-        setMaintenanceAgents(maintenance.agents);
-      }
-    });
+        // Load maintenance agents
+        const maintenance = resp.config.maintenance;
+        if (maintenance && Array.isArray(maintenance.agents)) {
+          setMaintenanceAgents(maintenance.agents);
+        }
+      })
+      .catch(() => {
+        if (!active) return;
+        setLoading(false);
+        setConfig(null);
+      });
     // Fetch available models from SDK registry
     if (getAvailableModels) {
       getAvailableModels().then((resp) => {
