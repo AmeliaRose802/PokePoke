@@ -118,12 +118,12 @@ def reconcile_completed_item(
 ) -> tuple[bool, dict[str, bool]]:
     """Detect whether work already landed even if the Copilot session failed.
 
-    Reconciliation is considered successful when any of these hold:
-    - All three original checks pass (fully merged and cleaned up).
-    - ``beads_closed`` is True — the beads item was explicitly closed by an
-      agent, which is strong evidence the work completed.  Commits may still
-      live on the worktree branch (not yet merged) and the worktree may not
-      have been cleaned up.
+    Reconciliation is considered successful only when:
+    - ``beads_closed`` is True, and
+    - ``commits_on_default`` is True.
+
+    This prevents false positives where an item was closed but commits remain
+    unmerged on a worktree branch.
     """
     repo_root = Path.cwd()
     evidence: dict[str, bool] = {
@@ -133,7 +133,7 @@ def reconcile_completed_item(
         "worktree_cleaned": is_worktree_cleaned(item.id, worktree_path),
     }
 
-    reconciled = evidence["beads_closed"]
+    reconciled = evidence["beads_closed"] and evidence["commits_on_default"]
 
     if run_logger:
         run_logger.log_orchestrator(
