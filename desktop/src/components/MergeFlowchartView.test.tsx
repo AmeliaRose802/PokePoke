@@ -90,6 +90,23 @@ describe("MergeFlowchartView", () => {
     expect(screen.queryByTestId("merge-step-16")).not.toBeInTheDocument();
   });
 
+  it("renders pending steps when no step has started yet", async () => {
+    const run = mkRun();
+    const state = mkFlowState({ current_run: run });
+    const getMergeFlowState = vi.fn().mockResolvedValue(state);
+
+    render(<MergeFlowchartView getMergeFlowState={getMergeFlowState} />);
+
+    await vi.waitFor(() => {
+      expect(screen.getByTestId("merge-step-0")).toBeInTheDocument();
+    });
+
+    expect(screen.getByTestId("merge-step-1")).toBeInTheDocument();
+    expect(screen.getByTestId("merge-step-2")).toBeInTheDocument();
+    expect(screen.getByTestId("merge-step-11")).toBeInTheDocument();
+    expect(screen.getByTestId("merge-step-16")).toBeInTheDocument();
+  });
+
   it("shows Live indicator for current run", async () => {
     const run = mkRun({ "0": { status: "active" } });
     const state = mkFlowState({ current_run: run });
