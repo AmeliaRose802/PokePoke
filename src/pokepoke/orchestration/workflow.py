@@ -315,7 +315,6 @@ def process_work_item(  # noqa: C901
 
             if not cleanup_success:
                 _gt.mark_failure("3")
-                result.success = False
                 _log_failure(run_logger, item_logger, request_count)
                 return _fail_result(request_count=request_count, stats=accumulated_stats,
                                     cleanup_agent_runs=cleanup_agent_runs, gate_agent_runs=gate_agent_runs,
