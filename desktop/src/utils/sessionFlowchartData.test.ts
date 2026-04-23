@@ -112,9 +112,42 @@ describe("buildSessionFlowchart", () => {
       work_item_id: "item-1",
     });
     const data = buildSessionFlowchart([maint, work], null);
-    expect(data.maintenance).toHaveLength(1);
-    expect(data.maintenance[0].label).toBe("Worktree Cleanup");
+    // Maintenance agents are now included in completed/active, not a separate array
+    expect(data.maintenance).toHaveLength(0);
     expect(data.active).toHaveLength(1);
+    expect(data.completed).toHaveLength(1);
+    // Maintenance slot should be in completed
+    const maintSlot = data.completed.find((s) => s.id === "m1");
+    expect(maintSlot).toBeDefined();
+    expect(maintSlot?.isMaintenance).toBe(true);
+    expect(maintSlot?.work?.label).toBe("Worktree Cleanup");
+  });
+
+  it("includes running maintenance agents in activeCount", () => {
+    const maint = mkAgent({
+      agent_id: "m1",
+      name: "Tech Debt Agent",
+      status: "running",
+      agent_type: "tech_debt_agent",
+    });
+    const work1 = mkAgent({
+      agent_id: "w1",
+      status: "running",
+      work_item_id: "item-1",
+    });
+    const work2 = mkAgent({
+      agent_id: "w2",
+      status: "running",
+      work_item_id: "item-2",
+    });
+    const data = buildSessionFlowchart([maint, work1, work2], null);
+    // activeCount should include maintenance agent + 2 work agents = 3
+    expect(data.activeCount).toBe(3);
+    expect(data.active).toHaveLength(3);
+    // Find the maintenance slot
+    const maintSlot = data.active.find((s) => s.isMaintenance);
+    expect(maintSlot).toBeDefined();
+    expect(maintSlot?.work?.label).toBe("Tech Debt Agent");
   });
 
   it("groups agents by work_item_id", () => {

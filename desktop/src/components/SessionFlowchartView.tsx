@@ -8,8 +8,8 @@ import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 import type { AgentInfo, SessionStats } from "../types";
 import { useBridge } from "../useBridge";
 import { buildSessionFlowchart, type PipelineStage } from "../utils/sessionFlowchartData";
-import { COL_SPACING, DOT_R, EDGE_GAP, fanOutPath, FONT, MIN_SVG_W, NODE_H, NODE_RX, NODE_W, PADDING, ROW_H, slotRowCount } from "../utils/sessionFlowchartLayout";
-import { Diamond, SlotColumn, SvgDefs, VEdge } from "./SessionFlowchartSvg";
+import { COL_SPACING, EDGE_GAP, fanOutPath, FONT, MIN_SVG_W, PADDING, ROW_H, slotRowCount } from "../utils/sessionFlowchartLayout";
+import { Diamond, SlotColumn, SvgDefs } from "./SessionFlowchartSvg";
 
 interface Props {
   agents: AgentInfo[];
@@ -36,14 +36,13 @@ export function SessionFlowchartView({ agents, stats, agentName, currentSessionI
     const cStartY = orchY + DIAMOND_RY + EDGE_GAP + 18;
     const cColXs = data.completed.map((_, i) => cx - cc * COL_SPACING / 2 + COL_SPACING / 2 + i * COL_SPACING);
     const cHeight = data.completed.reduce((m, s) => Math.max(m, slotRowCount(s)), 0) * ROW_H + 30;
-    const mStartY = cc > 0 ? cStartY + cHeight + 30 : orchY + DIAMOND_RY + 60;
-    const mHeight = data.maintenance.length > 0 ? data.maintenance.length * ROW_H + 20 : 0;
-    const sepY = mStartY + mHeight + 20, aOrchY = sepY + 50;
+    const sepY = cc > 0 ? cStartY + cHeight + 30 : orchY + DIAMOND_RY + 60;
+    const aOrchY = sepY + 50;
     const aStartY = aOrchY + DIAMOND_RY + EDGE_GAP + 18;
     const aColXs = data.active.map((_, i) => cx - ac * COL_SPACING / 2 + COL_SPACING / 2 + i * COL_SPACING);
     const aHeight = data.active.reduce((m, s) => Math.max(m, slotRowCount(s)), 0) * ROW_H + 40;
     const svgH = ac > 0 ? aStartY + aHeight : sepY + 80;
-    return { svgW, svgH, cx, orchY, cStartY, cColXs, mStartY, sepY, aOrchY, aStartY, aColXs };
+    return { svgW, svgH, cx, orchY, cStartY, cColXs, sepY, aOrchY, aStartY, aColXs };
   }, [data, DIAMOND_RY]);
 
   const onMouseDown = useCallback((e: React.MouseEvent) => {
@@ -146,15 +145,6 @@ export function SessionFlowchartView({ agents, stats, agentName, currentSessionI
               <Diamond cx={layout.cx} cy={layout.orchY} label="Orchestrator" sub="schedule / drain / maintain" stroke="#58a6ff" fill="rgba(88,166,255,0.08)" />
               {layout.cColXs.map((colX, i) => <path key={`cf-${i}`} d={fanOutPath(layout.cx, layout.orchY, colX, layout.cStartY)} fill="none" stroke="#2ea043" strokeWidth={1.8} markerEnd="url(#arr-g)" />)}
               {data.completed.map((slot, i) => <SlotColumn key={slot.id} slot={slot} centerX={layout.cColXs[i]} startY={layout.cStartY} onStageClick={handleStageClick} />)}
-            </g>}
-            {data.maintenance.length > 0 && <g opacity={0.4}>
-              {data.maintenance.map((m, i) => <g key={`mt-${i}`}>
-                <rect x={layout.cx - NODE_W / 2} y={layout.mStartY + i * ROW_H} width={NODE_W} height={NODE_H} rx={NODE_RX} fill="rgba(121,192,255,0.06)" stroke="#79c0ff" strokeWidth={1.2} />
-                <circle cx={layout.cx - NODE_W / 2 + 16} cy={layout.mStartY + i * ROW_H + NODE_H / 2} r={DOT_R} fill="#79c0ff" />
-                <text x={layout.cx - NODE_W / 2 + 26} y={layout.mStartY + i * ROW_H + NODE_H / 2 - 5} fontSize={10} fill="#e6edf3" fontFamily={FONT}>{m.label}</text>
-                <text x={layout.cx - NODE_W / 2 + 26} y={layout.mStartY + i * ROW_H + NODE_H / 2 + 8} fontSize={8.5} fill="#79c0ff" fontFamily={FONT}>{m.detail}</text>
-                {i < data.maintenance.length - 1 && <VEdge x={layout.cx} y1={layout.mStartY + i * ROW_H + NODE_H} y2={layout.mStartY + (i + 1) * ROW_H - 2} status="done" />}
-              </g>)}
             </g>}
             {data.active.length > 0 && <>
               <line x1={20} y1={layout.sepY} x2={layout.svgW - 20} y2={layout.sepY} stroke="#30363d" strokeWidth={1} strokeDasharray="6 4" />

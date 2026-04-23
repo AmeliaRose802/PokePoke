@@ -38,6 +38,7 @@ export interface FlowchartSlot {
   outcome: SlotOutcome;
   attempts: number;
   hasRetryArc: boolean;
+  isMaintenance?: boolean;
 }
 
 /** Aggregated session flowchart data */
@@ -161,6 +162,7 @@ export function buildSessionFlowchart(
   for (const agent of sessionAgents) {
     if (isMaintenance(agent)) {
       maintenanceList.push(agent);
+      // Maintenance agents are now included in work slots, not separate
       continue;
     }
     const key = agent.work_item_id ?? agent.agent_id;
@@ -259,19 +261,38 @@ export function buildSessionFlowchart(
     });
   }
 
+  // Convert maintenance agents to slots
+  for (const mAgent of maintenanceList) {
+    const isActive = mAgent.status === "running";
+    const maintenanceSlot: FlowchartSlot = {
+      id: mAgent.agent_id,
+      shortId: shortId(mAgent.agent_id),
+      title: mAgent.name ?? resolveAgentType(mAgent),
+      work: toStage(mAgent, mAgent.name ?? resolveAgentType(mAgent)),
+      gate: null,
+      merge: null,
+      cleanup: null,
+      retryMerge: null,
+      outcome: isActive ? "active" : "success",
+      attempts: 1,
+      hasRetryArc: false,
+      isMaintenance: true,
+    };
+    slots.push(maintenanceSlot);
+  }
+
   const completed = slots.filter((s) => s.outcome !== "active");
   const active = slots.filter((s) => s.outcome === "active");
 
-  const maintenance: PipelineStage[] = maintenanceList.map((a) => {
-    const stage = toStage(a, a.name ?? resolveAgentType(a));
-    return stage;
-  });
+  // Legacy maintenance array kept for backward compatibility but now empty
+  // since maintenance agents are included in active/completed slots
+  const maintenance: PipelineStage[] = [];
 
   return {
     completed,
     active,
     maintenance,
-    merged: completed.filter((s) => s.outcome === "success").length,
+    merged: completed.filter((s) => s.outcome === "success" && !s.isMaintenance).length,
     activeCount: active.length,
     deferred: completed.filter((s) => s.outcome === "deferred").length,
     decomposed: completed.filter((s) => s.outcome === "decomposed").length,
