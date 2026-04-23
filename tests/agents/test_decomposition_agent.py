@@ -157,18 +157,20 @@ class TestParseSubtasksFromOutput:
     """Tests for parsing SDK output into SubTask objects."""
 
     def test_parses_json_array(self) -> None:
-        output = '```json\n[{"title": "Add input validation to parser", "description": "Fix parser.py"}]\n```'
+        output = '```json\n[{"title": "Add input validation to parser", "description": "Fix parser.py", "depends_on": []}]\n```'
         subtasks = _parse_subtasks_from_output(output, default_priority=2)
         assert len(subtasks) == 1
         assert subtasks[0].title == "Add input validation to parser"
         assert subtasks[0].description == "Fix parser.py"
         assert subtasks[0].priority == 2
+        assert subtasks[0].depends_on == []
 
     def test_parses_bare_json_array(self) -> None:
-        output = '[{"title": "Refactor the config loader module", "description": "desc"}]'
+        output = '[{"title": "Refactor the config loader module", "description": "desc", "depends_on": ["Prepare shared config helpers"]}]'
         subtasks = _parse_subtasks_from_output(output, default_priority=1)
         assert len(subtasks) == 1
         assert subtasks[0].priority == 1
+        assert subtasks[0].depends_on == ["Prepare shared config helpers"]
 
     def test_returns_empty_on_no_json(self) -> None:
         assert _parse_subtasks_from_output("No JSON here", default_priority=2) == []
@@ -198,13 +200,42 @@ class TestParseSubtasksFromOutput:
 
     def test_multiple_valid_subtasks(self) -> None:
         output = json.dumps([
-            {"title": "Add retry logic to the query client", "description": "d1"},
-            {"title": "Extract filter class from selection module", "description": "d2"},
-            {"title": "Add integration tests for the pipeline", "description": "d3"},
+            {"title": "Add retry logic to the query client", "description": "d1", "depends_on": []},
+            {"title": "Extract filter class from selection module", "description": "d2", "depends_on": ["Add retry logic to the query client"]},
+            {"title": "Add integration tests for the pipeline", "description": "d3", "depends_on": ["Extract filter class from selection module"]},
         ])
         subtasks = _parse_subtasks_from_output(output, default_priority=0)
         assert len(subtasks) == 3
         assert all(s.priority == 0 for s in subtasks)
+        assert subtasks[1].depends_on == ["Add retry logic to the query client"]
+
+    def test_depends_on_string_is_normalized_to_list(self) -> None:
+        output = json.dumps([
+            {
+                "title": "Add parser validation and tests",
+                "description": "d1",
+                "depends_on": "Create parser helper utilities",
+            },
+        ])
+        subtasks = _parse_subtasks_from_output(output, default_priority=2)
+        assert len(subtasks) == 1
+        assert subtasks[0].depends_on == ["Create parser helper utilities"]
+
+    def test_depends_on_deduplicates_values(self) -> None:
+        output = json.dumps([
+            {
+                "title": "Add parser validation and tests",
+                "description": "d1",
+                "depends_on": [
+                    "Create parser helper utilities",
+                    "create parser helper utilities",
+                    "Create parser helper utilities",
+                ],
+            },
+        ])
+        subtasks = _parse_subtasks_from_output(output, default_priority=2)
+        assert len(subtasks) == 1
+        assert subtasks[0].depends_on == ["Create parser helper utilities"]
 
 
 # ---------------------------------------------------------------------------
@@ -592,7 +623,7 @@ class TestRunDecomposition:
     @patch(f"{_DECOMP}._create_child_item")
     @patch(f"{_DECOMP}._get_existing_child_titles", return_value=set())
     @patch(f"{_DECOMP}._invoke_sdk_for_decomposition")
-    def test_creates_blocking_deps_between_siblings(
+    def test_creates_only_agent_specified_blocking_deps(
         self,
         mock_sdk: MagicMock,
         mock_existing: MagicMock,
@@ -605,19 +636,18 @@ class TestRunDecomposition:
     ) -> None:
         item = _make_item()
         mock_sdk.return_value = [
-            SubTask(title="First subtask from analysis", description="d1", priority=2),
-            SubTask(title="Second subtask from analysis", description="d2", priority=2),
-            SubTask(title="Third subtask from analysis", description="d3", priority=2),
+            SubTask(title="First subtask from analysis", description="d1", priority=2, depends_on=[]),
+            SubTask(title="Second subtask from analysis", description="d2", priority=2, depends_on=["First subtask from analysis"]),
+            SubTask(title="Third subtask from analysis", description="d3", priority=2, depends_on=[]),
         ]
         mock_create.side_effect = ["child-1", "child-2", "child-3"]
         mock_update.return_value = True
 
         run_decomposition(item, failure_count=3)
 
-        # child-1 blocks child-2, child-2 blocks child-3
-        assert mock_block_dep.call_count == 2
+        # Only dependency declared by the agent is added.
+        assert mock_block_dep.call_count == 1
         mock_block_dep.assert_any_call("child-1", "child-2")
-        mock_block_dep.assert_any_call("child-2", "child-3")
 
     @patch(f"{_DECOMP}._delete_child_item")
     @patch("pokepoke.beads.sdk_beads_tracker.record_items_created")

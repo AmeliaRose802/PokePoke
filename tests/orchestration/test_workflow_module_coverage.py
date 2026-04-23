@@ -532,19 +532,26 @@ class TestProcessWorkItemCopilotRetryOnFailure:
         assert result.success is True
         assert call_count["n"] == 2
 
-    def test_non_timeout_failure_clears_resume_state(self, monkeypatch, _mock_workflow_deps):
-        """Non-timeout failure clears resume_session_id."""
+    def test_non_timeout_failure_preserves_session_for_retry(self, monkeypatch, _mock_workflow_deps):
+        """Non-timeout failure keeps the SDK session for the next retry."""
         _mock_workflow_deps.max_copilot_failure_retries = 1
         monkeypatch.setattr("pokepoke.orchestration.workflow_helpers.create_worktree", lambda *a, **kw: Path("/tmp/wt"))
-        # First: timeout failure with session, second: non-timeout failure
+        invoke_calls: list[dict[str, object]] = []
         call_n = {"n": 0}
         def fake_invoke(*a, **kw):
+            invoke_calls.append({"session_id": kw.get("session_id"), "is_resume": kw.get("is_resume")})
             call_n["n"] += 1
             if call_n["n"] == 1:
-                return _timeout_copilot()
-            return _fail_copilot(error="syntax error")  # no timeout keyword
+                return _fail_copilot(
+                    error="syntax error",
+                    session_id="sess-crash-1",
+                    last_output_summary="partial crash output",
+                )
+            return _ok_copilot(session_id="sess-crash-1")
         monkeypatch.setattr("pokepoke.orchestration.workflow.invoke_copilot", fake_invoke)
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
+        monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
+        monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
 
         retry_n = {"n": 0}
         def fake_retry(*a, **kw):
@@ -560,6 +567,10 @@ class TestProcessWorkItemCopilotRetryOnFailure:
         )
         result = process_work_item(_item(), interactive=False)
         assert result.success is False
+        assert invoke_calls == [
+            {"session_id": None, "is_resume": False},
+            {"session_id": "sess-crash-1", "is_resume": True},
+        ]
 
 
 class TestProcessWorkItemRepoPath:
