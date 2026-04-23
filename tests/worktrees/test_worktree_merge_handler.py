@@ -238,6 +238,23 @@ def test_perform_first_merge_succeeds(
     mock_add.assert_not_called()
 
 
+@patch("pokepoke.utils.shutdown.request_shutdown")
+@patch("pokepoke.worktrees.worktree_merge_handler.merge_worktree")
+@patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
+def test_perform_merge_invalid_result_type_halts(
+    mock_check, mock_merge, mock_shutdown,
+) -> None:
+    """Non-MergeResult return from merge_worktree is an invariant violation and must halt."""
+    mock_check.return_value = (True, "")
+    mock_merge.return_value = (False, ["conflict.py"])
+
+    ctx = _make_merge_context(agent_id="item-1", worktree_path=Path("C:/wt"), repo_root=Path("C:/repo"))
+    success, cleaned = perform_worktree_merge(ctx)
+    assert success is False
+    assert cleaned is False
+    mock_shutdown.assert_called_once()
+
+
 @patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
 @patch("pokepoke.worktrees.worktree_merge_handler.invoke_cleanup_agent")
 @patch("pokepoke.git.git_operations.check_main_repo_ready_for_merge")
