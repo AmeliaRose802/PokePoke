@@ -310,13 +310,6 @@ export function AgentsPanel({
       return children.some(treeHasRunning);
     };
 
-    const treeHasFailure = (agent: AgentInfo): boolean => {
-      if (agent.status === "failed") return true;
-      const children =
-        sessionChildrenByParent.get(cardIdForAgent(agent)) ?? sessionChildrenByParent.get(agent.agent_id) ?? [];
-      return children.some(treeHasFailure);
-    };
-
     const activeRootAgents = sessionRootAgents.filter((agent) => isHistoryAgent(agent) || treeHasRunning(agent));
     const completedRootAgents = sessionRootAgents.filter((agent) => !isHistoryAgent(agent) && !treeHasRunning(agent));
 
@@ -335,7 +328,7 @@ export function AgentsPanel({
           (sum, a) => sum + countTreeNodes(a, sessionChildrenByParent), 0,
         );
         const runningCount = wiGroup.agents.filter((a) => treeHasRunning(a)).length;
-        const failCount = wiGroup.agents.filter((a) => !treeHasRunning(a) && treeHasFailure(a)).length;
+        const failCount = wiGroup.agents.filter((a) => !treeHasRunning(a) && a.status === "failed").length;
         const okCount = wiGroup.agents.length - runningCount - failCount;
 
         const summaryParts: string[] = [];
@@ -363,9 +356,12 @@ export function AgentsPanel({
 
     const renderedActiveAgents = renderGroupedAgentSection(activeRootAgents);
 
-    // Split completed agents into successes and failures
-    const completedSuccessAgents = completedRootAgents.filter((agent) => !treeHasFailure(agent));
-    const completedFailedAgents = completedRootAgents.filter(treeHasFailure);
+    // Split completed agents into successes and failures.
+    // Use the root agent's own status — not treeHasFailure — so that items
+    // whose gate child failed transiently but ultimately succeeded are placed
+    // in the success section.  Child failures remain visible via badges.
+    const completedSuccessAgents = completedRootAgents.filter((agent) => agent.status !== "failed");
+    const completedFailedAgents = completedRootAgents.filter((agent) => agent.status === "failed");
     const renderedSuccessAgents = renderGroupedAgentSection(completedSuccessAgents);
     const renderedFailedAgents = renderGroupedAgentSection(completedFailedAgents);
 
