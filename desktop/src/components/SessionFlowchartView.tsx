@@ -3,9 +3,10 @@
  * SVG primitive components are in SessionFlowchartSvg.tsx.
  */
 
-import { useCallback, useMemo, useRef, useState } from "react";
+import { useCallback, useEffect, useMemo, useRef, useState } from "react";
 
 import type { AgentInfo, SessionStats } from "../types";
+import { useBridge } from "../useBridge";
 import { buildSessionFlowchart, type PipelineStage } from "../utils/sessionFlowchartData";
 import { COL_SPACING, DOT_R, EDGE_GAP, fanOutPath, FONT, MIN_SVG_W, NODE_H, NODE_RX, NODE_W, PADDING, ROW_H, slotRowCount } from "../utils/sessionFlowchartLayout";
 import { Diamond, SlotColumn, SvgDefs, VEdge } from "./SessionFlowchartSvg";
@@ -19,10 +20,12 @@ interface Props {
 }
 
 export function SessionFlowchartView({ agents, stats, agentName, currentSessionId, activeModel }: Props) {
+  const { getAgentDetail } = useBridge();
   const canvasRef = useRef<HTMLDivElement>(null);
   const [dragging, setDragging] = useState(false);
   const dragRef = useRef({ x: 0, y: 0, sl: 0, st: 0 });
   const [selectedStage, setSelectedStage] = useState<PipelineStage | null>(null);
+  const [selectedStageDetail, setSelectedStageDetail] = useState<AgentInfo | null>(null);
   const data = useMemo(() => buildSessionFlowchart(agents, currentSessionId), [agents, currentSessionId]);
   const { DIAMOND_RY } = { DIAMOND_RY: 35 };
 
@@ -57,8 +60,46 @@ export function SessionFlowchartView({ agents, stats, agentName, currentSessionI
     el.scrollTop = d.st - (e.pageY - d.y);
   }, [dragging]);
   const onMouseUp = useCallback(() => setDragging(false), []);
-  const handleStageClick = useCallback((stage: PipelineStage) => setSelectedStage((prev) => (prev?.agentId === stage.agentId ? null : stage)), []);
+  const handleStageClick = useCallback((stage: PipelineStage) => {
+    if (!stage.agentId) return;
+    setSelectedStage((prev) => (prev?.agentId === stage.agentId ? null : stage));
+  }, []);
   const closeLog = useCallback(() => setSelectedStage(null), []);
+
+  useEffect(() => {
+    let cancelled = false;
+    const agentId = selectedStage?.agentId ?? "";
+    if (!agentId) {
+      return () => {
+        cancelled = true;
+      };
+    }
+
+    async function loadStageDetail() {
+      const detail = await getAgentDetail(agentId);
+      if (!cancelled) {
+        setSelectedStageDetail(detail);
+      }
+    }
+
+    loadStageDetail().catch(() => {
+      if (!cancelled) {
+        setSelectedStageDetail(null);
+      }
+    });
+
+    return () => {
+      cancelled = true;
+    };
+  }, [getAgentDetail, selectedStage?.agentId]);
+
+  const selectedLogs = useMemo(() => {
+    if (selectedStageDetail && selectedStageDetail.agent_id === selectedStage?.agentId) {
+      if (selectedStageDetail.log_lines?.length) return selectedStageDetail.log_lines;
+      if (selectedStageDetail.recent_logs?.length) return selectedStageDetail.recent_logs;
+    }
+    return selectedStage?.logs ?? [];
+  }, [selectedStage, selectedStageDetail]);
 
   const elapsed = stats?.elapsed_time ?? 0;
   const elapsedStr = [Math.floor(elapsed / 3600), Math.floor((elapsed % 3600) / 60), Math.floor(elapsed % 60)].map((n) => n.toString().padStart(2, "0")).join(":");
@@ -74,7 +115,13 @@ export function SessionFlowchartView({ agents, stats, agentName, currentSessionI
           <button className="sf-log-close" onClick={closeLog}>✕</button>
         </div>
         <div className="sf-log-body">
-          {selectedStage?.logs.length === 0 ? <span className="sf-log-empty-msg">No logs available for this step.</span> : selectedStage?.logs.map((line, i) => <div key={i}>{line}</div>)}
+          {selectedStage && !selectedStage.agentId ? (
+            <span className="sf-log-empty-msg">No logs available for this step.</span>
+          ) : selectedLogs.length === 0 ? (
+            <span className="sf-log-empty-msg">No logs available for this step.</span>
+          ) : (
+            selectedLogs.map((line, i) => <div key={i}>{line}</div>)
+          )}
         </div>
       </div>
       <div className="sf-info-bar">
