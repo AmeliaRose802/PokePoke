@@ -66,8 +66,13 @@ def _finalize_item_result(
     ctx: ResultContext,
 ) -> tuple[WorkItemResult, bool]:
     """Handle post-loop outcome. Returns (WorkItemResult, finalized_successfully)."""
-    if ctx.result.success:
+    if ctx.result.success and not ctx.result.gate_rejected:
         return _handle_success(ctx)
+    if ctx.result.gate_rejected:
+        # Agent succeeded but gate exhausted rejection cap — skip reconciliation because
+        # the agent's committed work exists but is explicitly deemed unacceptable. Running
+        # reconciliation would falsely detect the agent's commits and close the beads item.
+        return _handle_gate_rejected(ctx)
     return _handle_failure(ctx)
 
 
@@ -118,6 +123,42 @@ def _handle_success(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
         model_completion=model_completion,
         failure_stage=failure_stage, failure_reason=failure_reason,
     ), success
+
+
+def _handle_gate_rejected(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
+    """Handle the gate-rejection-cap path — agent succeeded but gate refused the work.
+
+    Reconciliation is intentionally skipped here: the agent did commit work, so
+    reconcile_completed_item would falsely detect it as complete and try to close
+    the beads item, which is exactly the double-close bug we are preventing.
+    """
+    set_terminal_banner(format_work_item_banner(ctx.item.id, ctx.item.title, "Failed"))
+    failure_reason = ctx.result.error or "Exceeded max gate rejections"
+    logger.error("\n❌ Gate rejection cap exceeded for %s: %s", ctx.item.id, failure_reason)
+    if ctx.item_logger:
+        ctx.item_logger.log_error(
+            f"❌ ORCHESTRATOR: Gate rejection cap exceeded — {failure_reason}"
+        )
+
+    from pokepoke.beads.beads_management import fail_task
+    fail_task(ctx.item.id, failure_reason)
+
+    logger.warning("\n⚠️  Preserving worktree for %s (work may be recoverable)", ctx.item.id)
+    if ctx.item_logger:
+        ctx.item_logger.log(f"⚠️  ORCHESTRATOR: Preserving worktree for {ctx.item.id} (work may be recoverable)")
+    _log_failure(ctx.run_logger, ctx.item_logger, ctx.request_count)
+    terminal_ui.ui.set_current_agent(None)
+    dur = time.time() - ctx.start_time
+    model_completion = _build_completion_record(
+        ctx.item.id, ctx.selected_model, dur, False,
+        False,  # gate_passed=False — gate explicitly rejected the work
+        ctx.accumulated_stats, ctx.request_count,
+    )
+    return _fail_result(
+        request_count=ctx.request_count, cleanup_agent_runs=ctx.cleanup_agent_runs,
+        gate_agent_runs=ctx.gate_agent_runs, model_completion=model_completion,
+        stats=ctx.accumulated_stats, failure_reason=failure_reason,
+    ), False
 
 
 def _handle_failure(ctx: ResultContext) -> tuple[WorkItemResult, bool]:

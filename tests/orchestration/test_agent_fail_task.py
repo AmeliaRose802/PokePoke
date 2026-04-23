@@ -815,8 +815,98 @@ class TestFinalizeReconciliation:
 
 
 # ═══════════════════════════════════════════════════════════════════════════
-# Process crash detection
+# Gate rejected path — must NOT run reconciliation
 # ═══════════════════════════════════════════════════════════════════════════
+
+
+class TestGateRejectedFinalization:
+    """Tests for _finalize_item_result when result.gate_rejected is True.
+
+    When the gate exhausts its rejection cap, the agent's reported success must
+    be preserved (result.success stays True) while the overall outcome is still
+    a failure.  Crucially, reconciliation must NOT be called — otherwise it
+    would see the agent's commits and falsely close the beads item.
+    """
+
+    def _make_ctx(self, gate_rejected: bool = True) -> "ResultContext":
+        from pokepoke.orchestration.finalization import ResultContext
+        result = CopilotResult(
+            work_item_id="task-gr", success=True,
+            error="Exceeded max gate rejections (3)",
+            attempt_count=1,
+            session_id="test-session",
+            gate_rejected=gate_rejected,
+        )
+        item = make_work_item(id="task-gr", title="Gate Rejected Task")
+        return ResultContext(
+            result=result,
+            item=item,
+            worktree_path=Path("/fake/wt"),
+            selected_model="test-model",
+            start_time=0.0,
+            request_count=1,
+            accumulated_stats=AgentStats(),
+            cleanup_agent_runs=0,
+            gate_agent_runs=3,
+            gate_success=False,
+            run_logger=None,
+            item_logger=None,
+            base_agent_id="test-agent",
+            run_beta_test=False,
+        )
+
+    def test_gate_rejected_does_not_call_reconciliation(self) -> None:
+        """reconcile_completed_item must NOT be called when gate_rejected=True."""
+        ctx = self._make_ctx()
+        with (
+            patch(
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
+            ) as mock_reconcile,
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
+            patch("pokepoke.orchestration.finalization.fail_task", create=True),
+            patch("pokepoke.beads.beads_management.fail_task"),
+        ):
+            _finalize_item_result(ctx)
+        mock_reconcile.assert_not_called()
+
+    def test_gate_rejected_returns_failure(self) -> None:
+        """Overall WorkItemResult must be failure when gate_rejected=True."""
+        ctx = self._make_ctx()
+        with (
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
+            patch("pokepoke.beads.beads_management.fail_task"),
+        ):
+            wi_result, finalized = _finalize_item_result(ctx)
+        assert wi_result.success is False
+        assert finalized is False
+
+    def test_gate_rejected_result_success_stays_true(self) -> None:
+        """result.success must remain True after gate_rejected path — agent outcome preserved."""
+        ctx = self._make_ctx()
+        original_success = ctx.result.success
+        with (
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
+            patch("pokepoke.beads.beads_management.fail_task"),
+        ):
+            _finalize_item_result(ctx)
+        assert ctx.result.success is original_success
+
+    def test_non_gate_rejected_failure_still_calls_reconciliation(self) -> None:
+        """Normal failure (gate_rejected=False) still runs reconciliation."""
+        ctx = self._make_ctx(gate_rejected=False)
+        ctx.result.success = False  # simulate normal agent failure
+        with (
+            patch(
+                "pokepoke.orchestration.finalization.reconcile_completed_item",
+                return_value=(False, {}),
+            ) as mock_reconcile,
+            patch("pokepoke.orchestration.finalization.terminal_ui"),
+            patch("pokepoke.beads.beads_management.fail_task"),
+        ):
+            _finalize_item_result(ctx)
+        mock_reconcile.assert_called_once()
+
+
 
 
 class TestProcessCrashDetection:

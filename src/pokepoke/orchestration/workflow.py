@@ -348,7 +348,7 @@ def process_work_item(  # noqa: C901
                 break
             if gate_loop_result.exceeded_max:
                 _maybe_decompose(item, copilot_failure_count, gate_rejection_count, config)
-                result.success = False
+                result.gate_rejected = True
                 result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
                 _log_failure(run_logger, item_logger, request_count)
                 break
@@ -364,7 +364,7 @@ def process_work_item(  # noqa: C901
                 break  # Gate infra failure with no fallback
 
         # Save worker context for future workers when this attempt failed
-        if not result.success:
+        if not result.success or result.gate_rejected:
             save_worker_context(
                 item.id,
                 attempt_number=work_agent_iteration,
