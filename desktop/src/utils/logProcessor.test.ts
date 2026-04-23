@@ -497,6 +497,83 @@ describe("processLogsToRenderItems - non-interleaved batch result pairing", () =
     if (items[0].type !== "tool-batch") return;
     expect(items[0].batch.completedCalls).toBe(2);
   });
+
+  it("captures multi-line result continuation inside tool accordion", () => {
+    const entries = makeEntries([
+      "[Tool] powershell({'command': 'git status --short'})",
+      "✅ Result: M docs/specs/orchestration-workflow.md",
+      "MM src/pokepoke/agents/decomposition_agent.py",
+      "M src/pokepoke/builtin_prompts/decomposition.md",
+      "M src/pokepoke/orchestrator.py",
+    ]);
+    const items = processLogsToRenderItems(entries);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("tool");
+    if (items[0].type !== "tool") return;
+
+    const tool = items[0].tool;
+    expect(tool.result?.message).toBe("✅ Result: M docs/specs/orchestration-workflow.md");
+    expect(tool.resultContinuation).toHaveLength(3);
+    expect(tool.resultContinuation![0].message).toBe("MM src/pokepoke/agents/decomposition_agent.py");
+    expect(tool.resultContinuation![1].message).toBe("M src/pokepoke/builtin_prompts/decomposition.md");
+    expect(tool.resultContinuation![2].message).toBe("M src/pokepoke/orchestrator.py");
+  });
+
+  it("stops continuation at next tool call", () => {
+    const entries = makeEntries([
+      "[Tool] powershell({'command': 'git status --short'})",
+      "✅ Result: M file1.ts",
+      "M file2.ts",
+      "[Tool] view({'path': 'file1.ts'})",
+      "✅ Result: File contents shown",
+    ]);
+    const items = processLogsToRenderItems(entries);
+
+    // Two consecutive tool calls get batched together
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("tool-batch");
+    if (items[0].type !== "tool-batch") return;
+    const allTools = items[0].batch.groups.flatMap((g) => g.items);
+    expect(allTools[0].resultContinuation).toHaveLength(1);
+    expect(allTools[0].resultContinuation![0].message).toBe("M file2.ts");
+  });
+
+  it("captures continuation in batch results", () => {
+    const entries = makeEntries([
+      "[Copilot] Calling 2 tool(s)...",
+      "[Tool] powershell({'command': 'git status --short'})",
+      "[Tool] grep({'pattern': 'TODO'})",
+      "✅ Result: M file1.ts",
+      "M file2.ts",
+      "M file3.ts",
+      "✅ Result: Found 3 matches",
+    ]);
+    const items = processLogsToRenderItems(entries);
+
+    expect(items).toHaveLength(1);
+    expect(items[0].type).toBe("tool-batch");
+    if (items[0].type !== "tool-batch") return;
+
+    const allTools = items[0].batch.groups.flatMap((g) => g.items);
+    expect(allTools[0].resultContinuation).toHaveLength(2);
+    expect(allTools[0].resultContinuation![0].message).toBe("M file2.ts");
+    expect(allTools[0].resultContinuation![1].message).toBe("M file3.ts");
+    expect(allTools[1].result?.message).toBe("✅ Result: Found 3 matches");
+    expect(allTools[1].resultContinuation).toBeUndefined();
+  });
+
+  it("has no continuation when result is single line", () => {
+    const entries = makeEntries([
+      "[Tool] grep({'pattern': 'foo'})",
+      "✅ Result: Found 5 matches",
+    ]);
+    const items = processLogsToRenderItems(entries);
+
+    expect(items).toHaveLength(1);
+    if (items[0].type !== "tool") return;
+    expect(items[0].tool.resultContinuation).toBeUndefined();
+  });
 });
 
 describe("groupPlainLines", () => {

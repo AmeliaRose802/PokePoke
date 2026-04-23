@@ -20,6 +20,7 @@ export interface ToolItem {
   result?: LogEntry;
   summary: ToolSummary;
   additionalEntries?: LogEntry[];
+  resultContinuation?: LogEntry[];
 }
 export interface ToolGroup {
   toolName: string;
@@ -199,12 +200,13 @@ export function formatTime(ts: number): string {
   return d.toLocaleTimeString("en-US", { hour12: false });
 }
 
-/** Collect lines between a tool call and its result/next-call boundary. */
+/** Collect lines between a tool call and its result/next-call boundary,
+ *  plus any continuation lines after the result (multi-line tool output). */
 function collectIntermediateLines(
   logs: LogEntry[],
   start: number,
   stopOnPatchEnd = false,
-): { entries: LogEntry[]; result?: LogEntry; nextIndex: number } {
+): { entries: LogEntry[]; result?: LogEntry; resultContinuation: LogEntry[]; nextIndex: number } {
   const entries: LogEntry[] = [];
   let j = start;
   while (j < logs.length) {
@@ -218,7 +220,18 @@ function collectIntermediateLines(
     j += 1;
   }
   const result = logs[j] && isToolResultMessage(logs[j].message) ? logs[j] : undefined;
-  return { entries, result, nextIndex: result ? j + 1 : j };
+  const resultContinuation: LogEntry[] = [];
+  if (result) {
+    let k = j + 1;
+    while (k < logs.length) {
+      const msg = logs[k].message;
+      if (isToolCallMessage(msg) || isCopilotToolBatchHeader(msg) || isToolResultMessage(msg)) break;
+      resultContinuation.push(logs[k]);
+      k += 1;
+    }
+    return { entries, result, resultContinuation, nextIndex: k };
+  }
+  return { entries, result, resultContinuation, nextIndex: j };
 }
 
 export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
@@ -251,9 +264,10 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
     }
 
     const parts = parseToolCallParts(entry.message);
-    const { entries, result, nextIndex } = collectIntermediateLines(logs, index + 1);
+    const { entries, result, resultContinuation, nextIndex } = collectIntermediateLines(logs, index + 1);
     // Only attach intermediate entries when a result follows; otherwise leave them for separate rendering
     const hasIntermediate = result && entries.length > 0;
+    const hasContinuation = result && resultContinuation.length > 0;
     return {
       tool: {
         toolName: parts.toolName,
@@ -261,23 +275,39 @@ export function processLogsToRenderItems(logs: LogEntry[]): RenderLogItem[] {
         entry,
         result,
         additionalEntries: hasIntermediate ? entries : undefined,
+        resultContinuation: hasContinuation ? resultContinuation : undefined,
         summary: buildToolSummary(entry.message, result?.message),
       },
       nextIndex: result ? nextIndex : index + 1,
     };
   }
 
-  /** Re-pair batch results: collects all results and re-assigns positionally. */
+  /** Re-pair batch results: collects all results (with continuations) and re-assigns positionally. */
   function repairBatchResults(tools: ToolItem[], trailingIndex: number): number {
-    const allResults: LogEntry[] = [];
+    const allPairs: { result: LogEntry; continuation: LogEntry[] }[] = [];
     for (const tool of tools) {
-      if (tool.result) { allResults.push(tool.result); tool.result = undefined; }
+      if (tool.result) {
+        allPairs.push({ result: tool.result, continuation: tool.resultContinuation ?? [] });
+        tool.result = undefined;
+        tool.resultContinuation = undefined;
+      }
     }
     let idx = trailingIndex;
-    while (idx < logs.length && isToolResultMessage(logs[idx].message)) allResults.push(logs[idx++]);
-    for (let j = 0; j < Math.min(tools.length, allResults.length); j++) {
-      tools[j].result = allResults[j];
-      const rs = buildToolSummary("", allResults[j].message);
+    while (idx < logs.length && isToolResultMessage(logs[idx].message)) {
+      const result = logs[idx++];
+      const continuation: LogEntry[] = [];
+      while (idx < logs.length) {
+        const msg = logs[idx].message;
+        if (isToolCallMessage(msg) || isCopilotToolBatchHeader(msg) || isToolResultMessage(msg)) break;
+        continuation.push(logs[idx]);
+        idx++;
+      }
+      allPairs.push({ result, continuation });
+    }
+    for (let j = 0; j < Math.min(tools.length, allPairs.length); j++) {
+      tools[j].result = allPairs[j].result;
+      tools[j].resultContinuation = allPairs[j].continuation.length > 0 ? allPairs[j].continuation : undefined;
+      const rs = buildToolSummary("", allPairs[j].result.message);
       tools[j].summary.resultSummary = rs.resultSummary;
       tools[j].summary.statusClass = rs.statusClass;
     }

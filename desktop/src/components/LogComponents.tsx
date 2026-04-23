@@ -98,6 +98,7 @@ interface ToolAccordionProps {
 export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordionProps) {
   const showViewContent = isViewToolWithContent(tool);
   const showToolOutput = !showViewContent && (tool.additionalEntries?.length ?? 0) > 1;
+  const showResultContinuation = (tool.resultContinuation?.length ?? 0) > 0;
   const detailsEntries = [tool.entry];
   if (!showViewContent && !showToolOutput && tool.additionalEntries) detailsEntries.push(...tool.additionalEntries);
   if (tool.result) detailsEntries.push(tool.result);
@@ -127,6 +128,7 @@ export function ToolAccordion({ tool, keyPrefix, nested = false }: ToolAccordion
             keyPrefix={`${keyPrefix}-${detailIndex}`}
           />
         ))}
+        {showResultContinuation && <ToolOutputBlock entries={tool.resultContinuation!} />}
       </div>
     </details>
   );
