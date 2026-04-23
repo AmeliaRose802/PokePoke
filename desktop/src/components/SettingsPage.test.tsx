@@ -61,12 +61,15 @@ describe("SettingsPage", () => {
   });
 
   it("should show error if getConfig times out", async () => {
+    vi.useFakeTimers();
     mockGetConfig.mockImplementation(() => new Promise(() => {})); // never resolves
     render(<SettingsPage getConfig={mockGetConfig} saveConfig={mockSaveConfig} onClose={mockOnClose} />);
-    // Wait for timeout (10s)
+    // Fast-forward timers by 11s
+    await vi.advanceTimersByTimeAsync(11000);
     await waitFor(() => {
       expect(screen.getByText("Could not load configuration.")).toBeInTheDocument();
-    }, { timeout: 11000 });
+    }, { timeout: 12000 });
+    vi.useRealTimers();
   });
 
   it("should load and display configuration", async () => {
