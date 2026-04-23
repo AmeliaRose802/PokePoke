@@ -11,6 +11,7 @@ import pytest
 
 from pokepoke.worktrees.worktrees import (
     MergeResult,
+    _check_existing_directory,
     _run_git,
     cleanup_worktree,
     create_worktree,
@@ -641,3 +642,96 @@ class TestCleanupWorktree:
         # Should handle gracefully and return True (worktree already gone)
         result = cleanup_worktree('nonexistent')
         assert result is True
+
+
+class TestCheckExistingDirectory:
+    """Tests for _check_existing_directory function."""
+
+    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.force_remove_directory')
+    def test_wrong_branch_worktree_halts_with_error(
+        self, mock_force_remove, mock_run_git, tmp_path: Path
+    ) -> None:
+        """Wrong-branch worktree raises RuntimeError instead of repairing.
+
+        A worktree on the wrong branch is evidence of a prior bug (incomplete cleanup,
+        race condition, or git corruption). The system must halt to prevent associating
+        wrong commits with the wrong work item.
+        """
+        from pokepoke.worktrees.worktrees import _check_existing_directory
+
+        # Create a fake worktree directory
+        worktree_path = tmp_path / "worktrees" / "task-test-item"
+        worktree_path.mkdir(parents=True)
+
+        # Create .git file (not directory) to make it look like a valid worktree
+        git_file = worktree_path / ".git"
+        git_file.write_text("gitdir: /repo/.git/worktrees/task-test-item")
+
+        # Mock git commands to simulate wrong branch
+        def git_side_effect(cmd, **kwargs):
+            if 'rev-parse' in cmd and '--is-inside-work-tree' in cmd:
+                return Mock(stdout='true', returncode=0)
+            if 'branch' in cmd and '--show-current' in cmd:
+                return Mock(stdout='wrong-branch', returncode=0)  # Wrong branch!
+            return Mock(stdout='', returncode=0)
+
+        mock_run_git.side_effect = git_side_effect
+
+        # Expect RuntimeError instead of silent repair
+        with pytest.raises(RuntimeError, match=r"Wrong-branch worktree detected"):
+            _check_existing_directory(worktree_path, repo_path=str(tmp_path))
+
+        # Verify repair was NOT attempted (force_remove_directory should not be called for repair)
+        # The function should raise immediately upon detecting wrong branch
+
+    @patch('pokepoke.worktrees.worktrees._run_git')
+    @patch('pokepoke.worktrees.worktrees.force_remove_directory')
+    def test_wrong_branch_error_includes_context(
+        self, mock_force_remove, mock_run_git, tmp_path: Path
+    ) -> None:
+        """Wrong-branch error includes branch names for debugging."""
+        from pokepoke.worktrees.worktrees import _check_existing_directory
+
+        worktree_path = tmp_path / "worktrees" / "task-my-item"
+        worktree_path.mkdir(parents=True)
+        (worktree_path / ".git").write_text("gitdir: /repo/.git/worktrees/task-my-item")
+
+        def git_side_effect(cmd, **kwargs):
+            if 'rev-parse' in cmd and '--is-inside-work-tree' in cmd:
+                return Mock(stdout='true', returncode=0)
+            if 'branch' in cmd and '--show-current' in cmd:
+                return Mock(stdout='feature/other-work', returncode=0)
+            return Mock(stdout='', returncode=0)
+
+        mock_run_git.side_effect = git_side_effect
+
+        with pytest.raises(RuntimeError) as exc_info:
+            _check_existing_directory(worktree_path, repo_path=str(tmp_path))
+
+        error_msg = str(exc_info.value)
+        assert 'feature/other-work' in error_msg  # current branch
+        assert 'task/my-item' in error_msg  # expected branch
+        assert 'manual investigation' in error_msg.lower()
+
+    @patch('pokepoke.worktrees.worktrees._run_git')
+    def test_correct_branch_worktree_reused(self, mock_run_git, tmp_path: Path) -> None:
+        """Worktree on correct branch is reused without error."""
+        from pokepoke.worktrees.worktrees import _check_existing_directory
+
+        worktree_path = tmp_path / "worktrees" / "task-good-item"
+        worktree_path.mkdir(parents=True)
+        (worktree_path / ".git").write_text("gitdir: /repo/.git/worktrees/task-good-item")
+
+        def git_side_effect(cmd, **kwargs):
+            if 'rev-parse' in cmd and '--is-inside-work-tree' in cmd:
+                return Mock(stdout='true', returncode=0)
+            if 'branch' in cmd and '--show-current' in cmd:
+                return Mock(stdout='task/good-item', returncode=0)  # Correct branch
+            return Mock(stdout='', returncode=0)
+
+        mock_run_git.side_effect = git_side_effect
+
+        result = _check_existing_directory(worktree_path, repo_path=str(tmp_path))
+
+        assert result == worktree_path
