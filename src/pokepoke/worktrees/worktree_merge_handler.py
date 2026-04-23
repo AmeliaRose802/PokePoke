@@ -26,6 +26,7 @@ if TYPE_CHECKING:
 from pokepoke.worktrees.coordination import merge_lock
 from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
 from pokepoke.worktrees.merge_conflict_retry import retry_merge_after_cleanup, run_conflict_retry_loop
+from pokepoke.worktrees.merge_result import MergeResult
 from pokepoke.worktrees.worktrees import cleanup_worktree, merge_worktree
 
 logger = logging.getLogger(__name__)
@@ -339,17 +340,27 @@ def perform_worktree_merge(  # noqa: C901
     if ctx.item_logger:
         ctx.item_logger.log(f"🔀 ORCHESTRATOR: Merging worktree for {ctx.agent_id} to default branch")
     merge_result = merge_worktree(ctx.agent_id, cleanup=True, repo_path=repo_cwd)
-    # Support both object and 2-tuple return styles (legacy support / mocks)
-    if isinstance(merge_result, tuple):
-        merge_success = bool(merge_result[0])
-        unmerged_files = list(merge_result[1]) if len(merge_result) > 1 and merge_result[1] is not None else []
-        rollback_failed = False
-        halt_required = False
-    else:
-        merge_success = getattr(merge_result, "success", False)
-        unmerged_files = getattr(merge_result, "unmerged_files", [])
-        rollback_failed = getattr(merge_result, "rollback_failed", False)
-        halt_required = getattr(merge_result, "halt_required", False)
+    if not isinstance(merge_result, MergeResult):
+        from pokepoke.utils.shutdown import request_shutdown
+        logger.critical(
+            "🚨 INVARIANT VIOLATION: merge_worktree(%s) returned %s instead of MergeResult. Halting.",
+            ctx.agent_id,
+            type(merge_result).__name__,
+        )
+        if ctx.item_logger:
+            ctx.item_logger.log_error(
+                f"🚨 ORCHESTRATOR: merge_worktree returned invalid type "
+                f"({type(merge_result).__name__}) for {ctx.agent_id}. Halting."
+            )
+        tracker.fail_step("8", "merge_worktree returned invalid type")
+        tracker.finish_run("failed")
+        request_shutdown()
+        return False, False
+
+    merge_success = merge_result.success
+    unmerged_files = merge_result.unmerged_files
+    rollback_failed = merge_result.rollback_failed
+    halt_required = merge_result.halt_required
 
     if rollback_failed:
         logger.critical("🚨 REPO CORRUPTION: Rollback failed for %s — manual intervention required.", ctx.agent_id)

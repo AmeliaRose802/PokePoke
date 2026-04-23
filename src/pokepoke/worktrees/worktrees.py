@@ -32,9 +32,6 @@ from pokepoke.worktrees.worktree_cleanup import (
     force_remove_directory,
 )
 from pokepoke.worktrees.worktree_helpers import (
-    repair_worktree_branch as _repair_worktree_branch,
-)
-from pokepoke.worktrees.worktree_helpers import (
     sync_and_ensure_clean_main_repo as _sync_and_ensure_clean_main_repo,
 )
 from pokepoke.worktrees.worktree_helpers import (
@@ -131,16 +128,23 @@ def _check_existing_directory(worktree_path: Path, repo_path: str | None = None)
                 if branch_result.returncode == 0:
                     current_branch = branch_result.stdout.strip()
                     if current_branch and current_branch != expected_branch:
-                        logger.warning(
-                            f"Directory {worktree_path} on wrong branch '{current_branch}' "
-                            f"(expected '{expected_branch}'). Repairing."
+                        # HALT: A wrong-branch worktree indicates a prior bug (incomplete cleanup,
+                        # race condition, or git corruption). Repairing would mask the root cause
+                        # and could associate wrong commits with the wrong work item.
+                        logger.error(
+                            f"INVARIANT VIOLATION: Worktree at {worktree_path} is on wrong branch.\n"
+                            f"  Current branch: '{current_branch}'\n"
+                            f"  Expected branch: '{expected_branch}'\n"
+                            f"  Directory name: '{dir_name}'\n"
+                            f"  This indicates a prior bug (incomplete cleanup, race, or git corruption).\n"
+                            f"  Commits may have been made to the wrong branch. Manual investigation required."
                         )
-                        repaired = _repair_worktree_branch(
-                            worktree_path, expected_branch, current_branch, repo_path,
+                        raise RuntimeError(
+                            f"Wrong-branch worktree detected at {worktree_path}: "
+                            f"on '{current_branch}' but expected '{expected_branch}'. "
+                            f"This is evidence of a prior bug and requires manual investigation. "
+                            f"Commits may have been made to the wrong branch."
                         )
-                        if repaired:
-                            return worktree_path
-                        return None
             except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as e:
                 logger.warning(f"Failed to verify branch for worktree at {worktree_path}: {e}")
 
