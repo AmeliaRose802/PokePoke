@@ -2,10 +2,20 @@
  * Tests for SessionFlowchartView component rendering.
  */
 
-import { render } from "@testing-library/react";
-import { describe, expect, it } from "vitest";
+import { fireEvent, render, screen, waitFor } from "@testing-library/react";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { AgentInfo } from "../types";
+
+const mockGetAgentDetail = vi.fn();
+const mockBridge = {
+  getAgentDetail: mockGetAgentDetail,
+};
+
+vi.mock("../useBridge", () => ({
+  useBridge: () => mockBridge,
+}));
+
 import { SessionFlowchartView } from "./SessionFlowchartView";
 
 function mkAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
@@ -21,6 +31,10 @@ function mkAgent(overrides: Partial<AgentInfo> = {}): AgentInfo {
 }
 
 describe("SessionFlowchartView", () => {
+  beforeEach(() => {
+    mockGetAgentDetail.mockReset();
+  });
+
   it("renders the shell container", () => {
     const { container } = render(
       <SessionFlowchartView
@@ -142,5 +156,41 @@ describe("SessionFlowchartView", () => {
     // Should have both the dimmed completed section and the active section
     const groups = container.querySelectorAll(".sf-svg g");
     expect(groups.length).toBeGreaterThan(0);
+  });
+
+  it("loads detailed logs for a clicked stage", async () => {
+    mockGetAgentDetail.mockResolvedValue({
+      agent_id: "w1",
+      name: "Worker",
+      iteration: 1,
+      status: "running",
+      recent_logs: [],
+      log_lines: ["line one", "line two"],
+      modified_files: [],
+    });
+
+    render(
+      <SessionFlowchartView
+        agents={[
+          mkAgent({
+            agent_id: "w1",
+            status: "running",
+            work_item_id: "item-1",
+            recent_logs: [],
+          }),
+        ]}
+        stats={null}
+        agentName="test"
+        currentSessionId={null}
+        activeModel={null}
+      />,
+    );
+
+    fireEvent.click(screen.getByText("Work Agent"));
+
+    await waitFor(() => {
+      expect(screen.getByText("line one")).toBeInTheDocument();
+      expect(screen.getByText("line two")).toBeInTheDocument();
+    });
   });
 });
