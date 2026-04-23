@@ -44,7 +44,7 @@ from pokepoke.orchestration.workflow import process_work_item
 from pokepoke.protocols import BeadsClient as _BeadsClientProtocol
 from pokepoke.stats.performance_monitor import run_iteration_checks
 from pokepoke.stats.session_stats_registry import set_current_session_stats
-from pokepoke.types import AgentStats, BeadsWorkItem, RecordFn, SessionStats
+from pokepoke.types import AgentStats, BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
 from pokepoke.utils.logging_utils import RunLogger, configure_logging
 from pokepoke.utils.otel_logging import shutdown_otel_logging
 from pokepoke.utils.preflight_log_utils import handle_preflight_checks
@@ -229,105 +229,136 @@ def _fetch_work_items(ctx: _OrchestratorContext) -> tuple[int | None, list[Beads
     return None, ready_items
 
 
-def _run_main_loop(ctx: _OrchestratorContext) -> int:  # noqa: C901
+def _select_item_for_iteration(
+    ctx: _OrchestratorContext, ready_items: list[BeadsWorkItem],
+) -> BeadsWorkItem | None:
+    """Select the next work item, handling interactive UI transitions."""
+    if ctx.interactive:
+        terminal_ui.ui.stop()
+    with ctx.failed_claim_ids_lock:
+        skip_ids = set(ctx.failed_claim_ids)
+    selected_item = select_work_item(
+        ready_items, ctx.interactive, skip_ids=skip_ids, reclaimed_items=ctx.reclaimed_items)
+    if ctx.interactive:
+        terminal_ui.ui.start()
+    return selected_item
+
+
+def _run_selected_item(
+    ctx: _OrchestratorContext, selected_item: BeadsWorkItem,
+) -> tuple[bool, WorkItemResult]:
+    """Execute a selected item and update its terminal agent card."""
+    ctx.run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
+    set_terminal_banner(format_work_item_banner(selected_item.id, selected_item.title))
+    terminal_ui.ui.update_header(selected_item.id, selected_item.title)
+    agent_id, display_name = selected_item.id, get_agent_name(default="pokepoke")
+    terminal_ui.ui.push_agent_status(
+        agent_id, display_name, iteration=1, status="running",
+        work_item_id=selected_item.id, work_item_title=selected_item.title, agent_type="work")
+    success = False
+    try:
+        with terminal_ui.ui.agent_output_for(agent_id):
+            wi_result = process_work_item(
+                selected_item, ctx.interactive, run_logger=ctx.run_logger, agent_id=agent_id,
+            )
+        success = wi_result.success
+    finally:
+        terminal_ui.ui.push_agent_status(
+            agent_id, display_name, iteration=1,
+            status="success" if success else "failed",
+            work_item_id=selected_item.id, work_item_title=selected_item.title, agent_type="work")
+    return success, wi_result
+
+
+def _update_failed_claim_state(
+    ctx: _OrchestratorContext, selected_item: BeadsWorkItem, wi_result: WorkItemResult,
+) -> None:
+    """Track failed claims to avoid hot-looping on unclaimable items."""
+    failed_to_claim = not wi_result.success and wi_result.request_count == 0
+    if failed_to_claim:
+        with ctx.failed_claim_ids_lock:
+            ctx.failed_claim_ids.add(selected_item.id)
+            failed_count = len(ctx.failed_claim_ids)
+        ctx.run_logger.log_orchestrator(
+            f"Item {selected_item.id} failed to claim, added to skip list ({failed_count} skipped)")
+        return
+    if not wi_result.success:
+        return
+    with ctx.failed_claim_ids_lock:
+        ctx.failed_claim_ids.discard(selected_item.id)
+    if ctx.reclaimed_items:
+        remaining = [i for i in ctx.reclaimed_items if i.id != selected_item.id]
+        ctx.reclaimed_items = remaining or None
+
+
+def _maybe_exit_after_iteration(
+    ctx: _OrchestratorContext, iter_start: float, selected_item: BeadsWorkItem,
+    wi_result: WorkItemResult, success: bool,
+) -> int | None:
+    """Apply post-item bookkeeping and decide whether to exit the main loop."""
+    # Safe without lock: _run_main_loop only executes in single-threaded mode.
+    ctx.total_requests += wi_result.request_count
+    _record_item_result(selected_item, wi_result, ctx.session_stats, ctx.run_logger)
+    ctx.items_completed = ctx.session_stats.items_completed
+    terminal_ui.ui.update_stats(ctx.session_stats, time.time() - ctx.start_time)
+    run_iteration_checks(time.monotonic() - iter_start, wi_result.success)
+
+    if should_stop_after_current():
+        cancel_stop_after_current()
+        terminal_ui.ui.stop_and_capture()
+        logger.info("\n⏸️  Stopping after current item (user requested).")
+        ctx.run_logger.log_orchestrator("Stop after current item requested - exiting")
+        ctx.finalize()
+        return 0
+    if not ctx.continuous:
+        terminal_ui.ui.stop_and_capture()
+        ctx.finalize()
+        return 0 if success else 1
+    if ctx.interactive:
+        set_terminal_banner(f"PokePoke {ctx.mode_name} - {ctx.agent_name}")
+        terminal_ui.ui.update_header("PokePoke", f"{ctx.mode_name} Mode", "Waiting...")
+        terminal_ui.ui.stop()
+        cont = input("\nProcess another item? [Y/n]: ").strip().lower()
+        terminal_ui.ui.start()
+        if cont and cont != 'y':
+            terminal_ui.ui.stop_and_capture()
+            logger.info("\n👋 Exiting PokePoke.")
+            ctx.finalize()
+            return 0
+        return None
+
+    terminal_ui.ui.update_header("PokePoke", f"{ctx.mode_name} Mode", "Sleeping...")
+    logger.info("\n⏳ Waiting 5 seconds before next iteration...")
+    for _ in range(10):
+        if is_shutting_down():
+            break
+        time.sleep(0.5)
+    return None
+
+
+def _run_main_loop(ctx: _OrchestratorContext) -> int:
     """Sequential work-selection and dispatch loop. Returns process exit code."""
     while not is_shutting_down():
         iter_start = time.monotonic()
-        exit_code = _run_preflight(ctx)
-        if exit_code is not None:
+        if (exit_code := _run_preflight(ctx)) is not None:
             return exit_code
         exit_code, ready_items = _fetch_work_items(ctx)
         if exit_code is not None:
             return exit_code
-        if ctx.interactive:
-            terminal_ui.ui.stop()
-        # Snapshot failed_claim_ids under lock for work item selection
-        with ctx.failed_claim_ids_lock:
-            skip_ids = set(ctx.failed_claim_ids)
-        selected_item = select_work_item(
-            ready_items, ctx.interactive, skip_ids=skip_ids, reclaimed_items=ctx.reclaimed_items)
-        if ctx.interactive:
-            terminal_ui.ui.start()
+        selected_item = _select_item_for_iteration(ctx, ready_items)
         if selected_item is None:
             terminal_ui.ui.stop_and_capture()
             logger.info("\n👋 Exiting PokePoke - no work items available.")
             ctx.run_logger.log_orchestrator("No work items available - exiting")
-            # Check if we should run post-mortem before exiting
             run_pm = _should_run_post_mortem(ctx.session_stats, "empty ready queue")
             ctx.finalize(run_post_mortem=run_pm)
             return 0
-        ctx.run_logger.log_orchestrator(f"Selected item: {selected_item.id} - {selected_item.title}")
-        set_terminal_banner(format_work_item_banner(selected_item.id, selected_item.title))
-        terminal_ui.ui.update_header(selected_item.id, selected_item.title)
-        agent_id, display_name = selected_item.id, get_agent_name(default="pokepoke")
-        terminal_ui.ui.push_agent_status(
-            agent_id, display_name, iteration=1, status="running",
-            work_item_id=selected_item.id, work_item_title=selected_item.title, agent_type="work")
-        success = False
-        try:
-            with terminal_ui.ui.agent_output_for(agent_id):
-                wi_result = process_work_item(
-                    selected_item, ctx.interactive,
-                    run_logger=ctx.run_logger, agent_id=agent_id,
-                )
-            success = wi_result.success
-        finally:
-            terminal_ui.ui.push_agent_status(
-                agent_id, display_name, iteration=1,
-                status="success" if success else "failed",
-                work_item_id=selected_item.id, work_item_title=selected_item.title, agent_type="work")
-        # Update failed_claim_ids under lock to prevent race conditions with parallel workers
-        with ctx.failed_claim_ids_lock:
-            if not wi_result.success and wi_result.request_count == 0:
-                ctx.failed_claim_ids.add(selected_item.id)
-                failed_count = len(ctx.failed_claim_ids)
-        if not wi_result.success and wi_result.request_count == 0:
-            ctx.run_logger.log_orchestrator(f"Item {selected_item.id} failed to claim, added to skip list ({failed_count} skipped)")
-        elif wi_result.success:
-            # Use discard() instead of clear() to avoid wiping parallel worker state
-            with ctx.failed_claim_ids_lock:
-                ctx.failed_claim_ids.discard(selected_item.id)
-            # Remove from reclaimed items list if present
-            if ctx.reclaimed_items:
-                remaining = [i for i in ctx.reclaimed_items if i.id != selected_item.id]
-                ctx.reclaimed_items = remaining or None
-        # NOTE: These ctx mutations are safe without a lock because _run_main_loop
-        # only executes when effective_parallel == 1 (single-threaded path).
-        # The parallel path (effective_parallel > 1) uses its own _LoopState, not ctx.
-        ctx.total_requests += wi_result.request_count
-        _record_item_result(selected_item, wi_result, ctx.session_stats, ctx.run_logger)
-        ctx.items_completed = ctx.session_stats.items_completed
-        terminal_ui.ui.update_stats(ctx.session_stats, time.time() - ctx.start_time)
-        run_iteration_checks(time.monotonic() - iter_start, wi_result.success)
-        if should_stop_after_current():
-            cancel_stop_after_current()
-            terminal_ui.ui.stop_and_capture()
-            logger.info("\n⏸️  Stopping after current item (user requested).")
-            ctx.run_logger.log_orchestrator("Stop after current item requested - exiting")
-            ctx.finalize()
-            return 0
-        if not ctx.continuous:
-            terminal_ui.ui.stop_and_capture()
-            ctx.finalize()
-            return 0 if success else 1
-        if ctx.interactive:
-            set_terminal_banner(f"PokePoke {ctx.mode_name} - {ctx.agent_name}")
-            terminal_ui.ui.update_header("PokePoke", f"{ctx.mode_name} Mode", "Waiting...")
-            terminal_ui.ui.stop()
-            cont = input("\nProcess another item? [Y/n]: ").strip().lower()
-            terminal_ui.ui.start()
-            if cont and cont != 'y':
-                terminal_ui.ui.stop_and_capture()
-                logger.info("\n👋 Exiting PokePoke.")
-                ctx.finalize()
-                return 0
-        else:
-            terminal_ui.ui.update_header("PokePoke", f"{ctx.mode_name} Mode", "Sleeping...")
-            logger.info("\n⏳ Waiting 5 seconds before next iteration...")
-            for _ in range(10):
-                if is_shutting_down():
-                    break
-                time.sleep(0.5)
+        success, wi_result = _run_selected_item(ctx, selected_item)
+        _update_failed_claim_state(ctx, selected_item, wi_result)
+        if (exit_code := _maybe_exit_after_iteration(
+            ctx, iter_start, selected_item, wi_result, success,
+        )) is not None:
+            return exit_code
     terminal_ui.ui.stop_and_capture()
     logger.info("\n👋 Shutdown requested - exiting PokePoke.")
     ctx.finalize()

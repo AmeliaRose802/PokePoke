@@ -185,8 +185,9 @@ max-statements = 50
 "src/pokepoke/git/repo_picker.py" = ["PLR0915"]
 "src/pokepoke/models/mcp_memory_client.py" = ["PLR0912", "PLR0915"]
 "src/pokepoke/orchestration/gate_agent_loop.py" = ["PLR0915"]
-"src/pokepoke/orchestration/orchestrator.py" = ["PLR0912", "PLR0915"]
-"src/pokepoke/orchestration/workflow.py" = ["PLR0912", "PLR0915"]
+"src/pokepoke/orchestration/orchestrator.py" = ["PLR0915"]
+"src/pokepoke/orchestration/workflow.py" = ["PLR0915"]
+"src/pokepoke/orchestration/workflow_loop.py" = ["PLR0915"]
 "src/pokepoke/worktrees/startup_cleanup.py" = ["PLR0912", "PLR0915"]
 "src/pokepoke/worktrees/worktree_merge_handler.py" = ["PLR0912", "PLR0915"]
 
