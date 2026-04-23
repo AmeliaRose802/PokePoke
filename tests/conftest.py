@@ -386,49 +386,37 @@ def _block_real_bd_subprocess(request, monkeypatch):
 
 @pytest.fixture(autouse=True)
 def _enforce_subprocess_timeout(request, monkeypatch):
-    """CRITICAL: Enforce timeouts on subprocess calls to prevent test hangs.
+    """CRITICAL: Block real subprocess calls in tests by default.
 
-    Wraps subprocess.run and subprocess.Popen to ensure all subprocess calls
-    have a timeout. Tests that spawn subprocesses without timeouts can hang
-    indefinitely, especially in worktree environments.
+    Tests must mock subprocess.run and subprocess.Popen. Any unmocked call
+    will raise RuntimeError, preventing CI hangs caused by forgotten mocks.
 
-    Default timeout: 30 seconds (can be overridden by explicit timeout param)
-
-    Opt out with: @pytest.mark.allow_real_bd or @pytest.mark.allow_git_repair
-    (these markers indicate genuine integration tests that need real subprocesses)
+    Opt out with: @pytest.mark.allow_subprocess (or the existing
+    @pytest.mark.allow_real_bd / @pytest.mark.allow_git_repair for known
+    integration tests).
     """
-    # Skip for tests that explicitly allow real subprocess operations
-    if (request.node.get_closest_marker("allow_real_bd") or
+    # Allow explicit opt-out markers for tests that need real subprocesses
+    if (request.node.get_closest_marker("allow_subprocess") or
+        request.node.get_closest_marker("allow_real_bd") or
         request.node.get_closest_marker("allow_git_repair")):
         yield
         return
 
-    import subprocess as _sp
-    _original_run = _sp.run
-    _original_popen = _sp.Popen
+    def _blocked_run(*args, **kwargs):
+        raise RuntimeError(
+            "Unmocked subprocess.run invoked during test. "
+            "Mock subprocess.run or mark the test with @pytest.mark.allow_subprocess to opt out."
+        )
 
-    def _safe_run(*args, **kwargs):
-        """Wrapper for subprocess.run that enforces timeout."""
-        # If timeout is not set, add a default
-        if 'timeout' not in kwargs:
-            kwargs['timeout'] = 30
-        return _original_run(*args, **kwargs)
-
-    class _SafePopen(_sp.Popen):
-        """Wrapper for subprocess.Popen that enforces timeout on communicate()."""
+    class _BlockedPopen:
         def __init__(self, *args, **kwargs):
-            # Store the timeout for later use
-            self._default_timeout = 30
-            super().__init__(*args, **kwargs)
+            raise RuntimeError(
+                "Unmocked subprocess.Popen invoked during test. "
+                "Mock subprocess.Popen or mark the test with @pytest.mark.allow_subprocess to opt out."
+            )
 
-        def communicate(self, input=None, timeout=None):
-            """Override communicate to enforce timeout."""
-            if timeout is None:
-                timeout = self._default_timeout
-            return super().communicate(input, timeout)
-
-    monkeypatch.setattr("subprocess.run", _safe_run)
-    monkeypatch.setattr("subprocess.Popen", _SafePopen)
+    monkeypatch.setattr("subprocess.run", _blocked_run)
+    monkeypatch.setattr("subprocess.Popen", _BlockedPopen)
     yield
 
 
