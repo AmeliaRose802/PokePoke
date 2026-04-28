@@ -4,6 +4,7 @@ import logging
 from pathlib import Path
 from unittest.mock import MagicMock, Mock, patch
 
+from pokepoke.agents.agent_config import MaintenanceRunConfig
 from pokepoke.agents.agent_runner import (
     run_maintenance_agent,
 )
@@ -41,8 +42,8 @@ class TestRunMaintenanceAgent:
         stats = run_maintenance_agent(
             "TestAgent",
             "test.md",
-            needs_worktree=False
-        )
+            config=MaintenanceRunConfig(needs_worktree=False
+        ))
 
         assert stats is not None
         assert stats.wall_duration == 10.0
@@ -76,8 +77,8 @@ class TestRunMaintenanceAgent:
         stats = run_maintenance_agent(
             "TestAgent",
             "test.md",
-            needs_worktree=True
-        )
+            config=MaintenanceRunConfig(needs_worktree=True
+        ))
 
         assert stats is not None
         assert stats.wall_duration == 20.0
@@ -153,9 +154,7 @@ class TestNeedsShellAgent:
         stats = run_maintenance_agent(
             "Tech Debt",
             "tech-debt.md",
-            needs_worktree=False,
-            needs_shell=True,
-        )
+            config=MaintenanceRunConfig(needs_worktree=False, needs_shell=True))
 
         assert stats is not None
         mock_run_main.assert_called_once()
@@ -180,9 +179,7 @@ class TestNeedsShellAgent:
         stats = run_maintenance_agent(
             "Code Review",
             "code-reviewer.md",
-            needs_worktree=False,
-            needs_shell=False,
-        )
+            config=MaintenanceRunConfig(needs_worktree=False, needs_shell=False))
 
         assert stats is not None
         mock_run_beads.assert_called_once()
@@ -198,7 +195,7 @@ class TestMaintenanceAgentPromptMissing:
         mock_prompt_path.exists.return_value = False
         mock_dir.__truediv__ = Mock(return_value=mock_prompt_path)
         mock_get_dir.return_value = mock_dir
-        stats = run_maintenance_agent("TestAgent", "missing.md", needs_worktree=False)
+        stats = run_maintenance_agent("TestAgent", "missing.md", config=MaintenanceRunConfig(needs_worktree=False))
         assert stats is None
 
 
@@ -211,7 +208,7 @@ class TestStartupFailureLogging:
         mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
         item_logger = Mock()
 
-        stats = run_maintenance_agent("Code Review", "code-reviewer.md", item_logger=item_logger)
+        stats = run_maintenance_agent("Code Review", "code-reviewer.md", config=MaintenanceRunConfig(item_logger=item_logger))
 
         assert stats is None
         item_logger.log_error.assert_called_once()
@@ -226,7 +223,7 @@ class TestStartupFailureLogging:
         mock_get_dir.return_value = fake_dir
         item_logger = Mock()
 
-        stats = run_maintenance_agent("Tech Debt", "nonexistent.md", item_logger=item_logger)
+        stats = run_maintenance_agent("Tech Debt", "nonexistent.md", config=MaintenanceRunConfig(item_logger=item_logger))
 
         assert stats is None
         item_logger.log_error.assert_called_once()
@@ -239,7 +236,7 @@ class TestStartupFailureLogging:
         """Startup failure without item_logger must not raise AttributeError."""
         mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
 
-        stats = run_maintenance_agent("Code Review", "code-reviewer.md", item_logger=None)
+        stats = run_maintenance_agent("Code Review", "code-reviewer.md", config=MaintenanceRunConfig(item_logger=None))
 
         assert stats is None
 
@@ -257,10 +254,7 @@ class TestStartupFailureLogging:
 
         stats = run_maintenance_agent(
             "Code Review", "code-reviewer.md",
-            repo_root=Path("/fake/repo"),
-            needs_worktree=True,
-            item_logger=item_logger,
-        )
+            config=MaintenanceRunConfig(repo_root=Path("/fake/repo"), needs_worktree=True, item_logger=item_logger))
 
         assert stats is None
         item_logger.log_error.assert_called_once()

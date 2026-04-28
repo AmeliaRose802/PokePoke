@@ -6,6 +6,7 @@ from unittest.mock import MagicMock, Mock, patch
 
 import pytest
 
+from pokepoke.agents.agent_config import CleanupInvocationConfig
 from pokepoke.agents.cleanup_agents import (
     _apply_base_template_vars,
     _build_work_item_context,
@@ -739,7 +740,7 @@ class TestMergeWaitLogic:
         )
 
         with patch('pokepoke.agents.cleanup_agents.time.sleep'):
-            success, _stats = invoke_cleanup_agent(item, wait_for_merge=True)
+            success, _stats = invoke_cleanup_agent(item, config=CleanupInvocationConfig(wait_for_merge=True))
 
         assert success is True
 
@@ -766,7 +767,7 @@ class TestMergeWaitLogic:
         )
 
         with patch('pokepoke.agents.cleanup_agents.time.sleep'):
-            success, _stats = invoke_cleanup_agent(item, wait_for_merge=True)
+            success, _stats = invoke_cleanup_agent(item, config=CleanupInvocationConfig(wait_for_merge=True))
 
         assert success is True
 
@@ -790,7 +791,7 @@ class TestMergeWaitLogic:
             status="in_progress", priority=1, issue_type="task"
         )
 
-        success, _stats = invoke_cleanup_agent(item, wait_for_merge=False)
+        success, _stats = invoke_cleanup_agent(item, config=CleanupInvocationConfig(wait_for_merge=False))
 
         assert success is True
         mock_merge_active.assert_not_called()
@@ -822,8 +823,8 @@ class TestMergeWaitLogic:
 
         with patch('pokepoke.agents.cleanup_agents.time.sleep'):
             success, _stats = invoke_merge_conflict_cleanup_agent(
-                item, "Merge error", wait_for_merge=True
-            )
+                item, "Merge error", config=CleanupInvocationConfig(wait_for_merge=True
+            ))
 
         assert success is True
 
@@ -853,8 +854,8 @@ class TestMergeWaitLogic:
 
         with patch('pokepoke.agents.cleanup_agents.time.sleep'):
             success, _stats = invoke_merge_conflict_cleanup_agent(
-                item, "Merge error", wait_for_merge=True
-            )
+                item, "Merge error", config=CleanupInvocationConfig(wait_for_merge=True
+            ))
 
         assert success is True
 
@@ -885,8 +886,7 @@ class TestMergeWaitLogic:
         success, _stats = invoke_merge_conflict_cleanup_agent(
             item, "Merge error",
             unmerged_files=["f1.py", "f2.py", "f3.py", "f4.py", "f5.py", "f6.py"],
-            wait_for_merge=False,
-        )
+            config=CleanupInvocationConfig(wait_for_merge=False))
 
         assert success is True
 
@@ -951,8 +951,8 @@ class TestCleanupAgentTimeout:
         )
 
         success, _stats = invoke_merge_conflict_cleanup_agent(
-            item, "Merge error", wait_for_merge=False
-        )
+            item, "Merge error", config=CleanupInvocationConfig(wait_for_merge=False
+        ))
 
         assert success is True
         mock_invoke.assert_called_once()
@@ -1334,6 +1334,7 @@ class TestItemLoggerPassThrough:
     @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
     def test_run_agent_with_ui_none_logger_by_default(self, mock_invoke, mock_ui):
         """Without item_logger, invoke_copilot should get None."""
+        from pokepoke.agents.agent_config import CleanupAgentConfig
         from pokepoke.agents.cleanup_agents import _run_agent_with_ui
 
         mock_invoke.return_value = CopilotResult(
@@ -1345,11 +1346,16 @@ class TestItemLoggerPassThrough:
             status="in_progress", priority=1, issue_type="task"
         )
 
+        config = CleanupAgentConfig(
+            agent_id="test-1",
+            agent_label="Test Agent",
+            agent_type_key="cleanup",
+            cwd=None,
+            parent_agent_id=None,
+        )
+
         with patch('pokepoke.agents.cleanup_agents.agent_type_context', create=True):
-            _run_agent_with_ui(
-                "test-1", "Test Agent", "cleanup",
-                item, "prompt", None, None,
-            )
+            _run_agent_with_ui(config, item, "prompt")
 
         mock_invoke.assert_called_once()
         assert mock_invoke.call_args[1].get("item_logger") is None

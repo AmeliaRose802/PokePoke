@@ -86,7 +86,7 @@ def check_and_merge_worktree(
                 item_logger.log("⏭️  ORCHESTRATOR: No commits in worktree — skipping merge, cleaning up")
             cleanup_worktree(item.id, force=True, repo_path=repo_path)
             return True
-        
+
         # Log commit count for merge tracking
         logger.info(f"\n📊 Found {commit_count} commit(s) to merge")
         if item_logger:
@@ -161,7 +161,7 @@ def merge_worktree_to_dev(
     return merge_success
 
 
-def close_work_item_and_parents(item: BeadsWorkItem, item_logger: 'ItemLogger | None' = None) -> None:
+def close_work_item_and_parents(item: BeadsWorkItem, item_logger: ItemLogger | None = None) -> None:
     """Close work item and check if parents should be closed."""
     if item.is_ephemeral:
         logger.info("Skipping beads close for ephemeral item %s", item.id)
@@ -203,7 +203,7 @@ def close_work_item_and_parents(item: BeadsWorkItem, item_logger: 'ItemLogger | 
     check_parent_hierarchy(item, item_logger=item_logger)
 
 
-def check_parent_hierarchy(item: BeadsWorkItem, item_logger: 'ItemLogger | None' = None) -> None:
+def check_parent_hierarchy(item: BeadsWorkItem, item_logger: ItemLogger | None = None) -> None:
     """Check and close parent items if all children are complete."""
     parent_id = get_parent_id(item.id)
     if parent_id:

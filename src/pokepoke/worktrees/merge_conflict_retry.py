@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pokepoke.agents.agent_config import CleanupInvocationConfig
 from pokepoke.agents.cleanup_agents import invoke_merge_conflict_cleanup_agent
 from pokepoke.git.repo_state_guard import cleanup_lock
 from pokepoke.worktrees.worktrees import merge_worktree
@@ -167,10 +168,12 @@ def _run_conflict_cleanup_outside_lock(
                 ctx.agent_item,
                 conflict_info.conflict_details,
                 unmerged_files=conflict_info.unmerged_files,
-                cwd=str(ctx.worktree_path),
-                parent_agent_id=ctx.parent_agent_id,
-                wait_for_merge=False,
-                item_logger=ctx.item_logger,
+                config=CleanupInvocationConfig(
+                    cwd=str(ctx.worktree_path),
+                    parent_agent_id=ctx.parent_agent_id,
+                    wait_for_merge=False,
+                    item_logger=ctx.item_logger,
+                ),
             )
         if success:
             tracker.complete_step("3b", f"Merge conflict cleanup agent succeeded{suffix}")

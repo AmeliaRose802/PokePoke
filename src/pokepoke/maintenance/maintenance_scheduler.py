@@ -16,6 +16,7 @@ from pathlib import Path
 
 logger = logging.getLogger(__name__)
 
+from pokepoke.agents.agent_config import MaintenanceRunConfig
 from pokepoke.agents.agent_runner import run_maintenance_agent
 from pokepoke.config import MaintenanceAgentConfig, get_config
 from pokepoke.desktop import terminal_ui
@@ -375,13 +376,15 @@ class MaintenanceScheduler:
                     result = run_maintenance_agent(
                         agent_name,
                         agent_cfg.prompt_file,
-                        repo_root=pokepoke_repo,
-                        needs_worktree=agent_cfg.needs_worktree,
-                        needs_shell=agent_cfg.needs_shell,
-                        merge_changes=agent_cfg.merge_changes,
-                        model=agent_cfg.model,
-                        item_logger=maint_logger,
-                        parent_agent_id=agent_id,
+                        config=MaintenanceRunConfig(
+                            repo_root=pokepoke_repo,
+                            needs_worktree=agent_cfg.needs_worktree,
+                            needs_shell=agent_cfg.needs_shell,
+                            merge_changes=agent_cfg.merge_changes,
+                            model=agent_cfg.model,
+                            item_logger=maint_logger,
+                            parent_agent_id=agent_id,
+                        ),
                     )
 
             success = result is not None

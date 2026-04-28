@@ -323,14 +323,14 @@ class TestCreateWorktree:
         mock_lock.return_value.__enter__ = Mock(return_value=None)
         mock_lock.return_value.__exit__ = Mock(return_value=None)
         mock_run_git.return_value = Mock(returncode=0, stdout='')
-        
+
         # Simulate cleanup agent releasing lock after 2 checks
         call_count = 0
         def cleanup_active_side_effect():
             nonlocal call_count
             call_count += 1
             return call_count <= 2
-        
+
         mock_cleanup_active.side_effect = cleanup_active_side_effect
 
         result = create_worktree('task-blocked')
@@ -368,10 +368,10 @@ class TestCreateWorktree:
         mock_lock.return_value.__enter__ = Mock(return_value=None)
         mock_lock.return_value.__exit__ = Mock(return_value=None)
         mock_run_git.return_value = Mock(returncode=0, stdout='')
-        
+
         # Simulate cleanup agent still active (never releases)
         mock_cleanup_active.return_value = True
-        
+
         # Mock time to simulate timeout - return increasing values
         call_count = [0]
         def time_side_effect():
@@ -380,9 +380,9 @@ class TestCreateWorktree:
                 return 0.0  # Initial calls
             else:
                 return 601.0  # After initial, simulate timeout exceeded
-        
+
         mock_time.side_effect = time_side_effect
-        
+
         result = create_worktree('task-timeout')
 
         # Should have created the worktree despite active cleanup
@@ -658,7 +658,6 @@ class TestCheckExistingDirectory:
         race condition, or git corruption). The system must halt to prevent associating
         wrong commits with the wrong work item.
         """
-        from pokepoke.worktrees.worktrees import _check_existing_directory
 
         # Create a fake worktree directory
         worktree_path = tmp_path / "worktrees" / "task-test-item"
@@ -691,7 +690,6 @@ class TestCheckExistingDirectory:
         self, mock_force_remove, mock_run_git, tmp_path: Path
     ) -> None:
         """Wrong-branch error includes branch names for debugging."""
-        from pokepoke.worktrees.worktrees import _check_existing_directory
 
         worktree_path = tmp_path / "worktrees" / "task-my-item"
         worktree_path.mkdir(parents=True)
@@ -717,7 +715,6 @@ class TestCheckExistingDirectory:
     @patch('pokepoke.worktrees.worktrees._run_git')
     def test_correct_branch_worktree_reused(self, mock_run_git, tmp_path: Path) -> None:
         """Worktree on correct branch is reused without error."""
-        from pokepoke.worktrees.worktrees import _check_existing_directory
 
         worktree_path = tmp_path / "worktrees" / "task-good-item"
         worktree_path.mkdir(parents=True)

@@ -4,8 +4,6 @@ import subprocess
 from pathlib import Path
 from unittest.mock import Mock, patch
 
-import pytest
-
 from pokepoke.worktrees.merge_helpers import integrate_target_into_worktree
 
 

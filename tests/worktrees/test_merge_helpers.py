@@ -13,7 +13,6 @@ from pokepoke.worktrees.merge_helpers import (
     validate_post_merge_or_rollback,
 )
 
-
 # ---------------------------------------------------------------------------
 # rollback_merge_commit
 # ---------------------------------------------------------------------------

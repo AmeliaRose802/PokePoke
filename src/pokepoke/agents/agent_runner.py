@@ -9,6 +9,7 @@ from typing import TYPE_CHECKING
 
 logger = logging.getLogger(__name__)
 
+from pokepoke.agents.agent_config import MaintenanceRunConfig
 from pokepoke.agents.cleanup_agents import (
     aggregate_cleanup_stats,
     get_pokepoke_prompts_dir,
@@ -16,7 +17,6 @@ from pokepoke.agents.cleanup_agents import (
     invoke_merge_conflict_cleanup_agent,
     run_cleanup_loop,
 )
-from pokepoke.agents.gate_agent_executor import run_gate_agent
 from pokepoke.agents.simple_runners import (
     _extract_stats,
     _run_beads_only_agent,
@@ -42,7 +42,7 @@ from pokepoke.worktrees.worktrees import cleanup_worktree, create_worktree
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
 
-__all__ = ['aggregate_cleanup_stats', 'invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent', 'run_beta_tester', 'run_cleanup_loop', 'run_gate_agent', 'run_maintenance_agent', 'run_worktree_cleanup']
+__all__ = ['aggregate_cleanup_stats', 'invoke_cleanup_agent', 'invoke_merge_conflict_cleanup_agent', 'run_beta_tester', 'run_cleanup_loop', 'run_maintenance_agent', 'run_worktree_cleanup']
 
 
 @dataclass
@@ -72,15 +72,12 @@ def run_maintenance_agent(
     agent_name: str,
     prompt_file: str,
     *,
-    repo_root: Path | None = None,
-    needs_worktree: bool = True,
-    needs_shell: bool = False,
-    merge_changes: bool = True,
-    model: str | None = None,
-    item_logger: 'ItemLogger | None' = None,
-    parent_agent_id: str | None = None
+    config: MaintenanceRunConfig | None = None,
 ) -> AgentStats | None:
     """Run a maintenance agent with optional worktree isolation."""
+    if config is None:
+        config = MaintenanceRunConfig()
+
     terminal_ui.ui.set_current_agent(f"{agent_name} Agent")
     logger.info(f"\n{'='*60}\n🔧 Running {agent_name} Agent\n{'='*60}")
 
@@ -91,8 +88,8 @@ def run_maintenance_agent(
         msg = f"{agent_name} Agent failed to start: {e}"
         logger.error("%s", msg)
         logger.error("The prompts directory is missing. Ensure .pokepoke/prompts/ exists in the PokePoke installation.")
-        if item_logger:
-            item_logger.log_error(msg)
+        if config.item_logger:
+            config.item_logger.log_error(msg)
         return None
     if not prompt_path.exists():
         msg = (
@@ -100,13 +97,13 @@ def run_maintenance_agent(
             f"(expected: {prompt_path}, available: {', '.join(p.name for p in prompts_dir.glob('*.md'))})"
         )
         logger.error("%s", msg)
-        if item_logger:
-            item_logger.log_error(msg)
+        if config.item_logger:
+            config.item_logger.log_error(msg)
         return None
     agent_prompt = prompt_path.read_text(encoding='utf-8')
     # Use unique ID with timestamp to avoid worktree conflicts
     base_agent_type = f"maintenance-{agent_name.lower().replace(' ', '-')}"
-    agent_id = _generate_unique_agent_id(base_agent_type) if needs_worktree else base_agent_type
+    agent_id = _generate_unique_agent_id(base_agent_type) if config.needs_worktree else base_agent_type
     agent_item = BeadsWorkItem(
         id=agent_id, title=f"{agent_name} Maintenance", description=agent_prompt,
         status=STATUS_IN_PROGRESS, priority=0, issue_type="task",
@@ -114,29 +111,28 @@ def run_maintenance_agent(
         is_ephemeral=True,
     )
 
-    if repo_root is None:
-        repo_root = Path.cwd()
+    repo_root = config.repo_root if config.repo_root is not None else Path.cwd()
 
     # Create config object
-    config = AgentRunnerConfig(
+    runner_config = AgentRunnerConfig(
         agent_name=agent_name,
         agent_id=agent_id,
         agent_item=agent_item,
         repo_root=repo_root,
         worktree_path=repo_root,  # Updated in _run_worktree_agent if needed
-        model=model,
-        item_logger=item_logger,
+        model=config.model,
+        item_logger=config.item_logger,
     )
 
-    if not needs_worktree:
-        if needs_shell:
-            return _run_main_repo_agent(config, agent_prompt)
-        return _run_beads_only_agent(config, agent_prompt)
+    if not config.needs_worktree:
+        if config.needs_shell:
+            return _run_main_repo_agent(runner_config, agent_prompt)
+        return _run_beads_only_agent(runner_config, agent_prompt)
 
     return _run_worktree_agent(
-        config, agent_prompt,
-        merge_changes=merge_changes,
-        parent_agent_id=parent_agent_id
+        runner_config, agent_prompt,
+        merge_changes=config.merge_changes,
+        parent_agent_id=config.parent_agent_id
     )
 
 def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger | None' = None, parent_agent_id: str | None = None) -> AgentStats | None:

@@ -197,6 +197,7 @@ def _run_cleanup_retries(repo_path: Path, run_logger: 'RunLogger') -> bool:
 
     Uses the merge-conflict-aware agent when conflict markers are detected.
     """
+    from pokepoke.agents.agent_config import CleanupInvocationConfig
     from pokepoke.agents.cleanup_agents import invoke_cleanup_agent, invoke_merge_conflict_cleanup_agent
     from pokepoke.types import BeadsWorkItem
 
@@ -236,13 +237,19 @@ def _run_cleanup_retries(repo_path: Path, run_logger: 'RunLogger') -> bool:
                 cleanup_success, _ = invoke_merge_conflict_cleanup_agent(
                     cleanup_item,
                     error_msg="Residual conflict markers found in working tree (MERGE_HEAD absent)",
-                    unmerged_files=conflict_files, cwd=str(repo_path), wait_for_merge=False,
-                    item_logger=item_logger,
+                    unmerged_files=conflict_files,
+                    config=CleanupInvocationConfig(
+                        cwd=str(repo_path), wait_for_merge=False,
+                        item_logger=item_logger,
+                    ),
                 )
             else:
                 cleanup_success, _ = invoke_cleanup_agent(
-                    cleanup_item, cwd=str(repo_path), wait_for_merge=False,
-                    item_logger=item_logger,
+                    cleanup_item,
+                    config=CleanupInvocationConfig(
+                        cwd=str(repo_path), wait_for_merge=False,
+                        item_logger=item_logger,
+                    ),
                 )
 
         if cleanup_success:

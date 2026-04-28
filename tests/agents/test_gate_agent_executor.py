@@ -3,6 +3,7 @@
 import json
 from unittest.mock import Mock, patch
 
+from pokepoke.agents.agent_config import GateAgentConfig
 from pokepoke.agents.gate_agent_executor import run_gate_agent
 from pokepoke.types import BeadsWorkItem
 
@@ -448,7 +449,7 @@ class TestGateModelRecording:
         output = f"```json\n{verdict}\n```"
         mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
 
-        run_gate_agent(_make_item(), work_model="gpt-4")
+        run_gate_agent(_make_item(), config=GateAgentConfig(work_model="gpt-4"))
 
         mock_record.assert_called_once_with("claude-3", "item-1", True, reason='')
 
@@ -462,7 +463,7 @@ class TestGateModelRecording:
         output = f"```json\n{verdict}\n```"
         mock_invoke.return_value = _mock_invoke_result(success=True, output=output)
 
-        run_gate_agent(_make_item(), work_model="gpt-4")
+        run_gate_agent(_make_item(), config=GateAgentConfig(work_model="gpt-4"))
 
         mock_record.assert_called_once_with("claude-3", "item-1", False, reason="Bad code\nDetails: ")
 
@@ -474,7 +475,7 @@ class TestGateModelRecording:
     def test_no_recording_on_crash(self, mock_ui, mock_branch, mock_model, mock_invoke, mock_record):
         mock_invoke.return_value = _mock_invoke_result(success=False, error="Process killed")
 
-        run_gate_agent(_make_item(), work_model="gpt-4")
+        run_gate_agent(_make_item(), config=GateAgentConfig(work_model="gpt-4"))
 
         mock_record.assert_not_called()
 

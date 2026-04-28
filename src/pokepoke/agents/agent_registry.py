@@ -9,6 +9,7 @@ import time
 from typing import Any
 
 from pokepoke.agents.agent_child_tracking import ChildAgentTracker
+from pokepoke.agents.agent_config import AgentStatusConfig
 
 
 @dataclasses.dataclass
@@ -106,30 +107,23 @@ class AgentRegistry:
 
     def update_status(
         self,
-        agent_id: str,
-        name: str,
-        iteration: int,
-        status: str,
-        model: str | None = None,
-        parent_agent_id: str | None = None,
-        work_item_id: str | None = None,
-        work_item_title: str | None = None,
-        agent_prompt: str | None = None,
-        session_id: str | None = None,
-        modified_files: list[str] | None = None,
-        agent_type: str | None = None,
-        resume_in_place: bool = False,
+        config: AgentStatusConfig,
     ) -> None:
+        """Update agent status using a configuration object.
+
+        Args:
+            config: AgentStatusConfig containing all status update parameters
+        """
         now = time.time()
         with self._lock:
-            existing = self._agents.get(agent_id)
+            existing = self._agents.get(config.agent_id)
             is_retry_iteration = (
                 existing is not None
-                and iteration > existing.iteration
+                and config.iteration > existing.iteration
             )
 
             # Determine how to handle logs, card_id, and started_at
-            if is_retry_iteration and resume_in_place:
+            if is_retry_iteration and config.resume_in_place:
                 # In-place resume (e.g. timeout retry): keep logs, card, start time
                 assert existing is not None
                 recent_logs = list(existing.recent_logs)
@@ -137,7 +131,7 @@ class AgentRegistry:
                 existing_started_at = existing.started_at or now
             elif is_retry_iteration:
                 assert existing is not None
-                self._archive_attempt(agent_id, existing)
+                self._archive_attempt(config.agent_id, existing)
                 recent_logs = []
                 log_lines = []
                 existing_started_at = now
@@ -148,49 +142,49 @@ class AgentRegistry:
                 )
                 existing_started_at = (existing.started_at or now) if existing else now
 
-            current_model = model if model is not None else (existing.model if existing else None)
+            current_model = config.model if config.model is not None else (existing.model if existing else None)
             current_parent = (
-                parent_agent_id
-                if parent_agent_id is not None
+                config.parent_agent_id
+                if config.parent_agent_id is not None
                 else (existing.parent_agent_id if existing else None)
             )
             current_work_item_id = (
-                work_item_id
-                if work_item_id is not None
+                config.work_item_id
+                if config.work_item_id is not None
                 else (existing.work_item_id if existing else None)
             )
             current_work_item_title = (
-                work_item_title
-                if work_item_title is not None
+                config.work_item_title
+                if config.work_item_title is not None
                 else (existing.work_item_title if existing else None)
             )
             current_prompt = (
-                agent_prompt
-                if agent_prompt is not None
+                config.agent_prompt
+                if config.agent_prompt is not None
                 else (existing.agent_prompt if existing else None)
             )
             current_session_id = (
-                session_id
-                if session_id is not None
+                config.session_id
+                if config.session_id is not None
                 else (existing.session_id if existing else None)
             )
             current_modified_files = (
-                modified_files
-                if modified_files is not None
+                config.modified_files
+                if config.modified_files is not None
                 else (existing.modified_files if existing else None)
             )
-            current_agent_type = self._normalize_agent_type(agent_type) or (
+            current_agent_type = self._normalize_agent_type(config.agent_type) or (
                 self._normalize_agent_type(existing.agent_type) if existing else None
             )
 
             # Card ID: keep existing for in-place resume or same-iteration update
-            if (is_retry_iteration and resume_in_place and existing) or (existing and not is_retry_iteration):
+            if (is_retry_iteration and config.resume_in_place and existing) or (existing and not is_retry_iteration):
                 card_id = existing.card_id
             else:
-                card_id = self._build_card_id(agent_id, iteration)
+                card_id = self._build_card_id(config.agent_id, config.iteration)
 
             # Parent card ID: preserve existing for in-place resume
-            if resume_in_place and existing:
+            if config.resume_in_place and existing:
                 parent_card_id = existing.parent_card_id
             else:
                 parent_card_id = None
@@ -204,21 +198,21 @@ class AgentRegistry:
                             parent_card_id = history[-1].card_id
 
             # Preserve last_log_at for in-place resume
-            if is_retry_iteration and resume_in_place:
+            if is_retry_iteration and config.resume_in_place:
                 last_log_at = existing.last_log_at if existing else None
             elif is_retry_iteration:
                 last_log_at = None
             else:
                 last_log_at = existing.last_log_at if existing else None
 
-            self._agents[agent_id] = AgentRecord(
-                agent_id=agent_id,
-                base_agent_id=agent_id,
+            self._agents[config.agent_id] = AgentRecord(
+                agent_id=config.agent_id,
+                base_agent_id=config.agent_id,
                 card_id=card_id,
                 parent_card_id=parent_card_id,
-                name=name,
-                iteration=iteration,
-                status=status,
+                name=config.name,
+                iteration=config.iteration,
+                status=config.status,
                 model=current_model,
                 parent_agent_id=current_parent,
                 work_item_id=current_work_item_id,
@@ -236,7 +230,7 @@ class AgentRegistry:
 
             # Track parent-child relationship
             if current_parent:
-                self._child_tracker.add_child(current_parent, agent_id)
+                self._child_tracker.add_child(current_parent, config.agent_id)
 
     def update_token_usage(
         self,

@@ -74,6 +74,7 @@ def _invoke_preflight_cleanup(repo_path: Path, commit_error: str) -> bool:
     the cleanup agent is unavailable or fails.
     """
     try:
+        from pokepoke.agents.agent_config import CleanupInvocationConfig
         from pokepoke.agents.cleanup_agents import invoke_cleanup_agent
         from pokepoke.types import BeadsWorkItem
     except ImportError:
@@ -101,8 +102,10 @@ def _invoke_preflight_cleanup(repo_path: Path, commit_error: str) -> bool:
         logger.info("Invoking cleanup agent for preflight repair")
         success, _stats = invoke_cleanup_agent(
             cleanup_item,
-            cwd=str(repo_path),
-            wait_for_merge=False,
+            config=CleanupInvocationConfig(
+                cwd=str(repo_path),
+                wait_for_merge=False,
+            ),
         )
     except Exception as e:
         logger.warning("Cleanup agent raised an exception: %s", e, exc_info=True)

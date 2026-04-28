@@ -13,20 +13,20 @@ from typing import TYPE_CHECKING
 
 from filelock import Timeout
 
+from pokepoke.agents.agent_config import CleanupInvocationConfig
 from pokepoke.agents.cleanup_agents import invoke_cleanup_agent
 from pokepoke.git.git_operations import get_default_branch, is_worktree_clean
 from pokepoke.git.repo_state_guard import cleanup_lock
 from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.types_stats import AgentStats
-from pokepoke.utils.constants import WORKTREE_DIR, WORKTREE_TASK_PREFIX
 
 if TYPE_CHECKING:
     from pokepoke.utils.logging_utils import ItemLogger
     from pokepoke.worktrees.merge_step_tracker import MergeStepTracker
 from pokepoke.worktrees.coordination import merge_lock
-from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
-from pokepoke.worktrees.merge_conflict_retry import retry_merge_after_cleanup, run_conflict_retry_loop
+from pokepoke.worktrees.merge_conflict_retry import run_conflict_retry_loop
 from pokepoke.worktrees.merge_result import MergeResult
+from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
 from pokepoke.worktrees.worktrees import cleanup_worktree, merge_worktree
 
 logger = logging.getLogger(__name__)
@@ -44,7 +44,7 @@ class WorktreeMergeContext:
     repo_root: Path
     parent_agent_id: str | None = None
     repo_path: str | None = None
-    item_logger: 'ItemLogger | None' = None
+    item_logger: ItemLogger | None = None
     max_conflict_retries: int = DEFAULT_MAX_CONFLICT_RETRIES
 
 
@@ -285,8 +285,11 @@ def _ensure_main_repo_ready(
         logger.info("   Cleanup attempt %d/%d...", attempt, _MAX_RETRIES)
         with cleanup_lock():
             ok, _ = invoke_cleanup_agent(
-                ctx.agent_item, cwd=repo_cwd, parent_agent_id=ctx.parent_agent_id,
-                wait_for_merge=False, item_logger=ctx.item_logger,
+                ctx.agent_item,
+                config=CleanupInvocationConfig(
+                    cwd=repo_cwd, parent_agent_id=ctx.parent_agent_id,
+                    wait_for_merge=False, item_logger=ctx.item_logger,
+                ),
             )
         if not ok:
             logger.error("   Cleanup failed (attempt %d/%d).", attempt, _MAX_RETRIES)
@@ -320,7 +323,7 @@ def _ensure_main_repo_ready(
     return False
 
 
-def perform_worktree_merge(  # noqa: C901
+def perform_worktree_merge(
     ctx: WorktreeMergeContext,
 ) -> tuple[bool, bool] | _ConflictResolutionNeeded:
     """Core merge logic: readiness check, merge attempt, conflict signal."""

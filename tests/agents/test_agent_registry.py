@@ -4,7 +4,16 @@ from __future__ import annotations
 
 import threading
 
+from pokepoke.agents.agent_config import AgentStatusConfig
 from pokepoke.agents.agent_registry import AgentRecord, AgentRegistry
+
+
+def _update_status(reg: AgentRegistry, agent_id: str, name: str, iteration: int = 1, status: str = "running", **kwargs) -> None:
+    """Helper to update_status using the new config API for test convenience."""
+    config = AgentStatusConfig(
+        agent_id=agent_id, name=name, iteration=iteration, status=status, **kwargs
+    )
+    reg.update_status(config)
 
 
 class TestAgentRecordConstruction:
@@ -147,26 +156,26 @@ class TestRegistryUsesAgentRecord:
 
     def test_internal_agents_are_agent_records(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "Worker", iteration=1, status="running")
+        _update_status(reg, "a1", "Worker", iteration=1, status="running")
         assert isinstance(reg._agents["a1"], AgentRecord)
 
     def test_internal_history_uses_agent_records(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "Worker", iteration=1, status="running")
-        reg.update_status("a1", "Worker", iteration=2, status="running")
+        _update_status(reg, "a1", "Worker", iteration=1, status="running")
+        _update_status(reg, "a1", "Worker", iteration=2, status="running")
         assert len(reg._agent_history["a1"]) == 1
         assert isinstance(reg._agent_history["a1"][0], AgentRecord)
 
     def test_serialize_all_returns_dicts(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "Worker", iteration=1, status="running")
+        _update_status(reg, "a1", "Worker", iteration=1, status="running")
         agents = reg.serialize_all()
         assert len(agents) == 1
         assert isinstance(agents[0], dict)
 
     def test_get_detail_returns_dict(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "Worker", iteration=1, status="running")
+        _update_status(reg, "a1", "Worker", iteration=1, status="running")
         detail = reg.get_detail("a1")
         assert isinstance(detail, dict)
         assert "log_lines" in detail
@@ -174,7 +183,7 @@ class TestRegistryUsesAgentRecord:
     def test_attribute_access_replaces_get(self) -> None:
         """Fields are accessed as attributes, not via .get() with string keys."""
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "Worker", iteration=1, status="running", model="gpt-5")
+        _update_status(reg, "a1", "Worker", iteration=1, status="running", model="gpt-5")
         agent = reg._agents["a1"]
         assert agent.model == "gpt-5"
         assert agent.iteration == 1
@@ -192,7 +201,7 @@ class TestRegistrySetLimits:
 class TestRegistryUpdateTokenUsage:
     def test_updates_token_counts(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.update_token_usage("a1", 1000, 500)
         assert reg._agents["a1"].input_tokens == 1000
         assert reg._agents["a1"].output_tokens == 500
@@ -206,7 +215,7 @@ class TestRegistryUpdateTokenUsage:
 class TestRegistryAppendLog:
     def test_appends_to_both_log_buffers(self) -> None:
         reg = AgentRegistry(threading.RLock(), preview_limit=5, detail_limit=10)
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.append_log("a1", "hello")
         agent = reg._agents["a1"]
         assert agent.recent_logs == ["hello"]
@@ -216,14 +225,14 @@ class TestRegistryAppendLog:
 
     def test_trims_preview_log(self) -> None:
         reg = AgentRegistry(threading.RLock(), preview_limit=2)
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         for i in range(5):
             reg.append_log("a1", f"line-{i}")
         assert reg._agents["a1"].recent_logs == ["line-3", "line-4"]
 
     def test_trims_detail_log(self) -> None:
         reg = AgentRegistry(threading.RLock(), preview_limit=100, detail_limit=3)
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         for i in range(5):
             reg.append_log("a1", f"line-{i}")
         assert reg._agents["a1"].log_lines == ["line-2", "line-3", "line-4"]
@@ -237,7 +246,7 @@ class TestRegistryAppendLog:
 class TestRegistryPauseResume:
     def test_pause_returns_true_for_existing(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         assert reg.pause("a1") is True
 
     def test_pause_returns_false_for_unknown(self) -> None:
@@ -246,7 +255,7 @@ class TestRegistryPauseResume:
 
     def test_resume_returns_true_when_paused(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.pause("a1")
         assert reg.resume("a1") is True
 
@@ -256,7 +265,7 @@ class TestRegistryPauseResume:
 
     def test_is_paused_reflects_state(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         assert reg.is_paused("a1") is False
         reg.pause("a1")
         assert reg.is_paused("a1") is True
@@ -267,9 +276,9 @@ class TestRegistryPauseResume:
 class TestRegistryClearRemove:
     def test_clear_removes_everything(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.pause("a1")
-        reg.update_status("a1", "W", iteration=2, status="running")
+        _update_status(reg, "a1", "W", iteration=2, status="running")
         reg.clear()
         assert reg._agents == {}
         assert reg._agent_history == {}
@@ -277,7 +286,7 @@ class TestRegistryClearRemove:
 
     def test_remove_deletes_agent_and_paused(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.pause("a1")
         reg.remove("a1")
         assert "a1" not in reg._agents
@@ -291,9 +300,9 @@ class TestRegistryClearRemove:
 class TestRegistrySerializeAll:
     def test_includes_history_and_live(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.append_log("a1", "v1 log")
-        reg.update_status("a1", "W", iteration=2, status="running")
+        _update_status(reg, "a1", "W", iteration=2, status="running")
         agents = reg.serialize_all()
         assert len(agents) == 2
         history = [a for a in agents if a["is_history_entry"]]
@@ -303,14 +312,14 @@ class TestRegistrySerializeAll:
 
     def test_sorted_by_started_at_descending(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
-        reg.update_status("a2", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
+        _update_status(reg, "a2", "W", iteration=1, status="running")
         agents = reg.serialize_all()
         assert agents[0]["started_at"] >= agents[1]["started_at"]
 
     def test_paused_flag_reflected_in_serialization(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.pause("a1")
         agents = reg.serialize_all()
         assert agents[0]["paused"] is True
@@ -323,7 +332,7 @@ class TestRegistryGetDetail:
 
     def test_lookup_by_card_id_on_live_agent(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         card_id = reg._agents["a1"].card_id
         detail = reg.get_detail(card_id)
         assert detail is not None
@@ -331,15 +340,15 @@ class TestRegistryGetDetail:
 
     def test_lookup_by_card_id_on_history(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
-        reg.update_status("a1", "W", iteration=2, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=2, status="running")
         detail = reg.get_detail("a1::v1")
         assert detail is not None
         assert detail["is_history_entry"] is True
 
     def test_includes_log_lines(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.append_log("a1", "hello")
         detail = reg.get_detail("a1")
         assert "log_lines" in detail
@@ -349,21 +358,21 @@ class TestRegistryGetDetail:
 class TestRegistryParentResolution:
     def test_parent_card_from_live_agent(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "P", iteration=1, status="running")
-        reg.update_status("child", "C", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "P", iteration=1, status="running")
+        _update_status(reg, "child", "C", iteration=1, status="running", parent_agent_id="parent")
         child = reg._agents["child"]
         assert child.parent_card_id == "parent::v1"
 
     def test_parent_card_from_history(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "P", iteration=1, status="running")
+        _update_status(reg, "parent", "P", iteration=1, status="running")
         reg.remove("parent")
         # Parent is gone from live agents, but history was not archived via iteration.
         # Manually archive to simulate finished parent.
         reg._agent_history["parent"] = [
             AgentRecord(agent_id="parent", base_agent_id="parent", card_id="parent::v1", name="P")
         ]
-        reg.update_status("child", "C", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "child", "C", iteration=1, status="running", parent_agent_id="parent")
         child = reg._agents["child"]
         assert child.parent_card_id == "parent::v1"
 
@@ -371,8 +380,8 @@ class TestRegistryParentResolution:
 class TestRegistryArchiveAttempt:
     def test_archive_sets_running_to_failed(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
-        reg.update_status("a1", "W", iteration=2, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=2, status="running")
         history = reg._agent_history["a1"]
         assert len(history) == 1
         assert history[0].status == "failed"
@@ -380,8 +389,8 @@ class TestRegistryArchiveAttempt:
 
     def test_archive_preserves_non_running_status(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="success")
-        reg.update_status("a1", "W", iteration=2, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="success")
+        _update_status(reg, "a1", "W", iteration=2, status="running")
         history = reg._agent_history["a1"]
         assert history[0].status == "success"
 
@@ -391,10 +400,10 @@ class TestRegistryResumeInPlace:
 
     def test_preserves_logs_on_resume(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.append_log("a1", "line-1")
         reg.append_log("a1", "line-2")
-        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        _update_status(reg, "a1", "W", iteration=2, status="running", resume_in_place=True)
         agent = reg._agents["a1"]
         assert "line-1" in agent.recent_logs
         assert "line-2" in agent.recent_logs
@@ -403,36 +412,36 @@ class TestRegistryResumeInPlace:
 
     def test_preserves_card_id_on_resume(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         original_card_id = reg._agents["a1"].card_id
-        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        _update_status(reg, "a1", "W", iteration=2, status="running", resume_in_place=True)
         assert reg._agents["a1"].card_id == original_card_id
 
     def test_preserves_started_at_on_resume(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         original_started = reg._agents["a1"].started_at
-        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        _update_status(reg, "a1", "W", iteration=2, status="running", resume_in_place=True)
         assert reg._agents["a1"].started_at == original_started
 
     def test_does_not_archive_on_resume(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
-        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        _update_status(reg, "a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=2, status="running", resume_in_place=True)
         assert "a1" not in reg._agent_history
 
     def test_updates_iteration_on_resume(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
-        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        _update_status(reg, "a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=2, status="running", resume_in_place=True)
         assert reg._agents["a1"].iteration == 2
 
     def test_standard_retry_still_archives(self) -> None:
         """Without resume_in_place, normal retry behavior is preserved."""
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.append_log("a1", "old-log")
-        reg.update_status("a1", "W", iteration=2, status="running")
+        _update_status(reg, "a1", "W", iteration=2, status="running")
         assert "a1" in reg._agent_history
         assert len(reg._agent_history["a1"]) == 1
         # Logs are cleared for standard retry
@@ -441,26 +450,26 @@ class TestRegistryResumeInPlace:
 
     def test_preserves_parent_card_id_on_resume(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         # Agent has no parent, so parent_card_id should stay None
-        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        _update_status(reg, "a1", "W", iteration=2, status="running", resume_in_place=True)
         assert reg._agents["a1"].parent_card_id is None
 
     def test_preserves_last_log_at_on_resume(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.append_log("a1", "log-line")
         original_log_at = reg._agents["a1"].last_log_at
         assert original_log_at is not None
-        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        _update_status(reg, "a1", "W", iteration=2, status="running", resume_in_place=True)
         assert reg._agents["a1"].last_log_at == original_log_at
 
     def test_serialize_shows_single_card_after_resume(self) -> None:
         """In-place resume should produce one card, not a history entry + live entry."""
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("a1", "W", iteration=1, status="running")
+        _update_status(reg, "a1", "W", iteration=1, status="running")
         reg.append_log("a1", "log-line")
-        reg.update_status("a1", "W", iteration=2, status="running", resume_in_place=True)
+        _update_status(reg, "a1", "W", iteration=2, status="running", resume_in_place=True)
         agents = reg.serialize_all()
         assert len(agents) == 1
         assert agents[0]["iteration"] == 2
@@ -495,51 +504,51 @@ class TestRegistryChildAgentTracking:
 
     def test_has_active_children_false_when_no_children(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
         assert reg.has_active_children("parent") is False
 
     def test_has_active_children_true_when_child_running(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child", "Child", iteration=1, status="running", parent_agent_id="parent")
         assert reg.has_active_children("parent") is True
 
     def test_has_active_children_false_when_child_completed(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child", "Child", iteration=1, status="success", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child", "Child", iteration=1, status="success", parent_agent_id="parent")
         assert reg.has_active_children("parent") is False
 
     def test_has_active_children_counts_pending_as_active(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child", "Child", iteration=1, status="pending", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child", "Child", iteration=1, status="pending", parent_agent_id="parent")
         assert reg.has_active_children("parent") is True
 
     def test_get_active_children_returns_running_children(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
-        reg.update_status("child2", "Child2", iteration=1, status="pending", parent_agent_id="parent")
-        reg.update_status("child3", "Child3", iteration=1, status="success", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "child2", "Child2", iteration=1, status="pending", parent_agent_id="parent")
+        _update_status(reg, "child3", "Child3", iteration=1, status="success", parent_agent_id="parent")
 
         active = reg.get_active_children("parent")
         assert set(active) == {"child1", "child2"}
 
     def test_get_active_children_empty_when_no_children(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
         assert reg.get_active_children("parent") == []
 
     def test_get_most_recent_child_activity_returns_none_when_no_children(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
         assert reg.get_most_recent_child_activity("parent") is None
 
     def test_get_most_recent_child_activity_returns_child_log_time(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child", "Child", iteration=1, status="running", parent_agent_id="parent")
         reg.append_log("child", "child log")
 
         # Get the child's last_log_at timestamp
@@ -550,9 +559,9 @@ class TestRegistryChildAgentTracking:
 
     def test_get_most_recent_child_activity_picks_most_recent(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
-        reg.update_status("child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
 
         # Log to child1
         reg.append_log("child1", "log")
@@ -570,9 +579,9 @@ class TestRegistryChildAgentTracking:
 
     def test_get_most_recent_child_activity_ignores_completed_children(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child1", "Child1", iteration=1, status="success", parent_agent_id="parent")
-        reg.update_status("child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child1", "Child1", iteration=1, status="success", parent_agent_id="parent")
+        _update_status(reg, "child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
 
         reg.append_log("child1", "completed child log")
         reg.append_log("child2", "running child log")
@@ -583,8 +592,8 @@ class TestRegistryChildAgentTracking:
 
     def test_remove_cleans_up_parent_child_tracking(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child", "Child", iteration=1, status="running", parent_agent_id="parent")
 
         assert reg.has_active_children("parent") is True
 
@@ -596,8 +605,8 @@ class TestRegistryChildAgentTracking:
 
     def test_remove_parent_cleans_up_children_mapping(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child", "Child", iteration=1, status="running", parent_agent_id="parent")
 
         # Remove parent
         reg.remove("parent")
@@ -607,8 +616,8 @@ class TestRegistryChildAgentTracking:
 
     def test_clear_removes_parent_child_tracking(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child", "Child", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child", "Child", iteration=1, status="running", parent_agent_id="parent")
 
         assert len(reg._child_tracker._parent_to_children) > 0
 
@@ -618,10 +627,10 @@ class TestRegistryChildAgentTracking:
 
     def test_multiple_children_tracked_correctly(self) -> None:
         reg = AgentRegistry(threading.RLock())
-        reg.update_status("parent", "Parent", iteration=1, status="running")
-        reg.update_status("child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
-        reg.update_status("child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
-        reg.update_status("child3", "Child3", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "parent", "Parent", iteration=1, status="running")
+        _update_status(reg, "child1", "Child1", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "child2", "Child2", iteration=1, status="running", parent_agent_id="parent")
+        _update_status(reg, "child3", "Child3", iteration=1, status="running", parent_agent_id="parent")
 
         active = reg.get_active_children("parent")
         assert len(active) == 3

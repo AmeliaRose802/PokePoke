@@ -7,6 +7,7 @@ import time
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pokepoke.agents.agent_config import CleanupAgentConfig, CleanupInvocationConfig
 from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.git_operations import commit_all_changes, verify_main_repo_clean
@@ -99,10 +100,12 @@ def run_cleanup_loop(
         file_paths = [f.split()[-1] if f.split() else f for f in non_beads_changes]
         cleanup_success, cleanup_stats = invoke_cleanup_agent(
             item,
-            cwd=cwd,
             modified_files=file_paths,
-            parent_agent_id=parent_agent_id,
-            item_logger=item_logger,
+            config=CleanupInvocationConfig(
+                cwd=cwd,
+                parent_agent_id=parent_agent_id,
+                item_logger=item_logger,
+            ),
         )
 
         aggregate_cleanup_stats(result.stats, cleanup_stats)
@@ -204,12 +207,7 @@ def _verify_cleanup_postcondition(
     agent_id: str,
     item_logger: ItemLogger | None,
 ) -> bool:
-    """Check that the repo is clean after a cleanup agent exits.
-
-    Returns True if the working directory has no uncommitted non-beads changes,
-    False otherwise.  A cleanup agent that exits 0 but leaves the repo dirty
-    is treated as a failure so callers can retry.
-    """
+    """Check repo is clean after cleanup agent. Returns False if still dirty."""
     from pokepoke.git.git_operations import has_uncommitted_changes
 
     try:
@@ -231,59 +229,59 @@ def _verify_cleanup_postcondition(
 
 
 def _run_agent_with_ui(
-    agent_id: str,
-    agent_label: str,
-    agent_type_key: str,
+    config: CleanupAgentConfig,
     cleanup_item: BeadsWorkItem,
     cleanup_prompt: str,
-    cwd: str | None,
-    parent_agent_id: str | None,
-    work_item_id: str | None = None,
-    work_item_title: str | None = None,
-    modified_files: list[str] | None = None,
-    timeout: float | None = None,
-    item_logger: ItemLogger | None = None,
 ) -> tuple[bool, AgentStats | None]:
-    """Invoke copilot with UI status tracking and metrics context."""
+    """Invoke copilot with UI status tracking and metrics context.
+
+    Args:
+        config: CleanupAgentConfig with agent invocation parameters
+        cleanup_item: The BeadsWorkItem to execute
+        cleanup_prompt: The prompt text for the cleanup agent
+
+    Returns:
+        Tuple of (success, stats) where success=True if cleanup succeeded
+    """
     try:
         from pokepoke.stats.metrics_context import agent_type_context
-        with terminal_ui.ui.agent_output_for(agent_id), agent_type_context(agent_type_key):
+        with terminal_ui.ui.agent_output_for(config.agent_id), agent_type_context(config.agent_type_key):
             # Push agent status inside context so get_current_agent_type() returns the agent type
             terminal_ui.ui.push_agent_status(
-                agent_id, agent_label, iteration=1, status="running",
-                work_item_id=work_item_id, work_item_title=work_item_title,
-                modified_files=modified_files,
-                parent_agent_id=parent_agent_id,
-                agent_type=agent_type_key,
+                config.agent_id, config.agent_label, iteration=1, status="running",
+                work_item_id=config.work_item_id, work_item_title=config.work_item_title,
+                modified_files=config.modified_files,
+                parent_agent_id=config.parent_agent_id,
+                agent_type=config.agent_type_key,
                 agent_prompt=cleanup_prompt,
             )
-            if item_logger:
-                item_logger.log(f"\n{'='*60}\n{agent_label} ({agent_id})\n{'='*60}")
+            if config.item_logger:
+                config.item_logger.log(f"\n{'='*60}\n{config.agent_label} ({config.agent_id})\n{'='*60}")
             copilot_result = invoke_copilot(
-                cleanup_item, prompt=cleanup_prompt, cwd=cwd, timeout=timeout,
-                item_logger=item_logger,
+                cleanup_item, prompt=cleanup_prompt, cwd=config.cwd, timeout=config.timeout,
+                item_logger=config.item_logger,
             )
 
         # Post-condition: verify repo is actually clean after agent exits.
         # The agent can exit 0 without committing (e.g. pre-commit hook rejected).
         agent_success = copilot_result.success
         if agent_success:
-            agent_success = _verify_cleanup_postcondition(cwd, agent_id, item_logger)
+            agent_success = _verify_cleanup_postcondition(config.cwd, config.agent_id, config.item_logger)
 
         status = "success" if agent_success else "failed"
         terminal_ui.ui.push_agent_status(
-            agent_id, agent_label, iteration=1, status=status,
-            parent_agent_id=parent_agent_id,
-            agent_type=agent_type_key,
+            config.agent_id, config.agent_label, iteration=1, status=status,
+            parent_agent_id=config.parent_agent_id,
+            agent_type=config.agent_type_key,
         )
 
         return agent_success, copilot_result.stats
     except Exception as e:
         logger.warning(f"Cleanup agent failed with error: {e}", exc_info=True)
         terminal_ui.ui.push_agent_status(
-            agent_id, agent_label, iteration=1, status="failed",
-            parent_agent_id=parent_agent_id,
-            agent_type=agent_type_key,
+            config.agent_id, config.agent_label, iteration=1, status="failed",
+            parent_agent_id=config.parent_agent_id,
+            agent_type=config.agent_type_key,
         )
         raise
 
@@ -309,15 +307,16 @@ def _wait_for_merge_completion(agent_label: str, item_id: str) -> None:
 
 def invoke_cleanup_agent(
     item: BeadsWorkItem,
-    cwd: str | None = None,
+    *,
     modified_files: list[str] | None = None,
-    parent_agent_id: str | None = None,
-    wait_for_merge: bool = True,
-    item_logger: ItemLogger | None = None,
+    config: CleanupInvocationConfig | None = None,
 ) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to commit uncommitted changes."""
+    if config is None:
+        config = CleanupInvocationConfig()
+
     # Check if merge is active and wait if requested
-    if wait_for_merge and merge_lock_active():
+    if config.wait_for_merge and merge_lock_active():
         _wait_for_merge_completion("cleanup", item.id)
 
     terminal_ui.ui.set_current_agent("Cleanup Agent")
@@ -328,12 +327,12 @@ def invoke_cleanup_agent(
     if cleanup_prompt_template is None:
         terminal_ui.ui.push_agent_status(
             agent_id, "Cleanup Agent", iteration=1, status="failed",
-            parent_agent_id=parent_agent_id,
+            parent_agent_id=config.parent_agent_id,
             agent_type="cleanup",
         )
         return False, None
 
-    current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
+    current_dir, current_branch, is_worktree = _get_current_git_context(cwd=config.cwd)
     cleanup_prompt_template = _apply_base_template_vars(
         cleanup_prompt_template, current_dir, current_branch, is_worktree,
     )
@@ -354,28 +353,35 @@ def invoke_cleanup_agent(
 
     logger.info("\n🧹 Invoking cleanup agent...")
 
-    return _run_agent_with_ui(
-        agent_id, "Cleanup Agent", "cleanup",
-        cleanup_item, cleanup_prompt, cwd, parent_agent_id,
-        work_item_id=item.id, work_item_title=item.title,
+    ui_config = CleanupAgentConfig(
+        agent_id=agent_id,
+        agent_label="Cleanup Agent",
+        agent_type_key="cleanup",
+        cwd=config.cwd,
+        parent_agent_id=config.parent_agent_id,
+        work_item_id=item.id,
+        work_item_title=item.title,
         modified_files=modified_files,
         timeout=CLEANUP_AGENT_TIMEOUT,
-        item_logger=item_logger,
+        item_logger=config.item_logger,
     )
+
+    return _run_agent_with_ui(ui_config, cleanup_item, cleanup_prompt)
 
 
 def invoke_merge_conflict_cleanup_agent(
     item: BeadsWorkItem,
     error_msg: str,
+    *,
     unmerged_files: list[str] | None = None,
-    cwd: str | None = None,
-    parent_agent_id: str | None = None,
-    wait_for_merge: bool = True,
-    item_logger: ItemLogger | None = None,
+    config: CleanupInvocationConfig | None = None,
 ) -> tuple[bool, AgentStats | None]:
     """Invoke cleanup agent to resolve merge conflicts."""
+    if config is None:
+        config = CleanupInvocationConfig()
+
     # Check if merge is active and wait if requested
-    if wait_for_merge and merge_lock_active():
+    if config.wait_for_merge and merge_lock_active():
         _wait_for_merge_completion("conflict cleanup", item.id)
 
     terminal_ui.ui.set_current_agent("Merge Conflict Cleanup")
@@ -390,12 +396,19 @@ def invoke_merge_conflict_cleanup_agent(
         logger.warning("⚠️ Falling back to standard cleanup agent")
         terminal_ui.ui.push_agent_status(
             agent_id, "Merge Conflict Cleanup", iteration=1, status="failed",
-            parent_agent_id=parent_agent_id,
+            parent_agent_id=config.parent_agent_id,
             agent_type="merge_conflict_cleanup",
         )
-        return invoke_cleanup_agent(item, parent_agent_id=parent_agent_id, wait_for_merge=wait_for_merge, item_logger=item_logger)
+        return invoke_cleanup_agent(
+            item,
+            config=CleanupInvocationConfig(
+                parent_agent_id=config.parent_agent_id,
+                wait_for_merge=config.wait_for_merge,
+                item_logger=config.item_logger,
+            ),
+        )
 
-    current_dir, current_branch, is_worktree = _get_current_git_context(cwd=cwd)
+    current_dir, current_branch, is_worktree = _get_current_git_context(cwd=config.cwd)
 
     is_merging = is_merge_in_progress()
     if unmerged_files is None:
@@ -446,11 +459,17 @@ def invoke_merge_conflict_cleanup_agent(
         if len(unmerged_files) > 5:
             logger.info(f"      ... and {len(unmerged_files) - 5} more")
 
-    return _run_agent_with_ui(
-        agent_id, "Merge Conflict Cleanup", "merge_conflict_cleanup",
-        cleanup_item, cleanup_prompt, cwd, parent_agent_id,
-        work_item_id=item.id, work_item_title=item.title,
+    ui_config = CleanupAgentConfig(
+        agent_id=agent_id,
+        agent_label="Merge Conflict Cleanup",
+        agent_type_key="merge_conflict_cleanup",
+        cwd=config.cwd,
+        parent_agent_id=config.parent_agent_id,
+        work_item_id=item.id,
+        work_item_title=item.title,
         modified_files=unmerged_files,
         timeout=CLEANUP_AGENT_TIMEOUT,
-        item_logger=item_logger,
+        item_logger=config.item_logger,
     )
+
+    return _run_agent_with_ui(ui_config, cleanup_item, cleanup_prompt)

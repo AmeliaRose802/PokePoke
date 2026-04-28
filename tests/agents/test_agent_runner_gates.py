@@ -4,6 +4,7 @@ from unittest.mock import Mock, patch
 
 import pytest
 
+from pokepoke.agents.agent_config import GateAgentConfig
 from pokepoke.agents.agent_runner import (
     run_gate_agent,
 )
@@ -299,8 +300,7 @@ class TestRunGateAgent:
         )
 
         result = run_gate_agent(
-            work_item, session_id="sess-abc", is_resume=True,
-        )
+            work_item, config=GateAgentConfig(session_id="sess-abc", is_resume=True))
 
         assert result.success is True
         # Should NOT have called PromptService since we're resuming
@@ -414,7 +414,7 @@ class TestRunGateAgent:
         mock_parse.return_value = None
 
         # Call with work_model parameter
-        success, _reason, _stats, _crashed = run_gate_agent(work_item, work_model="claude-opus-4.6")
+        success, _reason, _stats, _crashed = run_gate_agent(work_item, config=GateAgentConfig(work_model="claude-opus-4.6"))
 
         assert success is True
         # Verify select_gate_model was called with work model
@@ -456,7 +456,7 @@ class TestRunGateAgent:
         mock_parse.return_value = None
 
         handoff = "## Work Agent Handoff Context\n### Changed Files\nM\tsrc/foo.py"
-        success, _reason, _stats, _crashed = run_gate_agent(work_item, handoff_context=handoff)
+        success, _reason, _stats, _crashed = run_gate_agent(work_item, config=GateAgentConfig(handoff_context=handoff))
 
         assert success is True
         # Verify handoff_context was included in template variables
@@ -591,8 +591,7 @@ class TestGateAgentWithAgentId:
         mock_parse.return_value = None
 
         success, _reason, _stats, _crashed = run_gate_agent(
-            work_item, agent_id="gate-123", parent_agent_id="parent-1",
-        )
+            work_item, config=GateAgentConfig(agent_id="gate-123", parent_agent_id="parent-1"))
 
         assert success is True
         mock_terminal_ui.ui.push_agent_status.assert_called()

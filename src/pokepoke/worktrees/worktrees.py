@@ -18,12 +18,12 @@ from pokepoke.stats.perf_timing import timed_block
 from pokepoke.utils.constants import BRANCH_PREFIX, WORKTREE_DIR, WORKTREE_TASK_PREFIX
 from pokepoke.worktrees.coordination import with_worktree_lock
 from pokepoke.worktrees.merge_helpers import (
-    is_worktree_merged as is_worktree_merged,  # re-export
-)
-from pokepoke.worktrees.merge_helpers import (
     integrate_target_into_worktree,
     log_merge_failure,
     validate_post_merge_or_rollback,
+)
+from pokepoke.worktrees.merge_helpers import (
+    is_worktree_merged as is_worktree_merged,  # re-export
 )
 from pokepoke.worktrees.merge_result import MergeResult as MergeResult  # re-export
 from pokepoke.worktrees.worktree_cleanup import (
@@ -244,7 +244,7 @@ def create_worktree(item_id: str, base_branch: str | None = None, lock_timeout: 
                 else:
                     logger.info(f"Waiting for cleanup agent to complete before creating worktree for {item_id} ({elapsed:.0f}s elapsed)...")
                     time.sleep(5.0)
-            
+
             cleanup_wait_time = time.time() - cleanup_wait_start
             if cleanup_wait_time > 0.1:
                 logger.info(f"Waited {cleanup_wait_time:.2f}s for cleanup agent to complete (item: {item_id})")

@@ -7,14 +7,14 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.types import BeadsWorkItem
+from pokepoke.worktrees.merge_conflict_retry import retry_merge_after_cleanup
+from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
 from pokepoke.worktrees.worktree_merge_handler import (
-    _ConflictResolutionNeeded,
     WorktreeMergeContext,
+    _ConflictResolutionNeeded,
     handle_worktree_merge,
     perform_worktree_merge,
 )
-from pokepoke.worktrees.merge_conflict_retry import retry_merge_after_cleanup
-from pokepoke.worktrees.merge_step_tracker import get_merge_step_tracker
 from pokepoke.worktrees.worktrees import MergeResult
 
 
@@ -867,10 +867,10 @@ def test_merge_conflict_cleanup_receives_item_logger(
         item_logger=sentinel_logger,
     )
     handle_worktree_merge(ctx, agent_stats=None)
-    
+
     # Verify cleanup agent was called at all
     mock_invoke_conflict_cleanup.assert_called_once()
-    
+
     # Check that item_logger was actually passed
     call_kwargs = mock_invoke_conflict_cleanup.call_args[1]
     assert call_kwargs.get("item_logger") is sentinel_logger

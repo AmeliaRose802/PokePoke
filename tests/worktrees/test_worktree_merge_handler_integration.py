@@ -11,8 +11,8 @@ import pytest
 
 from pokepoke.types import BeadsWorkItem
 from pokepoke.worktrees.worktree_merge_handler import (
-    _ConflictResolutionNeeded,
     WorktreeMergeContext,
+    _ConflictResolutionNeeded,
     handle_worktree_merge,
     perform_worktree_merge,
 )

@@ -8,6 +8,7 @@ from __future__ import annotations
 
 from typing import TYPE_CHECKING, Any
 
+from pokepoke.agents.agent_config import AgentStatusConfig
 from pokepoke.stats.metrics_context import get_current_agent_type
 
 if TYPE_CHECKING:
@@ -35,11 +36,11 @@ def push_agent_status(
     with self._lock:
         if self._window_disposed:
             return
-        self._agent_registry.update_status(
-            agent_id,
-            name,
-            iteration,
-            status,
+        config = AgentStatusConfig(
+            agent_id=agent_id,
+            name=name,
+            iteration=iteration,
+            status=status,
             model=model,
             parent_agent_id=parent_agent_id,
             work_item_id=work_item_id,
@@ -50,6 +51,7 @@ def push_agent_status(
             agent_type=normalized_agent_type,
             resume_in_place=resume_in_place,
         )
+        self._agent_registry.update_status(config)
 
 
 def push_agent_log(self: DesktopAPI, agent_id: str, line: str) -> None:

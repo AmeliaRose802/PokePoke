@@ -17,6 +17,7 @@ from unittest.mock import MagicMock, patch
 
 import pytest
 
+from pokepoke.agents.agent_config import GateAgentConfig
 from pokepoke.agents.gate_agent_executor import run_gate_agent
 from pokepoke.types_agent import CopilotResult, GateAgentResult
 from pokepoke.types_beads import BeadsWorkItem
@@ -351,16 +352,7 @@ class TestRunGateAgentReturnsValidResult:
 
         result = run_gate_agent(
             sample_item,
-            cwd="/fake/worktree",
-            work_model="test-model",
-            handoff_context="diff context here",
-            agent_id="contract-1-gate-1",
-            agent_iteration=1,
-            parent_agent_id="contract-1",
-            item_logger=None,
-            session_id=None,
-            is_resume=False,
-        )
+            config=GateAgentConfig(cwd="/fake/worktree", work_model="test-model", handoff_context="diff context here", agent_id="contract-1-gate-1", agent_iteration=1, parent_agent_id="contract-1", item_logger=None, session_id=None, is_resume=False))
 
         assert isinstance(result, GateAgentResult)
         assert result.success is True
@@ -391,7 +383,7 @@ class TestRunGateAgentReturnsValidResult:
         )
         mock_ui.ui = MagicMock()
 
-        result = run_gate_agent(sample_item, cwd="/fake")
+        result = run_gate_agent(sample_item, config=GateAgentConfig(cwd="/fake"))
 
         assert isinstance(result, GateAgentResult)
         assert result.success is False

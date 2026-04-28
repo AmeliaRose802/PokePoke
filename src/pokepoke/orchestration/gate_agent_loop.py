@@ -11,7 +11,8 @@ from dataclasses import dataclass
 from pathlib import Path
 from typing import TYPE_CHECKING, Any
 
-from pokepoke.agents.agent_runner import run_gate_agent
+from pokepoke.agents.agent_config import GateAgentConfig
+from pokepoke.agents.gate_agent_executor import run_gate_agent
 from pokepoke.desktop import terminal_ui
 from pokepoke.orchestration.gate_step_tracker import GateStepTracker
 
@@ -107,11 +108,13 @@ def run_gate_loop(ctx: GateLoopContext, gt: GateStepTracker) -> GateLoopResult:
                         work_item_id=ctx.item.id, work_item_title=ctx.item.title,
                         agent_type="gate", resume_in_place=True,
                     )
-                gate_result = run_gate_agent(
-                    ctx.item, cwd=ctx.worktree_cwd, work_model=ctx.selected_model,
+                gate_config = GateAgentConfig(
+                    cwd=ctx.worktree_cwd,
+                    work_model=ctx.selected_model,
                     handoff_context=handoff_ctx,
                     previous_output_summary=gate_resume_output_summary,
-                    agent_id=gate_agent_id, agent_iteration=gate_iteration,
+                    agent_id=gate_agent_id,
+                    agent_iteration=gate_iteration,
                     parent_agent_id=ctx.base_agent_id,
                     item_logger=ctx.item_logger,
                     session_id=gate_resume_session_id,
@@ -119,6 +122,7 @@ def run_gate_loop(ctx: GateLoopContext, gt: GateStepTracker) -> GateLoopResult:
                     resume_reason=gate_resume_reason,
                     resume_feedback=gate_resume_feedback,
                 )
+                gate_result = run_gate_agent(ctx.item, config=gate_config)
             gate_success = gate_result.success
             gate_reason = gate_result.reason
             gate_crashed = gate_result.crashed

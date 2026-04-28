@@ -2,8 +2,8 @@
 import json
 import logging
 import re
-from typing import TYPE_CHECKING
 
+from pokepoke.agents.agent_config import GateAgentConfig
 from pokepoke.config import get_config
 from pokepoke.desktop import terminal_ui
 from pokepoke.git.git_operations import get_default_branch
@@ -18,9 +18,6 @@ from pokepoke.stats.stats import parse_agent_stats
 from pokepoke.types import BeadsWorkItem
 from pokepoke.types_agent import GateAgentResult
 from pokepoke.utils.output_sanitizer import contains_process_monitor_noise, strip_process_monitor_lines
-
-if TYPE_CHECKING:
-    from pokepoke.utils.logging_utils import ItemLogger
 
 logger = logging.getLogger(__name__)
 
@@ -140,53 +137,54 @@ def _try_parse_verdict_json(raw: str) -> tuple[bool, str, bool] | None:
 
 def run_gate_agent(
     item: BeadsWorkItem,
-    cwd: str | None = None,
-    work_model: str | None = None,
-    handoff_context: str | None = None,
-    previous_output_summary: str | None = None,
-    agent_id: str | None = None,
-    agent_iteration: int = 1,
-    parent_agent_id: str | None = None,
-    item_logger: 'ItemLogger | None' = None,
-    session_id: str | None = None,
-    is_resume: bool = False,
-    resume_reason: str | None = None,
-    resume_feedback: str | None = None,
+    config: GateAgentConfig | None = None,
 ) -> 'GateAgentResult':
-    """Run the Gate Agent to verify a fixed work item."""
+    """Run the Gate Agent to verify a fixed work item.
+
+    Args:
+        item: The work item to verify
+        config: Optional GateAgentConfig with execution parameters.
+                If None, uses default values.
+
+    Returns:
+        GateAgentResult with verification outcome
+    """
+    if config is None:
+        config = GateAgentConfig()
+
     terminal_ui.ui.set_current_agent("Gate Agent")
     logger.info(f"\n{'='*60}\n🕵️ Running Gate Agent on {item.id}\n{'='*60}")
     gate_model = None
-    if work_model:
-        gate_model = select_gate_model(work_model, item.id)
+    if config.work_model:
+        gate_model = select_gate_model(config.work_model, item.id)
     # Build prompt: use resume prompt if continuing a timed-out session
-    if is_resume and session_id:
-        if resume_reason == "reverify":
+    if config.is_resume and config.session_id:
+        if config.resume_reason == "reverify":
             final_prompt = build_gate_reverify_prompt(
                 item,
-                handoff_context=handoff_context,
-                previous_output_summary=previous_output_summary,
-                previous_rejection=resume_feedback,
+                handoff_context=config.handoff_context,
+                previous_output_summary=config.previous_output_summary,
+                previous_rejection=config.resume_feedback,
                 default_branch=get_default_branch(),
             )
         else:
             final_prompt = build_gate_resume_prompt(
                 item,
-                handoff_context=handoff_context,
-                previous_output_summary=previous_output_summary,
+                handoff_context=config.handoff_context,
+                previous_output_summary=config.previous_output_summary,
                 default_branch=get_default_branch(),
             )
     else:
         service = PromptService()
         try:
-            config = get_config()
+            app_config = get_config()
             final_prompt = service.load_and_render("gate-agent", {
                 "item_id": item.id,
                 "title": item.title,
                 "description": item.description or "",
-                "handoff_context": handoff_context or "",
+                "handoff_context": config.handoff_context or "",
                 "default_branch": get_default_branch(),
-                "command_timeout": config.command_timeout,
+                "command_timeout": app_config.command_timeout,
             })
         except Exception as e:
             return GateAgentResult(
@@ -194,17 +192,17 @@ def run_gate_agent(
                 crashed=True,
             )
     with agent_type_context("gate"):
-        if agent_id:
+        if config.agent_id:
             terminal_ui.ui.push_agent_status(
-                agent_id, "Gate Agent", iteration=agent_iteration, status="running",
-                parent_agent_id=parent_agent_id, work_item_id=item.id, work_item_title=item.title,
+                config.agent_id, "Gate Agent", iteration=config.agent_iteration, status="running",
+                parent_agent_id=config.parent_agent_id, work_item_id=item.id, work_item_title=item.title,
                 agent_type="gate",
                 agent_prompt=final_prompt,
             )
         result = invoke_copilot(
-            item, prompt=final_prompt, deny_write=True, cwd=cwd,
-            model=gate_model, item_logger=item_logger,
-            session_id=session_id, is_resume=is_resume,
+            item, prompt=final_prompt, deny_write=True, cwd=config.cwd,
+            model=gate_model, item_logger=config.item_logger,
+            session_id=config.session_id, is_resume=config.is_resume,
             add_parent_dir=True,
         )
 
@@ -219,7 +217,7 @@ def run_gate_agent(
                     gate_model=gate_model,
                     item_id=item.id,
                     passed=success,
-                    resumed=is_resume,
+                    resumed=config.is_resume,
                     input_tokens=stats.input_tokens if stats else 0,
                     output_tokens=stats.output_tokens if stats else 0,
                     reason=reason if not success else "",
