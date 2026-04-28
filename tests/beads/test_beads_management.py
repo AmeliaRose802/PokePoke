@@ -910,7 +910,7 @@ class TestSelectNextHierarchicalItem:
 
     def test_returns_regular_task_directly(self) -> None:
         from pokepoke.beads.beads_management import select_next_hierarchical_item
-        from pokepoke.types import BeadsWorkItem
+        from pokepoke.types_beads import BeadsWorkItem
         item = BeadsWorkItem(id="t-1", title="Task", description="", status="open",
                              priority=1, issue_type="task")
         result = select_next_hierarchical_item([item])
@@ -919,7 +919,7 @@ class TestSelectNextHierarchicalItem:
     def test_skips_human_required_items(self) -> None:
         from pokepoke.beads.beads_hierarchy import HUMAN_REQUIRED_LABEL
         from pokepoke.beads.beads_management import select_next_hierarchical_item
-        from pokepoke.types import BeadsWorkItem
+        from pokepoke.types_beads import BeadsWorkItem
         human_item = BeadsWorkItem(id="t-1", title="Human Task", description="",
                                    status="open", priority=1, issue_type="task",
                                    labels=[HUMAN_REQUIRED_LABEL])
@@ -931,7 +931,7 @@ class TestSelectNextHierarchicalItem:
     @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
     def test_resolves_epic_to_leaf(self, mock_resolve: Mock) -> None:
         from pokepoke.beads.beads_management import select_next_hierarchical_item
-        from pokepoke.types import BeadsWorkItem
+        from pokepoke.types_beads import BeadsWorkItem
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
                              priority=1, issue_type="epic")
         leaf = BeadsWorkItem(id="t-1", title="Task", description="", status="open",
@@ -944,7 +944,7 @@ class TestSelectNextHierarchicalItem:
     @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
     def test_skips_epic_when_no_leaf_resolved(self, mock_resolve: Mock) -> None:
         from pokepoke.beads.beads_management import select_next_hierarchical_item
-        from pokepoke.types import BeadsWorkItem
+        from pokepoke.types_beads import BeadsWorkItem
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
                              priority=1, issue_type="epic")
         mock_resolve.return_value = None
@@ -959,7 +959,7 @@ class TestResolveWithTimeout:
     @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
     def test_returns_resolved_item(self, mock_resolve: Mock) -> None:
         from pokepoke.beads.beads_management import _resolve_with_timeout
-        from pokepoke.types import BeadsWorkItem
+        from pokepoke.types_beads import BeadsWorkItem
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
                              priority=1, issue_type="epic")
         leaf = BeadsWorkItem(id="t-1", title="Leaf", description="", status="open",
@@ -972,7 +972,7 @@ class TestResolveWithTimeout:
         import time
 
         from pokepoke.beads.beads_management import _resolve_with_timeout
-        from pokepoke.types import BeadsWorkItem
+        from pokepoke.types_beads import BeadsWorkItem
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
                              priority=1, issue_type="epic")
         # Sleep just long enough to exceed the 1s timeout, but short enough
@@ -985,7 +985,7 @@ class TestResolveWithTimeout:
     @patch("pokepoke.beads.beads_management.resolve_to_leaf_task")
     def test_returns_none_on_exception(self, mock_resolve: Mock) -> None:
         from pokepoke.beads.beads_management import _resolve_with_timeout
-        from pokepoke.types import BeadsWorkItem
+        from pokepoke.types_beads import BeadsWorkItem
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
                              priority=1, issue_type="epic")
         mock_resolve.side_effect = RuntimeError("boom")
@@ -1000,7 +1000,7 @@ class TestResolveWithTimeout:
             _resolve_pool,
             _resolve_with_timeout,
         )
-        from pokepoke.types import BeadsWorkItem
+        from pokepoke.types_beads import BeadsWorkItem
 
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
                              priority=1, issue_type="epic")

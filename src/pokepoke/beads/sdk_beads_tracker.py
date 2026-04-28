@@ -56,7 +56,7 @@ def record_items_created(items: list[tuple[str, str]]) -> None:
     from pokepoke.beads.beads_item_stats_store import record_item_created
     from pokepoke.stats.metrics_context import get_current_agent_type
     from pokepoke.stats.session_stats_registry import get_current_session_stats
-    from pokepoke.types import BeadsCreatedItem
+    from pokepoke.types_beads import BeadsCreatedItem
 
     agent_type = get_current_agent_type()
     stats = get_current_session_stats()
