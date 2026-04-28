@@ -5,9 +5,7 @@ from unittest.mock import Mock, patch
 import pytest
 
 from pokepoke.agents.agent_config import GateAgentConfig
-from pokepoke.agents.agent_runner import (
-    run_gate_agent,
-)
+from pokepoke.agents.gate_agent_executor import run_gate_agent
 from pokepoke.types import AgentStats, BeadsWorkItem
 from pokepoke.types_agent import CopilotResult, GateAgentResult
 
@@ -28,6 +26,8 @@ class TestRunGateAgent:
             labels=["test"]
         )
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
@@ -36,7 +36,9 @@ class TestRunGateAgent:
         mock_service_cls: Mock,
         mock_invoke: Mock,
         mock_parse: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test successful gate agent verification with JSON output."""
         mock_service = Mock()
@@ -62,6 +64,8 @@ class TestRunGateAgent:
         assert crashed is False
         mock_invoke.assert_called_once_with(work_item, prompt="Gate prompt", deny_write=True, cwd=None, model=None, item_logger=None, session_id=None, is_resume=False, add_parent_dir=True)
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
@@ -70,7 +74,9 @@ class TestRunGateAgent:
         mock_service_cls: Mock,
         mock_invoke: Mock,
         mock_parse: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test failed gate agent verification with JSON output."""
         mock_service = Mock()
@@ -92,6 +98,8 @@ class TestRunGateAgent:
         assert "3 tests failed" in reason
         assert crashed is False
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
@@ -100,7 +108,9 @@ class TestRunGateAgent:
         mock_service_cls: Mock,
         mock_invoke: Mock,
         mock_parse: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test successful verification using text fallback when JSON fails."""
         mock_service = Mock()
@@ -120,6 +130,8 @@ class TestRunGateAgent:
         assert success is True
         assert "text match" in reason
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
@@ -128,7 +140,9 @@ class TestRunGateAgent:
         mock_service_cls: Mock,
         mock_invoke: Mock,
         mock_parse: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test successful verification using NEW_WORK_VERIFIED text fallback."""
         mock_service = Mock()
@@ -148,6 +162,8 @@ class TestRunGateAgent:
         assert success is True
         assert "text match" in reason
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
@@ -156,7 +172,9 @@ class TestRunGateAgent:
         mock_service_cls: Mock,
         mock_invoke: Mock,
         mock_parse: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test JSON parsing succeeds when output contains nested JSON objects.
 
@@ -192,13 +210,17 @@ class TestRunGateAgent:
         assert "new_work_verified" in reason
         assert "All verification steps passed" in reason
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_copilot_invocation_failure(
         self,
         mock_service_cls: Mock,
         mock_invoke: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test gate agent when Copilot invocation fails."""
         mock_service = Mock()
@@ -219,13 +241,17 @@ class TestRunGateAgent:
         assert "execution failed" in reason
         assert crashed is True
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_timeout_detected_as_timeout_not_crash(
         self,
         mock_service_cls: Mock,
         mock_invoke: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Timeout errors should set is_timeout=True and crashed=False."""
         mock_service = Mock()
@@ -255,13 +281,17 @@ class TestRunGateAgent:
         assert success is False
         assert crashed is False
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_non_timeout_failure_is_crash(
         self,
         mock_service_cls: Mock,
         mock_invoke: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Non-timeout errors should set crashed=True and is_timeout=False."""
         mock_service = Mock()
@@ -283,13 +313,17 @@ class TestRunGateAgent:
         assert result.is_timeout is False
         assert result.crashed is True
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_resume_uses_gate_resume_prompt(
         self,
         mock_service_cls: Mock,
         mock_invoke: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """When session_id and is_resume are set, use gate resume prompt."""
         mock_invoke.return_value = CopilotResult(
@@ -310,11 +344,15 @@ class TestRunGateAgent:
         assert call_kwargs[1].get('session_id') == "sess-abc"
         assert call_kwargs[1].get('is_resume') is True
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_prompt_render_failure(
         self,
         mock_service_cls: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test gate agent when prompt rendering fails."""
         mock_service = Mock()
@@ -328,13 +366,17 @@ class TestRunGateAgent:
         assert stats is None
         assert crashed is True
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_no_explicit_approval(
         self,
         mock_service_cls: Mock,
         mock_invoke: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test when gate agent doesn't explicitly approve."""
         mock_service = Mock()
@@ -353,6 +395,8 @@ class TestRunGateAgent:
         assert success is False
         assert "did not explicitly approve" in reason
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
@@ -361,7 +405,9 @@ class TestRunGateAgent:
         mock_service_cls: Mock,
         mock_invoke: Mock,
         mock_parse: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test gate agent recognizing work already complete on main branch."""
         mock_service = Mock()
@@ -385,6 +431,8 @@ class TestRunGateAgent:
         assert "Fix already exists on main" in reason
         assert "Close as already-resolved" in reason
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.select_gate_model')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
@@ -395,7 +443,9 @@ class TestRunGateAgent:
         mock_invoke: Mock,
         mock_parse: Mock,
         mock_select_gate: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock,
+        _mock_ui: Mock,
+        work_item: BeadsWorkItem,
     ) -> None:
         """Test that gate agent uses a different model than work agent."""
         mock_service = Mock()
@@ -432,6 +482,8 @@ class TestRunGateAgent:
             add_parent_dir=True,
         )
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
@@ -440,6 +492,8 @@ class TestRunGateAgent:
         mock_service_cls: Mock,
         mock_invoke: Mock,
         mock_parse: Mock,
+        _mock_branch: Mock,
+        _mock_ui: Mock,
         work_item: BeadsWorkItem,
     ) -> None:
         """Test that handoff_context is passed to the prompt template."""
@@ -464,6 +518,8 @@ class TestRunGateAgent:
         template_vars = call_args[0][1]
         assert template_vars["handoff_context"] == handoff
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
@@ -472,6 +528,8 @@ class TestRunGateAgent:
         mock_service_cls: Mock,
         mock_invoke: Mock,
         mock_parse: Mock,
+        _mock_branch: Mock,
+        _mock_ui: Mock,
         work_item: BeadsWorkItem,
     ) -> None:
         """Test that handoff_context defaults to empty string when not provided."""
@@ -493,6 +551,7 @@ class TestRunGateAgent:
         template_vars = call_args[0][1]
         assert template_vars["handoff_context"] == ""
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
     @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
@@ -503,6 +562,7 @@ class TestRunGateAgent:
         mock_invoke: Mock,
         mock_parse: Mock,
         mock_get_branch: Mock,
+        _mock_ui: Mock,
         work_item: BeadsWorkItem,
     ) -> None:
         """Test that default_branch variable is passed to the gate-agent template."""
@@ -539,12 +599,14 @@ class TestGateAgentJsonDecodeError:
             status="in_progress", priority=1, issue_type="bug", labels=["test"]
         )
 
+    @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
     def test_invalid_json_falls_back_to_text(
         self, mock_service_cls: Mock, mock_invoke: Mock, mock_parse: Mock,
-        work_item: BeadsWorkItem
+        _mock_branch: Mock, _mock_ui: Mock, work_item: BeadsWorkItem,
     ) -> None:
         """Invalid JSON in code block triggers JSONDecodeError handler."""
         mock_service = Mock()
@@ -568,9 +630,10 @@ class TestGateAgentWithAgentId:
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')
     @patch('pokepoke.agents.gate_agent_executor.PromptService')
+    @patch('pokepoke.agents.gate_agent_executor.get_default_branch', return_value='main')
     @patch('pokepoke.agents.gate_agent_executor.terminal_ui')
     def test_gate_agent_pushes_status_with_agent_id(
-        self, mock_terminal_ui: Mock, mock_service_cls: Mock,
+        self, mock_terminal_ui: Mock, _mock_branch: Mock, mock_service_cls: Mock,
         mock_invoke: Mock, mock_parse: Mock,
     ) -> None:
         """Gate agent should push agent status when agent_id is provided."""

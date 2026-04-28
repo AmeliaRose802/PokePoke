@@ -14,6 +14,7 @@ from pokepoke.types import AgentStats
 class TestRunMaintenanceAgent:
     """Test run_maintenance_agent function."""
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner._run_beads_only_agent')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
@@ -23,7 +24,8 @@ class TestRunMaintenanceAgent:
         mock_cwd: Mock,
         mock_exists: Mock,
         mock_read: Mock,
-        mock_run_beads: Mock
+        mock_run_beads: Mock,
+        _mock_ui: Mock,
     ) -> None:
         """Test running beads-only maintenance agent."""
         mock_cwd.return_value = Path("/fake/repo")
@@ -49,6 +51,7 @@ class TestRunMaintenanceAgent:
         assert stats.wall_duration == 10.0
         mock_run_beads.assert_called_once()
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner._run_worktree_agent')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
@@ -58,7 +61,8 @@ class TestRunMaintenanceAgent:
         mock_cwd: Mock,
         mock_exists: Mock,
         mock_read: Mock,
-        mock_run_wt: Mock
+        mock_run_wt: Mock,
+        _mock_ui: Mock,
     ) -> None:
         """Test running worktree maintenance agent."""
         mock_cwd.return_value = Path("/fake/repo")
@@ -84,9 +88,12 @@ class TestRunMaintenanceAgent:
         assert stats.wall_duration == 20.0
         mock_run_wt.assert_called_once()
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pathlib.Path.exists')
     @patch('pathlib.Path.cwd')
-    def test_missing_prompt_file(self, mock_cwd: Mock, mock_exists: Mock) -> None:
+    def test_missing_prompt_file(
+        self, mock_cwd: Mock, mock_exists: Mock, _mock_ui: Mock,
+    ) -> None:
         """Test maintenance agent with missing prompt file."""
         mock_cwd.return_value = Path("/fake/repo")
         mock_exists.return_value = False
@@ -95,8 +102,11 @@ class TestRunMaintenanceAgent:
 
         assert stats is None
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
-    def test_prompts_dir_not_found(self, mock_get_dir: Mock) -> None:
+    def test_prompts_dir_not_found(
+        self, mock_get_dir: Mock, _mock_ui: Mock,
+    ) -> None:
         """Test maintenance agent when prompts directory not found."""
         mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
 
@@ -104,8 +114,11 @@ class TestRunMaintenanceAgent:
 
         assert stats is None
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
-    def test_missing_prompt_shows_agent_name_in_error(self, mock_get_dir: Mock, caplog) -> None:
+    def test_missing_prompt_shows_agent_name_in_error(
+        self, mock_get_dir: Mock, _mock_ui: Mock, caplog,
+    ) -> None:
         """Test that missing prompt error includes agent name and available prompts."""
         fake_dir = Path(__file__).parent
         mock_get_dir.return_value = fake_dir
@@ -118,8 +131,11 @@ class TestRunMaintenanceAgent:
         assert "nonexistent-prompt.md" in caplog.text
         assert "failed to start" in caplog.text
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
-    def test_prompts_dir_not_found_shows_agent_name(self, mock_get_dir: Mock, caplog) -> None:
+    def test_prompts_dir_not_found_shows_agent_name(
+        self, mock_get_dir: Mock, _mock_ui: Mock, caplog,
+    ) -> None:
         """Test that prompts dir not found error includes agent name."""
         mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
 
@@ -134,6 +150,7 @@ class TestRunMaintenanceAgent:
 class TestNeedsShellAgent:
     """Test needs_shell routes through _run_main_repo_agent."""
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner._run_main_repo_agent')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
@@ -144,6 +161,7 @@ class TestNeedsShellAgent:
         mock_exists: Mock,
         mock_read: Mock,
         mock_run_main: Mock,
+        _mock_ui: Mock,
     ) -> None:
         """needs_shell=True without worktree should use _run_main_repo_agent."""
         mock_cwd.return_value = Path("/fake/repo")
@@ -159,6 +177,7 @@ class TestNeedsShellAgent:
         assert stats is not None
         mock_run_main.assert_called_once()
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner._run_beads_only_agent')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
@@ -169,6 +188,7 @@ class TestNeedsShellAgent:
         mock_exists: Mock,
         mock_read: Mock,
         mock_run_beads: Mock,
+        _mock_ui: Mock,
     ) -> None:
         """needs_shell=False (default) without worktree should use _run_beads_only_agent."""
         mock_cwd.return_value = Path("/fake/repo")
@@ -188,8 +208,11 @@ class TestNeedsShellAgent:
 class TestMaintenanceAgentPromptMissing:
     """Test run_maintenance_agent prompt file not found (lines 139-140)."""
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
-    def test_prompt_file_doesnt_exist(self, mock_get_dir: Mock) -> None:
+    def test_prompt_file_doesnt_exist(
+        self, mock_get_dir: Mock, _mock_ui: Mock,
+    ) -> None:
         mock_dir = MagicMock()
         mock_prompt_path = MagicMock()
         mock_prompt_path.exists.return_value = False
@@ -202,8 +225,11 @@ class TestMaintenanceAgentPromptMissing:
 class TestStartupFailureLogging:
     """Regression PokePoke-e0xuy: startup failures must log to item_logger."""
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
-    def test_prompts_dir_not_found_logs_to_item_logger(self, mock_get_dir: Mock) -> None:
+    def test_prompts_dir_not_found_logs_to_item_logger(
+        self, mock_get_dir: Mock, _mock_ui: Mock,
+    ) -> None:
         """When prompts dir is missing, item_logger must receive the error."""
         mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
         item_logger = Mock()
@@ -216,8 +242,11 @@ class TestStartupFailureLogging:
         assert "Code Review" in error_msg
         assert "failed to start" in error_msg
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
-    def test_missing_prompt_file_logs_to_item_logger(self, mock_get_dir: Mock) -> None:
+    def test_missing_prompt_file_logs_to_item_logger(
+        self, mock_get_dir: Mock, _mock_ui: Mock,
+    ) -> None:
         """When prompt file doesn't exist, item_logger must receive the error."""
         fake_dir = Path(__file__).parent
         mock_get_dir.return_value = fake_dir
@@ -231,8 +260,11 @@ class TestStartupFailureLogging:
         assert "Tech Debt" in error_msg
         assert "nonexistent.md" in error_msg
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner.get_pokepoke_prompts_dir')
-    def test_no_item_logger_does_not_crash(self, mock_get_dir: Mock) -> None:
+    def test_no_item_logger_does_not_crash(
+        self, mock_get_dir: Mock, _mock_ui: Mock,
+    ) -> None:
         """Startup failure without item_logger must not raise AttributeError."""
         mock_get_dir.side_effect = FileNotFoundError("Prompts directory not found")
 
@@ -240,11 +272,13 @@ class TestStartupFailureLogging:
 
         assert stats is None
 
+    @patch('pokepoke.agents.agent_runner.terminal_ui')
     @patch('pokepoke.agents.agent_runner.create_worktree')
     @patch('pathlib.Path.read_text')
     @patch('pathlib.Path.exists')
     def test_worktree_creation_failure_logs_to_item_logger(
-        self, mock_exists: Mock, mock_read: Mock, mock_create_wt: Mock
+        self, mock_exists: Mock, mock_read: Mock, mock_create_wt: Mock,
+        _mock_ui: Mock,
     ) -> None:
         """When worktree creation fails, item_logger must receive the error."""
         mock_exists.return_value = True
