@@ -16,7 +16,7 @@ from pokepoke.beads.beads_management import (
     select_next_hierarchical_item,
     unassign_item,
 )
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 
 # ---------------------------------------------------------------------------
 # Helpers

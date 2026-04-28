@@ -5,7 +5,7 @@ import subprocess
 from unittest.mock import Mock, patch
 
 from pokepoke.beads.beads import get_issue_dependencies, get_ready_work_items, is_item_claimable
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 
 
 class TestBeadsIntegration:

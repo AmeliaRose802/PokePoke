@@ -13,7 +13,7 @@ import re
 from pathlib import Path
 from typing import Any
 
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 
 logger = logging.getLogger(__name__)
 

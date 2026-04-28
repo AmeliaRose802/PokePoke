@@ -8,7 +8,8 @@ from pathlib import Path
 from typing import Any
 
 from pokepoke.stats.perf_timing import timed_block
-from pokepoke.types import BeadsStats, BeadsWorkItem, Dependency, IssueWithDependencies
+from pokepoke.types_beads import BeadsWorkItem, Dependency, IssueWithDependencies
+from pokepoke.types_stats import BeadsStats
 from pokepoke.utils.constants import (
     BEADS_BINARY_BD,
     BEADS_BINARY_BR,
