@@ -4,7 +4,7 @@ import logging
 from subprocess import CalledProcessError, TimeoutExpired
 
 from pokepoke.agents.agent_context import get_agent_name as _get_agent_name
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 
 from .beads_query import _run_bd, get_issue_dependencies, has_unmet_blocking_dependencies
 

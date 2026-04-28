@@ -24,7 +24,7 @@ from pokepoke.beads.beads_hierarchy import (
     is_high_conflict_risk,
     resolve_to_leaf_task,
 )
-from pokepoke.types import BeadsWorkItem, Dependency, IssueWithDependencies
+from pokepoke.types_beads import BeadsWorkItem, Dependency, IssueWithDependencies
 
 
 def _wi(

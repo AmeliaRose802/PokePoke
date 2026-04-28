@@ -13,7 +13,7 @@ from pokepoke.beads.stale_item_recovery import (
     get_worktree_path_for_item,
     is_pokepoke_agent_name,
 )
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 
 
 def _make_item(

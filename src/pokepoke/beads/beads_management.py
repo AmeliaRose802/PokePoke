@@ -8,7 +8,7 @@ import subprocess
 from filelock import Timeout
 
 from pokepoke.agents.agent_context import get_agent_name
-from pokepoke.types import BeadsWorkItem
+from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.utils.constants import STATUS_IN_PROGRESS
 from pokepoke.worktrees.coordination import acquire_lock
 

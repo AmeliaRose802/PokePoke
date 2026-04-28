@@ -6,7 +6,7 @@ import pytest
 
 from pokepoke.beads import beads_query, cli_retry
 from pokepoke.beads.beads_query import BD_CONFIG, BR_CONFIG, get_active_backend, set_active_backend
-from pokepoke.types import Dependency, IssueWithDependencies
+from pokepoke.types_beads import Dependency, IssueWithDependencies
 
 # Save reference to real _run_bd before conftest replaces it with a blocker.
 _real_run_bd = beads_query._run_bd
