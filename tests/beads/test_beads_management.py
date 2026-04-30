@@ -996,11 +996,15 @@ class TestResolveWithTimeout:
     def test_reuses_module_level_pool(self, mock_resolve: Mock) -> None:
         """Verify _resolve_with_timeout reuses the module-level pool
         instead of creating a new ThreadPoolExecutor per call."""
+        import pokepoke.beads.beads_management as management
         from pokepoke.beads.beads_management import (
             _resolve_pool,
             _resolve_with_timeout,
         )
         from pokepoke.types_beads import BeadsWorkItem
+
+        management._resolve_paused_until = 0.0
+        management._resolve_timed_out_until.clear()
 
         epic = BeadsWorkItem(id="e-1", title="Epic", description="", status="open",
                              priority=1, issue_type="epic")

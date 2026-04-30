@@ -6,7 +6,6 @@ worktree cleaned) even when the Copilot CLI session reported failure.
 
 from __future__ import annotations
 
-import contextlib
 import json
 import logging
 import subprocess
@@ -48,14 +47,8 @@ def default_branch_has_merge_commit(item_id: str, repo_root: Path) -> bool:
     branch_marker = f"{BRANCH_PREFIX}{sanitized_id}"
     default_branch = get_default_branch()
 
-    # Best-effort fetch; ignore failures to keep reconciliation non-fatal.
-    with contextlib.suppress(Exception):
-        run_git(
-            ["git", "fetch", "origin", default_branch],
-            timeout=30, cwd=str(repo_root), check=False,
-        )
-
-    for ref in (f"origin/{default_branch}", default_branch):
+    # Check local branches only — no remote fetch during reconciliation.
+    for ref in (default_branch,):
         try:
             result = run_git(
                 ["git", "log", ref, "--max-count", "50",

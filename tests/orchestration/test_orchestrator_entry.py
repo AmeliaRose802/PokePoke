@@ -25,7 +25,7 @@ class TestOrchestratorMain:
             continuous=False,
             run_beta_first=False,
             agent_name_override=None,
-            max_parallel_agents=1,
+            max_parallel_agents=None,
         )
 
     @patch('pokepoke.utils.project_utils.ensure_project_ready', return_value=True)
@@ -47,7 +47,7 @@ class TestOrchestratorMain:
             continuous=True,
             run_beta_first=False,
             agent_name_override=None,
-            max_parallel_agents=1,
+            max_parallel_agents=None,
         )
 
     @patch('pokepoke.utils.project_utils.ensure_project_ready', return_value=True)
@@ -69,7 +69,7 @@ class TestOrchestratorMain:
             continuous=True,
             run_beta_first=False,
             agent_name_override=None,
-            max_parallel_agents=1,
+            max_parallel_agents=None,
         )
 
     @patch('pokepoke.utils.project_utils.ensure_project_ready', return_value=False)
@@ -141,7 +141,7 @@ class TestOrchestratorMain:
             continuous=False,
             run_beta_first=True,
             agent_name_override=None,
-            max_parallel_agents=1,
+            max_parallel_agents=None,
         )
 
     @patch('pokepoke.init.init_project', return_value=True)
@@ -222,7 +222,7 @@ class TestOrchestratorMainDuplicates:
             continuous=False,
             run_beta_first=True,
             agent_name_override=None,
-            max_parallel_agents=1,
+            max_parallel_agents=None,
         )
 
     @patch('pokepoke.utils.project_utils.ensure_project_ready', return_value=False)
@@ -264,5 +264,5 @@ class TestOrchestratorMainDuplicates:
             continuous=True,
             run_beta_first=False,
             agent_name_override=None,
-            max_parallel_agents=1,
+            max_parallel_agents=None,
         )

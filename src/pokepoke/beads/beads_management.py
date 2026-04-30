@@ -4,6 +4,7 @@ import concurrent.futures
 import json
 import logging
 import subprocess
+import time
 
 from filelock import Timeout
 
@@ -51,6 +52,9 @@ __all__ = [
 # producing "cannot schedule new futures after interpreter shutdown".  Letting
 # Python's own executor finalizer handle cleanup is sufficient.
 _resolve_pool = concurrent.futures.ThreadPoolExecutor(max_workers=1)
+_RESOLVE_TIMEOUT_COOLDOWN_SECONDS = 120.0
+_resolve_paused_until = 0.0
+_resolve_timed_out_until: dict[str, float] = {}
 
 
 def run_bd_sync_with_retry(
@@ -350,6 +354,10 @@ def _resolve_with_timeout(
     each require a bd show subprocess call.  Uses the module-level
     ``_resolve_pool`` to avoid per-call thread creation/leak.
     """
+    global _resolve_paused_until
+    now = time.monotonic()
+    if now < _resolve_paused_until or now < _resolve_timed_out_until.get(item.id, 0.0):
+        return None
     try:
         fut = _resolve_pool.submit(resolve_to_leaf_task, item)
     except RuntimeError:
@@ -359,9 +367,13 @@ def _resolve_with_timeout(
     try:
         return fut.result(timeout=timeout)
     except concurrent.futures.TimeoutError:
+        fut.cancel()
+        cooldown_until = time.monotonic() + _RESOLVE_TIMEOUT_COOLDOWN_SECONDS
+        _resolve_paused_until = cooldown_until
+        _resolve_timed_out_until[item.id] = cooldown_until
         logger.warning(
-            "Hierarchical resolve timed out after %ds for %s — skipping",
-            timeout, item.id,
+            "Hierarchical resolve timed out after %ds for %s \u2014 skipping hierarchy for %.0fs",
+            timeout, item.id, _RESOLVE_TIMEOUT_COOLDOWN_SECONDS,
         )
         return None
     except Exception:
@@ -398,6 +410,13 @@ def select_next_hierarchical_item(items: list[BeadsWorkItem]) -> BeadsWorkItem |
 
     # Sort by priority for consistent ordering
     sorted_items = sorted(items, key=lambda x: x.priority)
+
+    # Prefer ready leaf tasks before attempting expensive epic resolution
+    for item in sorted_items:
+        if item.labels and HUMAN_REQUIRED_LABEL in item.labels:
+            continue
+        if item.issue_type not in ('epic', 'feature'):
+            return item
 
     for item in sorted_items:
         # Skip items that require human intervention

@@ -37,8 +37,8 @@ def main() -> int:
                         help="Custom agent name instead of auto-generating")
     parser.add_argument("--init", action="store_true",
                         help="Initialize .pokepoke/ directory with sample config")
-    parser.add_argument("--max-agents", type=int, default=1, metavar="N",
-                        help="Max concurrent work-item agents (default: 1)")
+    parser.add_argument("--max-agents", type=int, default=None, metavar="N",
+                        help="Max concurrent work-item agents (default: from config)")
     parser.add_argument("--repo", type=str, default=None, metavar="PATH",
                         help="Path to the repository to work in (changes cwd)")
     args = parser.parse_args()
@@ -56,7 +56,7 @@ def main() -> int:
         if launch_config is None:
             return 0
         os.chdir(launch_config.repo_path)
-        if args.max_agents <= 1 and launch_config.max_agents > 1:
+        if args.max_agents is None and launch_config.max_agents > 1:
             args.max_agents = launch_config.max_agents
 
     if args.init:

@@ -146,10 +146,10 @@ def _run_startup_cleanup(cfg: Any, main_repo_path: Path, run_logger: RunLogger) 
         run_logger.log_orchestrator(f"Startup worktree cleanup error: {e}", level="WARNING")
 
 
-def _resolve_parallelism(max_parallel_agents: int, cfg: Any, interactive: bool,
+def _resolve_parallelism(max_parallel_agents: int | None, cfg: Any, interactive: bool,
                          run_logger: RunLogger) -> int:
     """Resolve effective parallelism from CLI arg, config, and mode."""
-    effective = max(1, max_parallel_agents if max_parallel_agents > 1 else cfg.max_parallel_agents)
+    effective = max(1, max_parallel_agents if max_parallel_agents is not None else cfg.max_parallel_agents)
     if effective > 1 and interactive:
         logger.warning(f"⚠️  Parallel mode (--max-agents {effective}) requires autonomous mode; forcing parallel=1")
         effective = 1
@@ -160,7 +160,7 @@ def _resolve_parallelism(max_parallel_agents: int, cfg: Any, interactive: bool,
 
 
 def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: bool,
-                        agent_name_override: str | None, max_parallel_agents: int) -> _OrchestratorContext:
+                        agent_name_override: str | None, max_parallel_agents: int | None) -> _OrchestratorContext:
     """Initialize agent identity, logging, signal handlers, beads recovery, and config."""
     agent_name = initialize_agent_name(custom_name=agent_name_override)
     os.environ['AGENT_NAME'] = agent_name
@@ -370,7 +370,7 @@ def run_orchestrator(  # noqa: PLR0913, RUF100
     # PLR0913 currently globally ignored but will be re-enabled after all violations fixed.
     interactive: bool = True, continuous: bool = False,
     run_beta_first: bool = False, agent_name_override: str | None = None,
-    max_parallel_agents: int = 1,
+    max_parallel_agents: int | None = None,
     beads_client: _BeadsClientProtocol | None = None,
 ) -> int:
     """Main orchestrator entry point (interactive or autonomous)."""
@@ -394,7 +394,7 @@ def run_orchestrator(  # noqa: PLR0913, RUF100
                 continuous=ctx.continuous,
                 record_fn=cast(RecordFn, _record_item_result),
                 finalize_fn=_finalize_session,
-                cli_override=(max_parallel_agents > 1),
+                cli_override=(max_parallel_agents is not None),
                 external_lock=ctx.failed_claim_ids_lock,
             )
             ctx.items_completed = ctx.session_stats.items_completed

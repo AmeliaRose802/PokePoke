@@ -89,11 +89,9 @@ class TestDefaultBranchHasMergeCommit:
     def test_returns_true_when_commit_found_on_origin(
         self, mock_run, mock_sanitize, mock_default
     ):
-        # First call: git fetch (always succeeds)
-        fetch_result = MagicMock()
-        # Second call: git log origin/main finds a commit hash
+        # git log on local branch finds a commit hash (no fetch)
         log_result = MagicMock(stdout="abc123def456\n")
-        mock_run.side_effect = [fetch_result, log_result]
+        mock_run.side_effect = [log_result]
 
         assert default_branch_has_merge_commit("X-1", Path("/repo")) is True
 
@@ -103,10 +101,9 @@ class TestDefaultBranchHasMergeCommit:
     def test_returns_false_when_no_commits_found(
         self, mock_run, mock_sanitize, mock_default
     ):
-        fetch_result = MagicMock()
-        # Both git log calls return empty output
+        # git log returns empty output (no fetch anymore)
         empty_log = MagicMock(stdout="")
-        mock_run.side_effect = [fetch_result, empty_log, empty_log]
+        mock_run.side_effect = [empty_log]
 
         assert default_branch_has_merge_commit("X-1", Path("/repo")) is False
 
@@ -116,12 +113,9 @@ class TestDefaultBranchHasMergeCommit:
     def test_falls_back_to_local_branch_on_origin_failure(
         self, mock_run, mock_sanitize, mock_default
     ):
-        fetch_result = MagicMock()
-        # origin/main git log fails
-        origin_fail = subprocess.CalledProcessError(1, "git")
-        # local main git log succeeds
+        # Local branch git log succeeds (no origin fallback needed)
         local_result = MagicMock(stdout="abc123\n")
-        mock_run.side_effect = [fetch_result, origin_fail, local_result]
+        mock_run.side_effect = [local_result]
 
         assert default_branch_has_merge_commit("X-1", Path("/repo")) is True
 
@@ -131,9 +125,8 @@ class TestDefaultBranchHasMergeCommit:
     def test_fetch_failure_is_non_fatal(
         self, mock_run, mock_sanitize, mock_default
     ):
-        # Fetch raises an exception; should be suppressed
+        # No fetch anymore; just the git log call
         mock_run.side_effect = [
-            Exception("network error"),
             MagicMock(stdout="abc123\n"),
         ]
         assert default_branch_has_merge_commit("X-1", Path("/repo")) is True
@@ -144,13 +137,12 @@ class TestDefaultBranchHasMergeCommit:
     def test_uses_sanitized_branch_name_in_grep(
         self, mock_run, mock_sanitize, mock_default
     ):
-        fetch_result = MagicMock()
         log_result = MagicMock(stdout="abc\n")
-        mock_run.side_effect = [fetch_result, log_result]
+        mock_run.side_effect = [log_result]
 
         default_branch_has_merge_commit("MY-ITEM", Path("/repo"))
         # The git log call should grep for task/MY-ITEM
-        log_call_args = mock_run.call_args_list[1][0][0]
+        log_call_args = mock_run.call_args_list[0][0][0]
         assert "task/MY-ITEM" in log_call_args
 
 
