@@ -210,6 +210,22 @@ def _suppress_terminal_banner(request):
 
 
 @pytest.fixture(autouse=True)
+def _suppress_terminal_ui_lazy_init():
+    """Prevent lazy initialization of DesktopUI during tests.
+
+    terminal_ui.ui is resolved via __getattr__ and triggers DesktopUI()
+    which calls subprocess.run for git repo detection. Mock the module-level
+    _ui so get_ui() returns a stub instead of the real instance.
+    """
+    from unittest.mock import MagicMock
+
+    fake_ui = MagicMock()
+    with patch("pokepoke.desktop.terminal_ui._ui", fake_ui), \
+         patch("pokepoke.desktop.terminal_ui.get_ui", return_value=fake_ui):
+        yield
+
+
+@pytest.fixture(autouse=True)
 def _suppress_atexit():
     """Prevent tests from registering atexit handlers.
 
