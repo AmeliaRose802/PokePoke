@@ -97,24 +97,38 @@ class TestGateStepTracker:
         tracker.complete_step("0")
         tracker.fail_step("0")
         tracker.skip_step("0")
-        tracker.log_to_step("0", "msg")
         tracker.finish_run("failed")
 
-    def test_reset_steps_for_retry(self) -> None:
+    def test_skip_step_with_log(self) -> None:
         tracker = GateStepTracker()
         tracker.begin_run("a1", "i1")
-        tracker.complete_step("0")
-        tracker.begin_step("1")
-        tracker.fail_step("2", "Error")
-        tracker.reset_steps_for_retry()
+        tracker.skip_step("0", log="skipped reason")
         state = tracker.get_state()
-        # Completed steps stay done
-        assert state["current_run"]["steps"]["0"]["status"] == "done"
-        # Failed steps reset to pending
-        assert state["current_run"]["steps"]["2"]["status"] == "pending"
-        # Active steps reset to pending
-        assert state["current_run"]["steps"]["1"]["status"] == "pending"
+        step = state["current_run"]["steps"]["0"]
+        assert step["status"] == "skipped"
+        assert "skipped reason" in step["logs"]
 
+    def test_fail_step_records_status(self) -> None:
+        tracker = GateStepTracker()
+        tracker.begin_run("a1", "i1")
+        tracker.begin_step("0")
+        tracker.fail_step("0", log="error detail")
+        state = tracker.get_state()
+        step = state["current_run"]["steps"]["0"]
+        assert step["status"] == "failed"
+        assert "error detail" in step["logs"]
+
+    def test_get_state_serialization(self) -> None:
+        tracker = GateStepTracker()
+        tracker.begin_run("a1", "i1")
+        tracker.begin_step("0")
+        tracker.complete_step("0")
+        tracker.finish_run("success")
+        state = tracker.get_state()
+        assert state["last_completed_run"]["outcome"] == "success"
+        assert state["last_completed_run"]["agent_id"] == "a1"
+        assert "steps" in state["last_completed_run"]
+        assert "started_at" in state["last_completed_run"]
 
 class TestGateFlowRun:
     def test_to_dict_has_iteration_and_rejections(self) -> None:
@@ -124,6 +138,76 @@ class TestGateFlowRun:
         assert d["gate_rejections"] == 1
         assert len(d["steps"]) == len(GATE_STEPS)
 
+
+class TestConvenienceMethods:
+    """Tests for multi-step convenience methods."""
+
+    def test_mark_success_completes_steps_and_finishes(self) -> None:
+        tracker = GateStepTracker()
+        tracker.begin_run("a1", "i1")
+        tracker.mark_success("0", "1")
+        state = tracker.get_state()
+        assert state["current_run"] is None
+        assert state["last_completed_run"]["outcome"] == "success"
+
+    def test_mark_failure_fails_step_and_finishes(self) -> None:
+        tracker = GateStepTracker()
+        tracker.begin_run("a1", "i1")
+        tracker.mark_failure("0", "error detail")
+        state = tracker.get_state()
+        assert state["last_completed_run"]["outcome"] == "failed"
+
+    def test_start_work_begins_run_and_first_step(self) -> None:
+        tracker = GateStepTracker()
+        tracker.start_work("a1", "i1", iteration=3, rejections=1)
+        state = tracker.get_state()
+        run = state["current_run"]
+        assert run["iteration"] == 3
+        assert run["gate_rejections"] == 1
+        assert run["steps"]["0"]["status"] == "active"
+
+    def test_work_done_completes_work_steps(self) -> None:
+        tracker = GateStepTracker()
+        tracker.start_work("a1", "i1", iteration=1, rejections=0)
+        tracker.work_done()
+        state = tracker.get_state()
+        assert state["current_run"]["steps"]["0"]["status"] == "done"
+        assert state["current_run"]["steps"]["1"]["status"] == "done"
+
+    def test_gate_disabled_skips_gate(self) -> None:
+        tracker = GateStepTracker()
+        tracker.start_work("a1", "i1", iteration=1, rejections=0)
+        tracker.work_done()
+        tracker.cleanup_done()
+        tracker.gate_disabled()
+        state = tracker.get_state()
+        assert state["last_completed_run"]["outcome"] == "success"
+
+    def test_gate_rejected_retry(self) -> None:
+        tracker = GateStepTracker()
+        tracker.start_work("a1", "i1", iteration=1, rejections=0)
+        tracker.work_done()
+        tracker.cleanup_done()
+        tracker.gate_start()
+        tracker.gate_rejected_retry(1, "bad code")
+        state = tracker.get_state()
+        assert state["last_completed_run"]["outcome"] == "failed"
+        assert state["last_completed_run"]["gate_rejections"] == 1
+
+    def test_gate_rejected_max(self) -> None:
+        tracker = GateStepTracker()
+        tracker.start_work("a1", "i1", iteration=1, rejections=5)
+        tracker.gate_rejected_max(5)
+        state = tracker.get_state()
+        assert state["last_completed_run"]["outcome"] == "failed"
+
+    def test_item_closed_skips_gate_steps(self) -> None:
+        tracker = GateStepTracker()
+        tracker.start_work("a1", "i1", iteration=1, rejections=0)
+        tracker.work_done()
+        tracker.item_closed()
+        state = tracker.get_state()
+        assert state["last_completed_run"]["outcome"] == "success"
 
 class TestGateStepDefinitions:
     def test_steps_have_unique_ids(self) -> None:

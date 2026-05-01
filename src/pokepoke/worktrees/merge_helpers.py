@@ -12,26 +12,6 @@ from pokepoke.worktrees.merge_result import MergeResult
 logger = logging.getLogger(__name__)
 
 
-def rollback_merge_commit(reason: str, cwd: str | None = None) -> bool:
-    """Attempt to rollback the last merge commit and log the outcome.
-
-    Returns True if rollback succeeded, False otherwise.
-    """
-    try:
-        _run_git(["git", "reset", "--hard", "HEAD~1"], cwd=cwd)
-        logger.info("Rolled back merge commit: %s", reason)
-        logger.info(f"🔄 Rolled back merge commit due to {reason}")
-        return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired) as reset_err:
-        logger.critical(
-            "FAILED to rollback merge commit after %s: %s — "
-            "local repo may have a merge commit that could not be undone. "
-            "Manual intervention required.",
-            reason, reset_err,
-        )
-        return False
-
-
 def log_merge_failure(merge_error: str | None, unmerged_files: list[str]) -> None:
     """Log details about a merge failure."""
     if unmerged_files:

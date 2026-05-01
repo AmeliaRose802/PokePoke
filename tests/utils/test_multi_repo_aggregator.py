@@ -33,7 +33,6 @@ def _make_item(item_id: str = "x", priority: int = 1, **kwargs: object) -> Beads
     defaults.update(kwargs)
     return BeadsWorkItem(**defaults)  # type: ignore[arg-type]
 
-
 def _make_repo(
     path: str = "/repo/alpha",
     priority_weight: int = 1,
@@ -41,10 +40,8 @@ def _make_repo(
 ) -> RepoConfig:
     return RepoConfig(path=path, priority_weight=priority_weight, enabled=enabled)
 
-
 def _bd_stdout(items: list[dict]) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess("bd", 0, stdout=json.dumps(items))
-
 
 # ---------------------------------------------------------------------------
 # _derive_repo_name
@@ -63,7 +60,6 @@ class TestDeriveRepoName:
         rc = _make_repo(path="C:\\Users\\dev\\PokePoke")
         name = _derive_repo_name(rc)
         assert name == "PokePoke"
-
 
 # ---------------------------------------------------------------------------
 # query_repo_ready_items
@@ -137,7 +133,6 @@ class TestQueryRepoReadyItems:
         query_repo_ready_items(_make_repo(path=str(tmp_path)))
         assert captured_cwd[0] == str(tmp_path)
 
-
 # ---------------------------------------------------------------------------
 # _merge_and_sort
 # ---------------------------------------------------------------------------
@@ -187,7 +182,6 @@ class TestMergeAndSort:
         merged = _merge_and_sort([r])
         assert [a.item.id for a in merged] == ["a", "b"]
 
-    def test_repo_context_preserved(self) -> None:
         r = RepoQueryResult(
             repo_config=_make_repo(path="/projects/my-lib", priority_weight=5),
             items=[_make_item("x")],
@@ -196,7 +190,6 @@ class TestMergeAndSort:
         assert merged[0].repo_path == "/projects/my-lib"
         assert merged[0].repo_name == "my-lib"
         assert merged[0].repo_priority_weight == 5
-
 
 # ---------------------------------------------------------------------------
 # aggregate_ready_work_items
@@ -298,7 +291,6 @@ class TestAggregateReadyWorkItems:
         assert len(items) == 1
         assert items[0].item.id == "g1"
 
-
 # ---------------------------------------------------------------------------
 # get_aggregated_stats
 # ---------------------------------------------------------------------------
@@ -336,7 +328,6 @@ class TestGetAggregatedStats:
         stats = get_aggregated_stats(repos)
         assert stats == {}
 
-
 # ---------------------------------------------------------------------------
 # RepoConfig validation
 # ---------------------------------------------------------------------------
@@ -362,7 +353,6 @@ class TestRepoConfig:
         assert rc.path == "/my/repo"
         assert rc.priority_weight == 10
         assert rc.enabled is False
-
 
 # ---------------------------------------------------------------------------
 # AggregatedWorkItem

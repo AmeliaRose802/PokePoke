@@ -60,35 +60,6 @@ def save_gate_stats(data: dict[str, Any], path: Path | None = None) -> None:
     _STORE.save(data, path)
 
 
-def _rebuild_gate_summary(log: list[dict[str, Any]]) -> dict[str, dict[str, Any]]:
-    """Recompute per-gate-model summary from the raw log entries."""
-    buckets: dict[str, dict[str, Any]] = {}
-    for entry in log:
-        model = entry.get("gate_model", "unknown")
-        if model not in buckets:
-            buckets[model] = {
-                "total_checks": 0, "total_passed": 0, "total_rejected": 0,
-                "rejection_rate": 0.0, "last_used": "", "trend": [],
-            }
-        s = buckets[model]
-        s["total_checks"] += 1
-        if entry.get("passed") is True:
-            s["total_passed"] += 1
-        else:
-            s["total_rejected"] += 1
-        ts = entry.get("timestamp", "")
-        if ts and ts > s["last_used"]:
-            s["last_used"] = ts
-        s["trend"].append({"timestamp": ts, "passed": entry.get("passed", False)})
-        s["trend"] = s["trend"][-50:]
-
-    for s in buckets.values():
-        if s["total_checks"] > 0:
-            s["rejection_rate"] = round(s["total_rejected"] / s["total_checks"], 4)
-
-    return buckets
-
-
 def _update_gate_summary_incremental(
     summary: dict[str, dict[str, Any]], entry: dict[str, Any],
 ) -> None:

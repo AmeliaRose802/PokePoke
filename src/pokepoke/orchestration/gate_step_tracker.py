@@ -191,29 +191,6 @@ class GateStepTracker:
             if log:
                 step.logs.append(log)
 
-    def log_to_step(self, step_id: str, message: str) -> None:
-        with self._lock:
-            run = self._current_run
-            if run is None:
-                return
-            step = run.steps.get(step_id)
-            if step is None:
-                return
-            step.logs.append(message)
-
-    def reset_steps_for_retry(self) -> None:
-        """Reset non-terminal steps to pending for a retry iteration."""
-        with self._lock:
-            run = self._current_run
-            if run is None:
-                return
-            for step in run.steps.values():
-                if step.status != MergeStepStatus.DONE:
-                    step.status = MergeStepStatus.PENDING
-                    step.started_at = None
-                    step.ended_at = None
-                    step.logs.clear()
-
     def finish_run(self, outcome: str) -> None:
         with self._lock:
             run = self._current_run

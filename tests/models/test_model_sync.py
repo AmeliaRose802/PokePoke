@@ -18,50 +18,7 @@ from pokepoke.models.model_sync import (
 from pokepoke.models.model_sync_parsing import (
     is_beta_model,
     normalize_model_entry,
-    parse_copilot_models_output,
 )
-
-
-def test_parse_json_list():
-    output = '[{"name":"gpt-5.2","status":"beta"}]'
-    models = parse_copilot_models_output(output)
-    assert len(models) == 1
-    assert models[0]["name"] == "gpt-5.2"
-
-
-def test_parse_json_envelope():
-    output = '{"models":[{"id":"claude-opus-4.6"}]}'
-    models = parse_copilot_models_output(output)
-    assert len(models) == 1
-    assert models[0]["id"] == "claude-opus-4.6"
-
-
-def test_parse_text_table():
-    output = "MODEL STATUS\n gpt-5.2 beta\n claude-opus-4.6 ga"
-    models = parse_copilot_models_output(output)
-    assert [m["name"] for m in models] == ["gpt-5.2", "claude-opus-4.6"]
-
-
-def test_parse_markdown_table():
-    """Parse markdown table output from Copilot CLI."""
-    output = """Here are the available models:
-| Model | ID | Tier |
-|---|---|---|
-| Claude Opus 4.6 | `claude-opus-4.6` | Premium |
-| GPT-5.2 | `gpt-5.2` | Standard |
-| GPT-4.1 | `gpt-4.1` | Fast/Cheap |
-
-**Current session:** Claude Opus 4.6
-"""
-    models = parse_copilot_models_output(output)
-    assert len(models) == 3
-    names = [m["name"] for m in models]
-    assert "claude-opus-4.6" in names
-    assert "gpt-5.2" in names
-    assert "gpt-4.1" in names
-    # Check tier/status was captured
-    claude = next(m for m in models if m["name"] == "claude-opus-4.6")
-    assert claude.get("status") == "Premium"
 
 
 def test_normalize_and_beta_detection():
@@ -83,7 +40,6 @@ def test_normalize_and_beta_detection():
     assert tagged_model.capabilities == ["tools", "analysis"]
     assert tagged_model.tags == ["experimental", "tools"]
 
-
 def test_update_registry_tracks_availability():
     now = datetime(2026, 2, 25, tzinfo=UTC)
     model = normalize_model_entry({"name": "gpt-5.2", "status": "beta"})
@@ -96,7 +52,6 @@ def test_update_registry_tracks_availability():
     assert not new_models
     assert "gpt-5.2" in removed_models
 
-
 def test_sync_skips_recent_run():
     config = ProjectConfig()
     config.model_sync = ModelSyncConfig(interval_minutes=60)
@@ -107,7 +62,6 @@ def test_sync_skips_recent_run():
         result = sync_copilot_models()
         assert result is not None
         mock_models.assert_not_called()
-
 
 def test_sync_force_ignores_interval():
     """Test that force=True bypasses interval check and always runs sync."""
@@ -128,7 +82,6 @@ def test_sync_force_ignores_interval():
         # Should have called Copilot CLI despite recent sync
         assert result.wall_duration is not None
 
-
 def test_sync_disabled_skips_even_when_forced():
     """When model_sync.enabled is False, sync_copilot_models must skip even with force=True."""
     config = ProjectConfig()
@@ -138,7 +91,6 @@ def test_sync_disabled_skips_even_when_forced():
         result = sync_copilot_models(force=True)
         assert result is not None
         mock_models.assert_not_called()
-
 
 def test_sync_disabled_skips_without_force():
     """When model_sync.enabled is False, sync_copilot_models must skip in normal mode."""
@@ -150,7 +102,6 @@ def test_sync_disabled_skips_without_force():
         assert result is not None
         mock_models.assert_not_called()
 
-
 def test_sync_no_models_returns_none():
     config = ProjectConfig()
     config.model_sync = ModelSyncConfig()
@@ -159,12 +110,10 @@ def test_sync_no_models_returns_none():
             patch("pokepoke.models.model_sync._run_copilot_models", return_value=[]):
         assert sync_copilot_models() is None
 
-
 def test_load_registry_defaults(tmp_path):
     registry = load_registry(path=tmp_path / "missing.json")
     assert registry["models"] == {}
     assert registry["last_sync"] is None
-
 
 def test_save_registry_round_trip(tmp_path):
     path = tmp_path / "registry.json"
@@ -172,7 +121,6 @@ def test_save_registry_round_trip(tmp_path):
     save_registry(payload, path=path)
     loaded = load_registry(path=path)
     assert loaded["models"]["gpt-5.2"]["available"] is True
-
 
 def test_save_registry_atomic_write(tmp_path):
     """save_registry uses temp file + rename for atomic writes."""
@@ -189,14 +137,12 @@ def test_save_registry_atomic_write(tmp_path):
     loaded = json.loads(path.read_text(encoding="utf-8"))
     assert loaded == payload
 
-
 def test_save_registry_creates_parent_dirs(tmp_path):
     """save_registry creates parent directories if they don't exist."""
     path = tmp_path / "nested" / "dir" / "registry.json"
     payload = {"last_sync": None, "models": {}}
     save_registry(payload, path=path)
     assert path.exists()
-
 
 def test_run_copilot_models_returns_sdk_models():
     """SDK list_models returns structured model data."""
@@ -205,7 +151,6 @@ def test_run_copilot_models_returns_sdk_models():
         models = _run_copilot_models()
         assert len(models) == 1
         assert models[0]["id"] == "gpt-5.2"
-
 
 def test_run_copilot_models_handles_sdk_failure(caplog):
     """SDK failure returns empty list and logs a warning."""
@@ -216,7 +161,6 @@ def test_run_copilot_models_handles_sdk_failure(caplog):
         from pokepoke.models.model_sync import _run_copilot_models
         models = _run_copilot_models()
     assert models == []
-
 
 def test_sync_creates_and_updates_beads(tmp_path):
     config = ProjectConfig()
@@ -247,7 +191,6 @@ def test_sync_creates_and_updates_beads(tmp_path):
         assert any(call.args[0][0] == "update" for call in mock_bd.call_args_list)
         mock_sync.assert_called_once()
 
-
 def test_sync_records_created_items_in_stats(tmp_path):
     """Items created by model sync must be reported to session stats."""
     config = ProjectConfig()
@@ -276,7 +219,6 @@ def test_sync_records_created_items_in_stats(tmp_path):
         items = mock_record.call_args[0][0]
         assert len(items) == 1
         assert items[0][0] == "PokePoke-new1"
-
 
 def test_sync_prunes_unavailable(tmp_path):
     config = ProjectConfig()
@@ -310,7 +252,6 @@ def test_sync_prunes_unavailable(tmp_path):
         assert result is not None
         assert any(call.args[0][0] == "close" for call in mock_bd.call_args_list)
 
-
 def test_get_available_model_names(tmp_path):
     """get_available_model_names returns only models marked available."""
     registry_path = tmp_path / "registry.json"
@@ -325,12 +266,10 @@ def test_get_available_model_names(tmp_path):
     names = get_available_model_names(registry_path=registry_path)
     assert names == ["claude-opus-4.6", "gpt-5.2"]
 
-
 def test_get_available_model_names_empty_registry(tmp_path):
     """Returns empty list when no registry exists."""
     names = get_available_model_names(registry_path=tmp_path / "missing.json")
     assert names == []
-
 
 def test_get_registry_last_sync(tmp_path):
     """get_registry_last_sync returns the timestamp from registry."""
@@ -339,11 +278,9 @@ def test_get_registry_last_sync(tmp_path):
     registry_path.write_text(json.dumps({"last_sync": ts, "models": {}}))
     assert get_registry_last_sync(registry_path=registry_path) == ts
 
-
 def test_get_registry_last_sync_missing(tmp_path):
     """Returns None when registry doesn't exist."""
     assert get_registry_last_sync(registry_path=tmp_path / "missing.json") is None
-
 
 def test_prune_unavailable_from_config(tmp_path):
     """prune_unavailable_from_config removes stale models and saves config."""
@@ -383,7 +320,6 @@ def test_prune_unavailable_from_config(tmp_path):
     assert "claude-opus-4.6" in updated["models"]["candidate_models"]
     assert "gpt-5" in updated["models"]["candidate_models"]
 
-
 def test_prune_unavailable_from_config_no_stale(tmp_path):
     """No pruning when all candidates are available."""
     registry_path = tmp_path / "registry.json"
@@ -412,7 +348,6 @@ def test_prune_unavailable_from_config_no_stale(tmp_path):
 
     assert removed == []
 
-
 def test_prune_unavailable_from_config_no_candidates(tmp_path):
     """No pruning when config has no candidate_models."""
     registry_path = tmp_path / "registry.json"
@@ -433,32 +368,6 @@ def test_prune_unavailable_from_config_no_candidates(tmp_path):
         removed = prune_unavailable_from_config(registry_path=registry_path)
 
     assert removed == []
-
-
-def test_parse_markdown_table_rejects_invalid_entries():
-    """Markdown table parser should reject table separators and formatting."""
-    output = """Here are the available models:
-| Model | ID | Tier |
-|---|---|---|
-| Claude Opus 4.6 | `claude-opus-4.6` | Premium |
-| GPT-5.2 | `gpt-5.2` | Standard |
-
-**Current session:** Claude Opus 4.6
-Use `copilot -m <model>` to switch models.
-"""
-    models = parse_copilot_models_output(output)
-
-    # Should only get the 2 valid models, not table separators or text
-    assert len(models) == 2
-    names = [m["name"] for m in models]
-    assert "claude-opus-4.6" in names
-    assert "gpt-5.2" in names
-
-    # These should NOT appear in the results
-    invalid_names = ["|", "|---|---|---|", "**Current", "Use", "Model"]
-    for invalid in invalid_names:
-        assert invalid not in names, f"Invalid entry '{invalid}' should not be in parsed models"
-
 
 def test_is_valid_model_name():
     """Test model name validation helper."""

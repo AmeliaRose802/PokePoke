@@ -15,10 +15,6 @@ def get_current_agent_type(default: str = "unknown") -> str:
     return default
 
 
-def set_current_agent_type(agent_type: str | None) -> None:
-    _thread_local.agent_type = agent_type
-
-
 def get_current_repo_name(default: str = "") -> str:
     """Return the repo name set on the current thread, or *default*."""
     val = getattr(_thread_local, "repo_name", None)
@@ -43,17 +39,6 @@ def get_current_work_item_id(default: str = "") -> str:
 def set_current_work_item_id(work_item_id: str | None) -> None:
     """Set the work-item ID for the current thread."""
     _thread_local.work_item_id = work_item_id
-
-
-@contextmanager
-def repo_context(repo_name: str) -> Iterator[None]:
-    """Context manager that sets the current repo name for the duration."""
-    prev = getattr(_thread_local, "repo_name", None)
-    _thread_local.repo_name = repo_name
-    try:
-        yield
-    finally:
-        _thread_local.repo_name = prev
 
 
 @contextmanager

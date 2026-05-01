@@ -253,36 +253,6 @@ class RunLogger:
         item_dir.mkdir(exist_ok=True)
         return item_dir
 
-    def start_item_phase_log(
-        self,
-        item_id: str,
-        item_title: str,
-        phase: str,
-        attempt: int = 1,
-        agent_name: str | None = None,
-    ) -> 'ItemLogger':
-        """Start logging for a specific work item phase/attempt."""
-        if agent_name is None:
-            # Defer import to avoid circular dependency at module load
-            from pokepoke.agents.agent_context import get_agent_name
-
-            agent_name = get_agent_name(default="agent")
-
-        item_dir = self._get_item_dir(item_id)
-        safe_phase = phase.lower()
-        attempt_index = attempt if attempt >= 1 else 1
-        phase_item_id = f"{item_id}__{safe_phase}_attempt_{attempt_index}"
-        if agent_name:
-            safe_agent = ItemLogger._sanitize_agent_component(agent_name)
-            phase_item_id = f"{phase_item_id}_{safe_agent}"
-
-        return ItemLogger(
-            item_dir,
-            phase_item_id,
-            item_title,
-            agent_name=agent_name,
-        )
-
     def start_item_log(
         self,
         item_id: str,

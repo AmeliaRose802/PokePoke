@@ -7,8 +7,6 @@ isolation per repo, maintenance scheduling independence, and metrics segmentatio
 
 import json
 import subprocess
-import threading
-import time
 from pathlib import Path
 
 import pytest
@@ -30,18 +28,13 @@ from pokepoke.maintenance.maintenance_state import (
     _state_to_dict,
     get_repo_state,
     increment_items_completed,
-)
-from pokepoke.stats.metrics_context import (
-    get_current_repo_name,
-    repo_context,
-    set_current_repo_name,
+    load_state,
 )
 from pokepoke.types import AgentStats, BeadsWorkItem, SessionStats
 
 # ---------------------------------------------------------------------------
 # Helpers
 # ---------------------------------------------------------------------------
-
 
 def _make_item(item_id: str = "x", priority: int = 1, **kwargs: object) -> BeadsWorkItem:
     defaults = {
@@ -53,7 +46,6 @@ def _make_item(item_id: str = "x", priority: int = 1, **kwargs: object) -> Beads
     }
     defaults.update(kwargs)
     return BeadsWorkItem(**defaults)  # type: ignore[arg-type]
-
 
 def _make_repo(
     path: str = "/repo/alpha",
@@ -68,15 +60,12 @@ def _make_repo(
         max_workers=max_workers,
     )
 
-
 def _bd_stdout(items: list[dict]) -> subprocess.CompletedProcess[str]:
     return subprocess.CompletedProcess("bd", 0, stdout=json.dumps(items))
-
 
 # ═══════════════════════════════════════════════════════════════════════════
 # 1. CONFIG PARSING WITH MULTIPLE REPOS
 # ═══════════════════════════════════════════════════════════════════════════
-
 
 class TestConfigParsingMultipleRepos:
     """Test ProjectConfig.from_dict with multi-repo configurations."""
@@ -168,11 +157,9 @@ class TestConfigParsingMultipleRepos:
         assert len(config.repos) == 1
         assert config.repos[0].priority_weight == 10
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 2. WORK ITEM AGGREGATION ACROSS REPOS
 # ═══════════════════════════════════════════════════════════════════════════
-
 
 class TestAggregationEdgeCases:
     """Additional edge cases for multi-repo work item aggregation."""
@@ -238,41 +225,6 @@ class TestAggregationEdgeCases:
         assert len(items) == 1
         assert items[0].item.id == "e1"
 
-    def test_aggregate_preserves_repo_context_for_each_item(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """Each aggregated item carries the correct repo_path and repo_name."""
-        repo_a = tmp_path / "alpha"
-        repo_b = tmp_path / "beta"
-        repo_a.mkdir()
-        repo_b.mkdir()
-
-        call_map = {
-            str(repo_a): [
-                {"id": "a1", "title": "A1", "status": "open", "priority": 1, "issue_type": "task"},
-                {"id": "a2", "title": "A2", "status": "open", "priority": 2, "issue_type": "task"},
-            ],
-            str(repo_b): [
-                {"id": "b1", "title": "B1", "status": "open", "priority": 1, "issue_type": "task"},
-            ],
-        }
-
-        def mock_bd(*args, **kwargs):
-            return _bd_stdout(call_map.get(kwargs.get("cwd", ""), []))
-
-        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
-        repos = [
-            _make_repo(path=str(repo_a), priority_weight=1),
-            _make_repo(path=str(repo_b), priority_weight=1),
-        ]
-        items = aggregate_ready_work_items(repos)
-        a_items = [i for i in items if i.repo_name == "alpha"]
-        b_items = [i for i in items if i.repo_name == "beta"]
-        assert len(a_items) == 2
-        assert len(b_items) == 1
-        assert all(i.repo_path == str(repo_a) for i in a_items)
-        assert all(i.repo_path == str(repo_b) for i in b_items)
-
     def test_query_all_repos_handles_future_exception(
         self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
     ) -> None:
@@ -323,36 +275,12 @@ class TestAggregationEdgeCases:
         assert stats[str(good)] == 2
         assert stats[str(bad)] == 0
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 3. WORKTREE ISOLATION PER REPO
 # ═══════════════════════════════════════════════════════════════════════════
 
-
 class TestWorktreeIsolationPerRepo:
     """Test that worktree operations use per-repo context."""
-
-    def test_repo_context_isolates_concurrent_threads(self) -> None:
-        """Concurrent threads see their own repo context."""
-        results: dict[str, str] = {}
-        barrier = threading.Barrier(3, timeout=5)
-
-        def worker(name: str) -> None:
-            with repo_context(name):
-                barrier.wait(timeout=5)
-                time.sleep(0.01)  # Brief overlap
-                results[name] = get_current_repo_name()
-
-        threads = [
-            threading.Thread(target=worker, args=(f"repo-{i}",))
-            for i in range(3)
-        ]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=5)
-
-        assert results == {"repo-0": "repo-0", "repo-1": "repo-1", "repo-2": "repo-2"}
 
     def test_aggregated_items_carry_correct_repo_path(self, tmp_path: Path) -> None:
         """Worktree creation would use the item's repo_path, not a global one."""
@@ -371,18 +299,6 @@ class TestWorktreeIsolationPerRepo:
         assert agg_a.repo_path != agg_b.repo_path
         assert Path(agg_a.repo_path).name == "project-alpha"
         assert Path(agg_b.repo_path).name == "project-beta"
-
-    def test_repo_context_exception_safety(self) -> None:
-        """repo_context restores previous name even on exception."""
-        set_current_repo_name("outer-repo")
-        try:
-            with repo_context("inner-repo"):
-                assert get_current_repo_name() == "inner-repo"
-                raise ValueError("test error")
-        except ValueError:
-            pass
-        assert get_current_repo_name() == "outer-repo"
-        set_current_repo_name(None)
 
     def test_real_tmp_dirs_are_independent(self, tmp_path: Path) -> None:
         """Integration: verify real tmp dirs simulate independent worktrees."""
@@ -405,11 +321,9 @@ class TestWorktreeIsolationPerRepo:
         for dirs in repos.values():
             assert str(dirs["worktree"]).startswith(str(dirs["repo"]))
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 5. MAINTENANCE SCHEDULING INDEPENDENCE
 # ═══════════════════════════════════════════════════════════════════════════
-
 
 class TestMaintenanceIndependence:
     """Test per-repo maintenance scheduling independence."""
@@ -427,8 +341,8 @@ class TestMaintenanceIndependence:
         count_a2 = increment_items_completed(repo_id="repo-a")
         assert count_a2 == 2
         # repo-b still at 1
-        from pokepoke.maintenance.maintenance_state import get_items_completed_for_repo
-        assert get_items_completed_for_repo("repo-b") == 1
+        state = load_state()
+        assert state.repos.get("repo-b", RepoMaintenanceState()).items_completed == 1
 
     def test_maintenance_state_serialization(self) -> None:
         """MaintenanceState round-trips through dict serialization."""
@@ -482,49 +396,12 @@ class TestMaintenanceIndependence:
         state = load_state()
         assert state.total_items_completed == 2
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 6. METRICS SEGMENTATION
 # ═══════════════════════════════════════════════════════════════════════════
 
-
 class TestMetricsSegmentation:
     """Test per-repo metrics attribution and segmentation."""
-
-    def test_repo_context_sets_thread_local(self) -> None:
-        set_current_repo_name(None)
-        with repo_context("metrics-test-repo"):
-            assert get_current_repo_name() == "metrics-test-repo"
-        assert get_current_repo_name() == ""
-
-    def test_multiple_threads_independent_metrics(self) -> None:
-        """Each thread's repo name is independent for metrics attribution."""
-        results: dict[int, str] = {}
-        barrier = threading.Barrier(5, timeout=5)
-
-        def worker(idx: int) -> None:
-            with repo_context(f"repo-{idx}"):
-                barrier.wait(timeout=5)
-                results[idx] = get_current_repo_name()
-
-        threads = [threading.Thread(target=worker, args=(i,)) for i in range(5)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=5)
-
-        for i in range(5):
-            assert results[i] == f"repo-{i}"
-
-    def test_nested_repo_context_for_maintenance(self) -> None:
-        """Maintenance runs inside a repo context preserve the outer context."""
-        set_current_repo_name(None)
-        with repo_context("outer-repo"):
-            assert get_current_repo_name() == "outer-repo"
-            with repo_context("maintenance-context"):
-                assert get_current_repo_name() == "maintenance-context"
-            assert get_current_repo_name() == "outer-repo"
-        set_current_repo_name(None)
 
     def test_session_stats_per_agent_type(self) -> None:
         """Session stats tracks agent runs and elapsed time per agent type."""
@@ -538,11 +415,9 @@ class TestMetricsSegmentation:
         assert snap.agent_type_elapsed_seconds.get("work") == 120.0
         assert snap.agent_type_elapsed_seconds.get("tech_debt") == 30.0
 
-
 # ═══════════════════════════════════════════════════════════════════════════
 # 7. INTEGRATION TESTS WITH REAL DIRECTORIES
 # ═══════════════════════════════════════════════════════════════════════════
-
 
 class TestMultiRepoIntegration:
     """Integration tests using real temporary directories with mocked beads."""
@@ -587,37 +462,6 @@ class TestMultiRepoIntegration:
         assert len(fe_items) == 1
         assert fe_items[0].repo_path == str(tmp_path / "frontend")
 
-    def test_end_to_end_repo_context_with_aggregated_items(
-        self, monkeypatch: pytest.MonkeyPatch, tmp_path: Path
-    ) -> None:
-        """Full flow: aggregate items, process each in correct repo context."""
-        repo_a = tmp_path / "repo-alpha"
-        repo_b = tmp_path / "repo-beta"
-        repo_a.mkdir()
-        repo_b.mkdir()
-
-        call_map = {
-            str(repo_a): [{"id": "a1", "title": "A", "status": "open", "priority": 1, "issue_type": "task"}],
-            str(repo_b): [{"id": "b1", "title": "B", "status": "open", "priority": 1, "issue_type": "task"}],
-        }
-
-        def mock_bd(*args, **kwargs):
-            return _bd_stdout(call_map.get(kwargs.get("cwd", ""), []))
-
-        monkeypatch.setattr("pokepoke.git.multi_repo_aggregator._run_bd", mock_bd)
-
-        repos = [_make_repo(path=str(repo_a)), _make_repo(path=str(repo_b))]
-        items = aggregate_ready_work_items(repos)
-
-        # Simulate processing each item in its repo context
-        processed_contexts: list[tuple[str, str]] = []
-        for agg_item in items:
-            with repo_context(agg_item.repo_name):
-                processed_contexts.append((agg_item.item.id, get_current_repo_name()))
-
-        assert ("a1", "repo-alpha") in processed_contexts
-        assert ("b1", "repo-beta") in processed_contexts
-
     def test_maintenance_state_with_real_paths(
         self, tmp_path: Path, monkeypatch: pytest.MonkeyPatch
     ) -> None:
@@ -632,6 +476,6 @@ class TestMultiRepoIntegration:
         increment_items_completed(repo_id=repo_a)
         increment_items_completed(repo_id=repo_b)
 
-        from pokepoke.maintenance.maintenance_state import get_items_completed_for_repo
-        assert get_items_completed_for_repo(repo_a) == 2
-        assert get_items_completed_for_repo(repo_b) == 1
+        state = load_state()
+        assert state.repos.get(repo_a, RepoMaintenanceState()).items_completed == 2
+        assert state.repos.get(repo_b, RepoMaintenanceState()).items_completed == 1

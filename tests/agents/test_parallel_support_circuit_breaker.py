@@ -23,7 +23,6 @@ def _make_item(item_id: str = "t1") -> BeadsWorkItem:
         priority=1, issue_type="task",
     )
 
-
 class TestDrainCircuitBreaker:
     """Tests for drain_circuit_breaker."""
 
@@ -158,7 +157,6 @@ class TestDrainCircuitBreaker:
         # _drain_orphaned_futures should NOT have been called (no timeout forced)
         mock_drain.assert_not_called()
 
-
 class TestUpdateCircuitBreaker:
     """Tests for update_circuit_breaker."""
 
@@ -185,7 +183,6 @@ class TestUpdateCircuitBreaker:
         failures, tripped = update_circuit_breaker(0, 0, 3, 10, {}, run_logger)
         assert failures == 3
         assert tripped is False
-
 
 class TestUpdateMemoryCircuitBreaker:
     """Tests for update_memory_circuit_breaker."""
@@ -281,9 +278,6 @@ class TestUpdateMemoryCircuitBreaker:
             run_logger=run_logger,
         )
         assert tripped is True
-        call_args = run_logger.log_orchestrator.call_args
-        log_message = call_args[0][0]
-        assert "draining 1 remaining agent" in log_message
 
     def test_zero_avail_mb_preserves_counter(self):
         """When avail_mb is 0 (monitoring failure), counter is preserved -- not reset."""

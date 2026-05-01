@@ -61,7 +61,6 @@ def test_configure_logging_creates_debug_log(tmp_path):
         root.handlers = original_handlers
         pokepoke_logger.handlers = original_pp_handlers
 
-
 def test_configure_logging_no_duplicate_console_handlers(tmp_path):
     """Calling configure_logging twice should not add duplicate console handlers."""
     log_file = tmp_path / "debug.log"
@@ -88,7 +87,6 @@ def test_configure_logging_no_duplicate_console_handlers(tmp_path):
         root.handlers = original_handlers
         pokepoke_logger.handlers = original_pp_handlers
 
-
 def test_configure_logging_creates_parent_dirs(tmp_path):
     """configure_logging should create parent directories for the log file."""
     log_file = tmp_path / "nested" / "dirs" / "debug.log"
@@ -107,7 +105,6 @@ def test_configure_logging_creates_parent_dirs(tmp_path):
     finally:
         root.handlers = original_handlers
         pokepoke_logger.handlers = original_pp_handlers
-
 
 def test_run_logger_initialization():
     """Test that RunLogger creates proper directory structure."""
@@ -136,7 +133,6 @@ def test_run_logger_initialization():
         finally:
             logger.close()
 
-
 def test_run_logger_orchestrator_logging():
     """Test that orchestrator logging works."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -160,7 +156,6 @@ def test_run_logger_orchestrator_logging():
             assert "[ERROR]" in content
         finally:
             logger.close()
-
 
 def test_run_logger_item_logging():
     """Test that item logging works."""
@@ -197,7 +192,6 @@ def test_run_logger_item_logging():
         assert "Agent requests: 5" in content
         logger.close()
 
-
 def test_run_logger_finalize():
     """Test that finalize writes summary correctly."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -218,7 +212,6 @@ def test_run_logger_finalize():
             assert "Total time: 2.0 minutes" in content
         finally:
             logger.close()
-
 
 def test_run_logger_maintenance_logging():
     """Test that maintenance logging works."""
@@ -242,14 +235,12 @@ def test_run_logger_maintenance_logging():
         finally:
             logger.close()
 
-
 def test_run_logger_creates_maintenance_dir():
     """Test that RunLogger creates a maintenance logs directory."""
     with tempfile.TemporaryDirectory() as tmpdir:
         logger = RunLogger(base_dir=tmpdir)
         assert (logger.get_run_dir() / "maintenance").exists()
         logger.close()
-
 
 def test_start_maintenance_log_creates_log_file():
     """Test that start_maintenance_log creates a log file under maintenance/."""
@@ -268,7 +259,6 @@ def test_start_maintenance_log_creates_log_file():
             content = f.read()
         assert "Janitor Maintenance Agent" in content
         logger.close()
-
 
 def test_maintenance_log_captures_output():
     """Test that maintenance log captures copilot output and tool calls."""
@@ -292,7 +282,6 @@ def test_maintenance_log_captures_output():
         assert "Agent requests: 2" in content
         logger.close()
 
-
 def test_item_logger_sanitizes_filenames():
     """Test that ItemLogger sanitizes item IDs for filenames."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -307,7 +296,6 @@ def test_item_logger_sanitizes_filenames():
 
         # Verify file exists
         assert expected_path.exists()
-
 
 def test_item_logger_sanitizes_agent_name_in_filename():
     """Agent names should be appended to filenames after sanitization."""
@@ -329,7 +317,6 @@ def test_item_logger_sanitizes_agent_name_in_filename():
             content = f.read()
 
         assert f"Agent: {agent_name}" in content
-
 
 def test_multiple_item_logs():
     """Test that multiple items can be logged in sequence."""
@@ -367,7 +354,6 @@ def test_multiple_item_logs():
         assert "FAILURE" in content2
         logger.close()
 
-
 def test_item_logger_log_copilot_output():
     """Test that log_copilot_output writes streamed text to log."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -381,7 +367,6 @@ def test_item_logger_log_copilot_output():
             content = f.read()
 
         assert "Hello world!" in content
-
 
 def test_item_logger_log_tool_call():
     """Test that log_tool_call writes tool invocation details."""
@@ -410,7 +395,6 @@ def test_item_logger_log_tool_call():
         assert "✅" in content
         assert "❌" in content
 
-
 def test_item_logger_log_error():
     """Test that log_error writes error messages."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -424,7 +408,6 @@ def test_item_logger_log_error():
 
         assert "[ERROR]" in content
         assert "Something went wrong" in content
-
 
 def test_item_logger_log_debug():
     """Test that log_debug writes debug messages to file only."""
@@ -441,7 +424,6 @@ def test_item_logger_log_debug():
         assert "TOOL_TIMEOUT_DIAG" in content
         assert "copilot_pid=1234" in content
 
-
 def test_get_item_dir_creates_subdirectory():
     """Test that _get_item_dir creates a per-item subdirectory."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -453,7 +435,6 @@ def test_get_item_dir_creates_subdirectory():
         assert item_dir.name == "my-item-42"
         logger.close()
 
-
 def test_get_item_dir_sanitizes_slashes():
     """Test that _get_item_dir replaces slashes in item IDs."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -463,93 +444,6 @@ def test_get_item_dir_sanitizes_slashes():
         assert item_dir.name == "task_with_slashes"
         assert item_dir.exists()
         logger.close()
-
-
-def test_start_item_phase_log_creates_log_in_item_dir():
-    """Test that start_item_phase_log creates a log file inside a per-item directory."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        logger = RunLogger(base_dir=tmpdir)
-
-        item_logger = logger.start_item_phase_log(
-            item_id="item-99",
-            item_title="Phase Test",
-            phase="work",
-            attempt=1,
-            agent_name="test_agent",
-        )
-
-        # Log file should be inside items/item-99/
-        assert item_logger.log_path.parent == logger.item_logs_dir / "item-99"
-        assert item_logger.log_path.exists()
-        assert "work" in item_logger.log_path.name
-        assert "attempt_1" in item_logger.log_path.name
-        assert "test_agent" in item_logger.log_path.name
-        logger.close()
-
-
-def test_start_item_phase_log_multiple_phases():
-    """Test that different phases get separate log files."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        logger = RunLogger(base_dir=tmpdir)
-
-        work_logger = logger.start_item_phase_log(
-            "item-1", "Test", phase="work", attempt=1, agent_name="agent"
-        )
-        gate_logger = logger.start_item_phase_log(
-            "item-1", "Test", phase="gate", attempt=1, agent_name="agent"
-        )
-
-        assert work_logger.log_path != gate_logger.log_path
-        assert work_logger.log_path.parent == gate_logger.log_path.parent
-        logger.close()
-
-
-def test_start_item_phase_log_retry_attempt():
-    """Test that retries get separate log files with attempt number."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        logger = RunLogger(base_dir=tmpdir)
-
-        attempt1 = logger.start_item_phase_log(
-            "item-1", "Test", phase="work", attempt=1, agent_name="agent"
-        )
-        attempt2 = logger.start_item_phase_log(
-            "item-1", "Test", phase="work", attempt=2, agent_name="agent"
-        )
-
-        assert attempt1.log_path != attempt2.log_path
-        assert "attempt_1" in attempt1.log_path.name
-        assert "attempt_2" in attempt2.log_path.name
-        logger.close()
-
-
-def test_start_item_phase_log_clamps_attempt():
-    """Test that attempt < 1 is clamped to 1."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        logger = RunLogger(base_dir=tmpdir)
-
-        item_logger = logger.start_item_phase_log(
-            "item-1", "Test", phase="work", attempt=0, agent_name="agent"
-        )
-        assert "attempt_1" in item_logger.log_path.name
-        logger.close()
-
-
-def test_start_item_phase_log_writes_header():
-    """Test that phase log files contain proper header content."""
-    with tempfile.TemporaryDirectory() as tmpdir:
-        logger = RunLogger(base_dir=tmpdir)
-
-        item_logger = logger.start_item_phase_log(
-            "item-7", "My Feature", phase="cleanup", attempt=1, agent_name="bot"
-        )
-
-        with open(item_logger.log_path, encoding='utf-8') as f:
-            content = f.read()
-
-        assert "My Feature" in content
-        assert "Agent: bot" in content
-        logger.close()
-
 
 def test_item_logger_full_agent_session():
     """Test a realistic sequence: output, tool calls, errors, summary."""
@@ -581,7 +475,6 @@ def test_item_logger_full_agent_session():
         assert "SUCCESS" in content
         assert "Agent requests: 3" in content
 
-
 def test_log_polling_first_cycle_is_debug():
     """First poll cycle should be logged at DEBUG (not INFO)."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -599,7 +492,6 @@ def test_log_polling_first_cycle_is_debug():
             assert "Checking status" in content
         finally:
             logger.close()
-
 
 def test_log_polling_nth_cycle_is_info():
     """Every Nth poll cycle should be logged at INFO."""
@@ -624,7 +516,6 @@ def test_log_polling_nth_cycle_is_info():
         finally:
             logger.close()
 
-
 def test_log_polling_suppresses_most_cycles():
     """With default interval=50, only cycle 50 out of 50 should be INFO."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -647,7 +538,6 @@ def test_log_polling_suppresses_most_cycles():
         finally:
             logger.close()
 
-
 def test_enter_idle_logs_once():
     """enter_idle should log a message on first call, be a no-op on subsequent calls."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -664,7 +554,6 @@ def test_enter_idle_logs_once():
             assert len(idle_lines) == 1
         finally:
             logger.close()
-
 
 def test_exit_idle_logs_duration():
     """exit_idle should log idle duration and reset poll cycle counter."""
@@ -688,7 +577,6 @@ def test_exit_idle_logs_duration():
         finally:
             logger.close()
 
-
 def test_exit_idle_noop_when_not_idle():
     """exit_idle should be a no-op if not currently idle."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -703,7 +591,6 @@ def test_exit_idle_noop_when_not_idle():
             assert "Exiting idle state" not in content
         finally:
             logger.close()
-
 
 def test_exit_idle_resets_poll_cycle():
     """exit_idle should reset the poll cycle counter so INFO cycles restart."""
@@ -736,7 +623,6 @@ def test_exit_idle_resets_poll_cycle():
         finally:
             logger.close()
 
-
 def test_idle_duration_hours_format():
     """Long idle periods should format with hours."""
     with tempfile.TemporaryDirectory() as tmpdir:
@@ -755,9 +641,7 @@ def test_idle_duration_hours_format():
         finally:
             logger.close()
 
-
 # ── Repo-context logging tests───────────────────────────────────────
-
 
 def test_run_logger_repo_name_in_header():
     """RunLogger with repo_name should include it in the orchestrator log header."""
@@ -771,7 +655,6 @@ def test_run_logger_repo_name_in_header():
             assert "Repository: PokePoke" in content
         finally:
             logger.close()
-
 
 def test_run_logger_repo_name_in_log_lines():
     """Log lines should include repo name tag when set."""
@@ -789,7 +672,6 @@ def test_run_logger_repo_name_in_log_lines():
             assert "something happened" in content
         finally:
             logger.close()
-
 
 def test_run_logger_no_repo_name_omits_tag():
     """When no repo name is set, log lines should not have an empty tag."""
@@ -812,7 +694,6 @@ def test_run_logger_no_repo_name_omits_tag():
         finally:
             logger.close()
 
-
 def test_run_logger_picks_up_thread_local_repo():
     """Without repo_name param, log_orchestrator should read thread-local context."""
     from pokepoke.stats.metrics_context import set_current_repo_name
@@ -832,49 +713,43 @@ def test_run_logger_picks_up_thread_local_repo():
             logger.close()
             set_current_repo_name(None)
 
-
 # ── WorkItemFilter tests ────────────────────────────────────────────
-
 
 def test_work_item_filter_injects_fields():
     """WorkItemFilter should add work_item_id, repo_name, agent_type to records."""
     from pokepoke.stats.metrics_context import (
-        set_current_agent_type,
+        agent_type_context,
         set_current_repo_name,
         set_current_work_item_id,
     )
     set_current_work_item_id("PokePoke-abc1")
     set_current_repo_name("MyRepo")
-    set_current_agent_type("work")
 
-    try:
-        filt = WorkItemFilter()
-        record = logging.LogRecord(
-            name="test", level=logging.INFO, pathname="", lineno=0,
-            msg="hello", args=(), exc_info=None,
-        )
-        result = filt.filter(record)
+    with agent_type_context("work"):
+        try:
+            filt = WorkItemFilter()
+            record = logging.LogRecord(
+                name="test", level=logging.INFO, pathname="", lineno=0,
+                msg="hello", args=(), exc_info=None,
+            )
+            result = filt.filter(record)
 
-        assert result is True
-        assert record.work_item_id == "PokePoke-abc1"  # type: ignore[attr-defined]
-        assert record.repo_name == "MyRepo"  # type: ignore[attr-defined]
-        assert record.agent_type == "work"  # type: ignore[attr-defined]
-    finally:
-        set_current_work_item_id(None)
-        set_current_repo_name(None)
-        set_current_agent_type(None)
-
+            assert result is True
+            assert record.work_item_id == "PokePoke-abc1"  # type: ignore[attr-defined]
+            assert record.repo_name == "MyRepo"  # type: ignore[attr-defined]
+            assert record.agent_type == "work"  # type: ignore[attr-defined]
+        finally:
+            set_current_work_item_id(None)
+            set_current_repo_name(None)
 
 def test_work_item_filter_defaults_to_empty():
     """WorkItemFilter should default to empty strings when context is unset."""
     from pokepoke.stats.metrics_context import (
-        set_current_agent_type,
         set_current_repo_name,
         set_current_work_item_id,
     )
     set_current_work_item_id(None)
     set_current_repo_name(None)
-    set_current_agent_type(None)
 
     filt = WorkItemFilter()
     record = logging.LogRecord(
@@ -887,9 +762,7 @@ def test_work_item_filter_defaults_to_empty():
     assert record.repo_name == ""  # type: ignore[attr-defined]
     assert record.agent_type == ""  # type: ignore[attr-defined]
 
-
 # ── JsonFormatter tests ─────────────────────────────────────────────
-
 
 def test_json_formatter_basic_output():
     """JsonFormatter should produce valid JSON with required fields."""
@@ -905,7 +778,6 @@ def test_json_formatter_basic_output():
     assert data["logger"] == "pokepoke.test"
     assert data["message"] == "test warning"
     assert "timestamp" in data
-
 
 def test_json_formatter_includes_work_item_id():
     """JsonFormatter should include work_item_id when present on record."""
@@ -925,7 +797,6 @@ def test_json_formatter_includes_work_item_id():
     assert "repo_name" not in data
     assert "agent_type" not in data
 
-
 def test_json_formatter_includes_all_context():
     """JsonFormatter should include all context fields when present."""
     formatter = JsonFormatter()
@@ -944,7 +815,6 @@ def test_json_formatter_includes_all_context():
     assert data["repo_name"] == "PokePoke"
     assert data["agent_type"] == "gate"
 
-
 def test_json_formatter_omits_empty_context():
     """JsonFormatter should omit context fields when empty."""
     formatter = JsonFormatter()
@@ -961,11 +831,9 @@ def test_json_formatter_omits_empty_context():
 
     assert "work_item_id" not in data
 
-
 # ==============================================================================
 # Tests for split log files (events, maintenance, lifecycle)
 # ==============================================================================
-
 
 def test_run_logger_creates_three_separate_log_files(tmp_path):
     """RunLogger should create three separate log files: events, maintenance, lifecycle."""
@@ -986,7 +854,6 @@ def test_run_logger_creates_three_separate_log_files(tmp_path):
         assert run_logger.orchestrator_log_path == run_logger.orchestrator_events_log_path
     finally:
         run_logger.close()
-
 
 def test_run_logger_events_log_contains_important_events(tmp_path):
     """Events log should contain submissions, completions, errors, warnings."""
@@ -1016,7 +883,6 @@ def test_run_logger_events_log_contains_important_events(tmp_path):
     finally:
         run_logger.close()
 
-
 def test_run_logger_maintenance_log_contains_lock_messages(tmp_path):
     """Maintenance log should contain cleanup locks, dirty repo waits."""
     run_logger = RunLogger(base_dir=str(tmp_path))
@@ -1045,7 +911,6 @@ def test_run_logger_maintenance_log_contains_lock_messages(tmp_path):
     finally:
         run_logger.close()
 
-
 def test_run_logger_lifecycle_log_contains_poll_messages(tmp_path):
     """Lifecycle log should contain poll iterations and memory tracking."""
     run_logger = RunLogger(base_dir=str(tmp_path))
@@ -1073,7 +938,6 @@ def test_run_logger_lifecycle_log_contains_poll_messages(tmp_path):
     finally:
         run_logger.close()
 
-
 def test_run_logger_idle_messages_in_events_log(tmp_path):
     """Idle state messages should appear in events log as they're important state changes."""
     run_logger = RunLogger(base_dir=str(tmp_path))
@@ -1089,7 +953,6 @@ def test_run_logger_idle_messages_in_events_log(tmp_path):
         assert "Exiting idle state" in events_content
     finally:
         run_logger.close()
-
 
 def test_run_logger_headers_in_all_three_files(tmp_path):
     """All three log files should have descriptive headers."""
@@ -1117,7 +980,6 @@ def test_run_logger_headers_in_all_three_files(tmp_path):
     finally:
         run_logger.close()
 
-
 def test_run_logger_close_removes_all_handlers(tmp_path):
     """close() should remove and close all three handlers."""
     run_logger = RunLogger(base_dir=str(tmp_path))
@@ -1135,7 +997,6 @@ def test_run_logger_close_removes_all_handlers(tmp_path):
 
     # close() should be idempotent
     run_logger.close()  # Should not raise
-
 
 def test_event_filter_accepts_warnings_and_errors():
     """EventFilter should accept all WARNING and ERROR level messages."""
@@ -1160,7 +1021,6 @@ def test_event_filter_accepts_warnings_and_errors():
     assert event_filter.filter(error_record) is True
     assert event_filter.filter(debug_record) is False
 
-
 def test_event_filter_accepts_info_with_keywords():
     """EventFilter should accept INFO messages with event keywords."""
 
@@ -1181,7 +1041,6 @@ def test_event_filter_accepts_info_with_keywords():
     assert event_filter.filter(event_record) is True
     assert event_filter.filter(non_event_record) is False
 
-
 def test_maintenance_filter_accepts_lock_messages():
     """MaintenanceFilter should accept messages with maintenance keywords."""
 
@@ -1201,7 +1060,6 @@ def test_maintenance_filter_accepts_lock_messages():
 
     assert maintenance_filter.filter(lock_record) is True
     assert maintenance_filter.filter(normal_record) is False
-
 
 def test_lifecycle_filter_accepts_poll_messages():
     """LifecycleFilter should accept DEBUG and INFO messages with lifecycle keywords."""
@@ -1237,7 +1095,6 @@ def test_lifecycle_filter_accepts_poll_messages():
     assert lifecycle_filter.filter(warning_poll_record) is False
     assert lifecycle_filter.filter(normal_debug) is False
 
-
 def test_json_formatter_includes_exception():
     """JsonFormatter should include exception info when present."""
     formatter = JsonFormatter()
@@ -1257,9 +1114,7 @@ def test_json_formatter_includes_exception():
     assert "ValueError" in data["exception"]
     assert "test error" in data["exception"]
 
-
 # ── configure_logging with new features ─────────────────────────────
-
 
 def test_configure_logging_attaches_work_item_filter(tmp_path):
     """configure_logging should attach WorkItemFilter to root handlers."""
@@ -1285,7 +1140,6 @@ def test_configure_logging_attaches_work_item_filter(tmp_path):
         root.handlers = original_handlers
         root.filters = original_filters
         pokepoke_logger.handlers = original_pp_handlers
-
 
 def test_configure_logging_no_duplicate_filters(tmp_path):
     """Calling configure_logging twice should not add duplicate WorkItemFilters."""
@@ -1313,7 +1167,6 @@ def test_configure_logging_no_duplicate_filters(tmp_path):
         root.filters = original_filters
         pokepoke_logger.handlers = original_pp_handlers
 
-
 def test_configure_logging_json_output(tmp_path):
     """configure_logging with json_output=True should use JsonFormatter."""
     log_file = tmp_path / "debug.log"
@@ -1339,7 +1192,6 @@ def test_configure_logging_json_output(tmp_path):
         root.handlers = original_handlers
         root.filters = original_filters
         pokepoke_logger.handlers = original_pp_handlers
-
 
 def test_configure_logging_json_output_writes_valid_json(tmp_path):
     """JSON output mode should write valid JSON lines to the log file."""
@@ -1380,9 +1232,7 @@ def test_configure_logging_json_output_writes_valid_json(tmp_path):
         pokepoke_logger.handlers = original_pp_handlers
         set_current_work_item_id(None)
 
-
 # ── RunLogger Python logging bridge tests ───────────────────────────
-
 
 def test_run_logger_bridges_to_python_logging():
     """RunLogger.log_orchestrator should also emit via Python logging."""
@@ -1408,7 +1258,6 @@ def test_run_logger_bridges_to_python_logging():
     finally:
         py_logger.removeHandler(handler)
         py_logger.setLevel(original_level)
-
 
 def test_run_logger_bridge_respects_level():
     """RunLogger bridge should map string level to Python logging level."""
@@ -1436,9 +1285,7 @@ def test_run_logger_bridge_respects_level():
         py_logger.removeHandler(handler)
         py_logger.setLevel(original_level)
 
-
 # ── ItemLogger Python logging bridge tests ──────────────────────────
-
 
 def test_item_logger_error_bridges_to_python_logging():
     """ItemLogger.log_error should emit via Python logging."""
@@ -1466,7 +1313,6 @@ def test_item_logger_error_bridges_to_python_logging():
         py_logger.removeHandler(handler)
         py_logger.setLevel(original_level)
 
-
 def test_item_logger_summary_bridges_to_python_logging():
     """ItemLogger.log_summary should emit via Python logging."""
     captured: list[logging.LogRecord] = []
@@ -1493,7 +1339,6 @@ def test_item_logger_summary_bridges_to_python_logging():
     finally:
         py_logger.removeHandler(handler)
         py_logger.setLevel(original_level)
-
 
 def test_item_logger_tool_call_bridges_to_python_logging():
     """ItemLogger.log_tool_call should emit via Python logging."""

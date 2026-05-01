@@ -8,7 +8,6 @@ from pathlib import Path
 import pytest
 
 from pokepoke.stats.gate_rejection_tracker import (
-    _rebuild_gate_summary,
     _update_gate_summary_incremental,
     get_gate_rejection_stats,
     get_per_item_rejection_stats,
@@ -28,12 +27,10 @@ def _chdir_tmp(tmp_path: Path):
     finally:
         os.chdir(original)
 
-
 def test_missing_file_loads_empty_store(tmp_path: Path, _chdir_tmp) -> None:
     stats_path = tmp_path / "gate_stats.json"
     data = load_gate_stats(stats_path)
     assert data == {"log": [], "summary": {}}
-
 
 def test_record_gate_check_persists_and_updates_summary(tmp_path: Path, _chdir_tmp) -> None:
     stats_path = tmp_path / "gate_stats.json"
@@ -54,30 +51,6 @@ def test_record_gate_check_persists_and_updates_summary(tmp_path: Path, _chdir_t
     assert s["last_used"]
     assert len(s["trend"]) == 2
 
-
-def test_rebuild_summary_matches_incremental_fold() -> None:
-    log = [
-        {"gate_model": "m1", "passed": True, "timestamp": "2026-01-01T00:00:00"},
-        {"gate_model": "m1", "passed": False, "timestamp": "2026-01-01T00:01:00"},
-        {"gate_model": "m2", "passed": False, "timestamp": "2026-01-01T00:02:00"},
-    ]
-
-    rebuilt = _rebuild_gate_summary(log)
-
-    incremental: dict[str, dict] = {}
-    for entry in log:
-        _update_gate_summary_incremental(incremental, entry)
-
-    assert set(rebuilt.keys()) == set(incremental.keys())
-    for model in rebuilt:
-        assert rebuilt[model]["total_checks"] == incremental[model]["total_checks"]
-        assert rebuilt[model]["total_passed"] == incremental[model]["total_passed"]
-        assert rebuilt[model]["total_rejected"] == incremental[model]["total_rejected"]
-        assert rebuilt[model]["rejection_rate"] == incremental[model]["rejection_rate"]
-        assert rebuilt[model]["last_used"] == incremental[model]["last_used"]
-        assert rebuilt[model]["trend"] == incremental[model]["trend"]
-
-
 def test_trend_capped_to_50() -> None:
     summary: dict[str, dict] = {}
     for i in range(60):
@@ -89,7 +62,6 @@ def test_trend_capped_to_50() -> None:
         _update_gate_summary_incremental(summary, entry)
 
     assert len(summary["m1"]["trend"]) == 50
-
 
 def test_log_capped_at_max_entries(tmp_path: Path, _chdir_tmp, monkeypatch) -> None:
     """Test that the raw log evicts oldest half when reaching _MAX_LOG_ENTRIES."""
@@ -104,7 +76,6 @@ def test_log_capped_at_max_entries(tmp_path: Path, _chdir_tmp, monkeypatch) -> N
     data = load_gate_stats(stats_path)
     assert len(data["log"]) <= 20
 
-
 def test_log_eviction_preserves_summary_accuracy(tmp_path: Path, _chdir_tmp, monkeypatch) -> None:
     """Test that summary counters remain correct after log eviction."""
     import pokepoke.stats.gate_rejection_tracker as grt
@@ -118,7 +89,6 @@ def test_log_eviction_preserves_summary_accuracy(tmp_path: Path, _chdir_tmp, mon
     stats = get_gate_rejection_stats(stats_path)
     assert stats["model-A"]["total_checks"] == 15
 
-
 def test_print_leaderboard_logs_output(tmp_path: Path, _chdir_tmp, caplog) -> None:
     stats_path = tmp_path / "gate_stats.json"
     record_gate_check("m1", "PP-1", passed=False, path=stats_path)
@@ -129,7 +99,6 @@ def test_print_leaderboard_logs_output(tmp_path: Path, _chdir_tmp, caplog) -> No
     text = "\n".join(r.message for r in caplog.records)
     assert "Gate Agent Rejection Rates" in text
     assert "m1" in text
-
 
 def test_record_gate_check_with_reason(tmp_path: Path, _chdir_tmp) -> None:
     """Test that reason is stored in the log entry when provided."""
@@ -143,13 +112,11 @@ def test_record_gate_check_with_reason(tmp_path: Path, _chdir_tmp) -> None:
     assert data["log"][0]["reason"] == "Tests failed: 3 errors"
     assert "reason" not in data["log"][1]  # No reason for passing checks
 
-
 def test_get_per_item_rejection_stats_empty(tmp_path: Path, _chdir_tmp) -> None:
     """Test that per-item stats returns empty dict for missing file."""
     stats_path = tmp_path / "gate_stats.json"
     result = get_per_item_rejection_stats(stats_path)
     assert result == {}
-
 
 def test_get_per_item_rejection_stats_aggregates(tmp_path: Path, _chdir_tmp) -> None:
     """Test that per-item stats aggregates checks per item correctly."""
@@ -176,7 +143,6 @@ def test_get_per_item_rejection_stats_aggregates(tmp_path: Path, _chdir_tmp) -> 
     assert pp2["rejections"] == 0
     assert pp2["gate_models_used"] == ["m1"]
     assert pp2["reasons"] == []
-
 
 def test_per_item_reasons_capped_at_five(tmp_path: Path, _chdir_tmp) -> None:
     """Test that per-item reasons are capped at 5 most recent."""

@@ -260,17 +260,6 @@ class DesktopUI:
         with ThreadOutputRouter.agent_output_for(agent_id):
             yield
 
-    @contextmanager
-    def styled_output(self, style: str) -> Iterator[None]:
-        with self._buffer_lock:
-            prev_style = self._current_style
-            self._current_style = style
-        try:
-            yield
-        finally:
-            with self._buffer_lock:
-                self._current_style = prev_style
-
     def set_style(self, style: str | None) -> None:
         with self._buffer_lock:
             self._current_style = style
@@ -303,15 +292,8 @@ class DesktopUI:
     def set_logs_dir(self, logs_dir: str) -> None:
         self._api.set_logs_dir(logs_dir)
 
-    def log_message(self, message: str, target: str = "orchestrator",
-                    style: str | None = None) -> None:
-        self._api.push_log(message, target, style)
-
     def log_orchestrator(self, message: str, style: str | None = None) -> None:
         self._api.push_log(message, "orchestrator", style)
-
-    def log_agent(self, message: str, style: str | None = None) -> None:
-        self._api.push_log(message, "agent", style)
 
     def push_agent_status(self, agent_id: str, name: str, iteration: int = 1,
                           status: str = "running", model: str | None = None,

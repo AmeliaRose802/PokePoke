@@ -6,12 +6,22 @@ import threading
 from types import SimpleNamespace
 from unittest.mock import MagicMock
 
+import pytest
+
 import pokepoke.desktop.desktop_ui as desktop_ui_module
 import pokepoke.desktop.frontend_discovery as frontend_discovery_module
 import pokepoke.desktop.thread_output_router as thread_output_router_module
 import pokepoke.desktop.window_manager as window_manager_module
 from pokepoke.desktop import pywebview_patches
 from pokepoke.desktop.desktop_ui import DesktopUI, _shutdown_threading_excepthook
+
+
+@pytest.fixture(autouse=True)
+def _mock_repo_name(monkeypatch):
+    """Prevent DesktopAPI from calling real git to get repository name."""
+    monkeypatch.setattr(
+        "pokepoke.desktop.desktop_api.get_repository_name", lambda: "test-repo"
+    )
 
 
 class FakeWebviewModule:
@@ -31,7 +41,6 @@ class FakeWebviewModule:
         if func:
             func()
 
-
 class FakeTimer:
     def __init__(self, _delay, func):
         self.func = func
@@ -43,7 +52,6 @@ class FakeTimer:
 
     def cancel(self):
         return None
-
 
 class TestFindFrontendDist:
     def test_prioritizes_static_assets_over_dist(self, monkeypatch, tmp_path) -> None:
@@ -131,7 +139,6 @@ class TestFindFrontendDist:
         frontend_discovery_module.find_frontend_dist()
         # Don't assert None - the behavior depends on the test environment
 
-
 class TestDesktopUIOutputRouting:
     def test_output_contexts(self) -> None:
         """agent_output and orchestrator_output set thread-local target."""
@@ -144,13 +151,6 @@ class TestDesktopUIOutputRouting:
         with ui.orchestrator_output():
             assert getattr(thread_output_router_module._thread_output, "target", None) == "orchestrator"
         assert getattr(thread_output_router_module._thread_output, "target", None) is None
-
-    def test_styled_output_context(self) -> None:
-        ui = DesktopUI()
-        assert ui._current_style is None
-        with ui.styled_output("bold red"):
-            assert ui._current_style == "bold red"
-        assert ui._current_style is None
 
     def test_set_style(self) -> None:
         ui = DesktopUI()
@@ -260,7 +260,6 @@ class TestDesktopUIOutputRouting:
         assert results["agent-a"] == ["hello-a"]
         assert results["agent-b"] == ["hello-b"]
 
-
 class TestDesktopUIStateUpdates:
     def test_update_header(self) -> None:
         ui = DesktopUI()
@@ -284,14 +283,6 @@ class TestDesktopUIStateUpdates:
         stats = SessionStats(agent_stats=AgentStats())
         ui.update_stats(stats, 60.0)
         ui._api.push_stats.assert_called_once_with(stats, 60.0)
-
-    def test_log_helpers(self) -> None:
-        ui = DesktopUI()
-        ui._api = MagicMock()
-        ui.log_message("hello")
-        ui.log_orchestrator("orch", "green")
-        ui.log_agent("agent")
-        assert ui._api.push_log.call_count == 3
 
     def test_set_session_start_time(self) -> None:
         ui = DesktopUI()
@@ -320,7 +311,6 @@ class TestDesktopUIStateUpdates:
         ui.remove_agent("agent-1")
         ui._api.remove_agent.assert_called_once_with("agent-1")
 
-
 class TestDesktopUILifecycle:
     def test_start_stop_and_exit(self) -> None:
         ui = DesktopUI()
@@ -338,7 +328,6 @@ class TestDesktopUILifecycle:
             assert ui.is_running is False
         finally:
             builtins.print = original_print
-
 
 class TestDesktopUIRunWithOrchestrator:
     def test_run_with_orchestrator_success(self, monkeypatch, tmp_path) -> None:
@@ -541,7 +530,6 @@ class TestDesktopUIRunWithOrchestrator:
         assert ui._api.push_log.called
         assert mock_shutdown.called
 
-
 class TestShutdownThreadingExcepthook:
     """Tests for _shutdown_threading_excepthook."""
 
@@ -585,7 +573,6 @@ class TestShutdownThreadingExcepthook:
         _shutdown_threading_excepthook(args)
         mock_hook.assert_called_once_with(args)
 
-
 class TestCurrentStyleThreadSafety:
     """Verify _current_style is protected by _buffer_lock."""
 
@@ -596,43 +583,6 @@ class TestCurrentStyleThreadSafety:
         assert ui._current_style == "red"
         ui.set_style(None)
         assert ui._current_style is None
-
-    def test_styled_output_under_lock(self) -> None:
-        """styled_output should acquire the buffer lock for writes."""
-        ui = DesktopUI()
-        with ui.styled_output("bold"):
-            assert ui._current_style == "bold"
-        assert ui._current_style is None
-
-    def test_concurrent_styled_output_and_print(self) -> None:
-        """Concurrent styled_output + _print_redirect should not crash."""
-        ui = DesktopUI()
-        ui._api = MagicMock()
-        errors: list[Exception] = []
-
-        def writer() -> None:
-            try:
-                for _ in range(50):
-                    with ui.styled_output("green"):
-                        pass
-            except Exception as e:
-                errors.append(e)
-
-        def reader() -> None:
-            try:
-                for _ in range(50):
-                    ui._print_redirect("msg")
-            except Exception as e:
-                errors.append(e)
-
-        threads = [threading.Thread(target=writer), threading.Thread(target=reader)]
-        for t in threads:
-            t.start()
-        for t in threads:
-            t.join(timeout=10)
-
-        assert not errors
-
 
 def _build_stub_edge_module(tmp_path, module_suffix, *, private_mode=True):
     class _DummyLogger:
@@ -691,7 +641,6 @@ def _build_stub_edge_module(tmp_path, module_suffix, *, private_mode=True):
         logger=_DummyLogger(),
     )
     return module, _ProcessAPI, base_dir
-
 
 class TestPywebviewPatches:
     def test_edge_patch_handles_missing_core(self, tmp_path, monkeypatch) -> None:

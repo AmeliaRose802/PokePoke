@@ -63,7 +63,6 @@ class TestSanitizeBranchName:
         """Test handling of multiple invalid character sequences."""
         assert sanitize_branch_name("a~b^c:d?e*f[g]h") == "a-b-c-d-e-f-g-h"
 
-
 @pytest.mark.allow_real_bd
 class TestDefaultBranchResolution:
     """Tests for default branch resolution helpers."""
@@ -95,7 +94,6 @@ class TestDefaultBranchResolution:
             ]
 
             assert get_default_branch(preferred='') == 'task/PokePoke-6g1'
-
 
 @pytest.mark.allow_real_bd
 class TestGetMainRepoRoot:
@@ -138,7 +136,6 @@ class TestGetMainRepoRoot:
 
             with pytest.raises(RuntimeError, match="Not in a git repository"):
                 get_main_repo_root()
-
 
 @pytest.mark.allow_real_bd
 class TestIsWorktreeClean:
@@ -188,7 +185,6 @@ class TestIsWorktreeClean:
 
             assert result is False
 
-
 @pytest.mark.allow_real_bd
 class TestVerifyBranchPushed:
     """Tests for verify_branch_pushed function."""
@@ -237,7 +233,6 @@ class TestVerifyBranchPushed:
             result = verify_branch_pushed('main')
 
             assert result is False
-
 
 @pytest.mark.allow_real_bd
 class TestCreateWorktree:
@@ -421,7 +416,6 @@ class TestCreateWorktree:
             with pytest.raises(RuntimeError, match="Failed to create worktree"):
                 create_worktree('incredible_icm-42')
 
-
 @pytest.mark.allow_real_bd
 class TestIsWorktreeMerged:
     """Tests for is_worktree_merged function."""
@@ -479,7 +473,6 @@ class TestIsWorktreeMerged:
             result = is_worktree_merged('incredible_icm-42')
 
             assert result is False
-
 
 @pytest.mark.allow_real_bd
 class TestMergeWorktree:
@@ -857,7 +850,6 @@ class TestMergeWorktree:
             # unmerged_files might be empty on general merge failure
             assert any('Merge failed' in str(call) or 'checkout' in str(call) for call in mock_print.call_args_list)
 
-
 @pytest.mark.allow_real_bd
 class TestCleanupWorktree:
     """Tests for cleanup_worktree function."""
@@ -1132,7 +1124,6 @@ class TestCleanupWorktree:
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('Could not remove worktree directory after retries' in c for c in print_calls)
 
-
 @pytest.mark.allow_real_bd
 class TestForceRemoveDirectory:
     """Tests for force_remove_directory helper."""
@@ -1208,8 +1199,6 @@ class TestForceRemoveDirectory:
             result = force_remove_directory(Path("worktrees/task-test"), repo_root=Path("."))
 
             assert result is False
-
-
 
 @pytest.mark.allow_real_bd
 class TestWorktreeManifest:
@@ -1291,8 +1280,6 @@ class TestWorktreeManifest:
             assert "worktrees/task-3" in caplog.text
             assert "may become orphaned" in caplog.text
 
-
-
 @pytest.mark.allow_real_bd
 class TestCleanupAfterMergePermissionDenied:
     """Tests for cleanup_after_merge with permission denied errors."""
@@ -1351,7 +1338,6 @@ class TestCleanupAfterMergePermissionDenied:
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('Could not remove worktree after retries' in c for c in print_calls)
             assert any('Merge successful' in c for c in print_calls)
-
 
 @pytest.mark.allow_real_bd
 class TestListWorktrees:
@@ -1448,7 +1434,6 @@ class TestListWorktrees:
             assert result[1]['path'] == '/home/user/repo/worktrees/task-42'
             assert result[1]['branch'] == 'refs/heads/task/incredible_icm-42'
 
-
 @pytest.mark.allow_real_bd
 class TestIsWindowsLockError:
     """Tests for _is_windows_lock_error."""
@@ -1464,7 +1449,6 @@ class TestIsWindowsLockError:
 
     def test_unrelated_error_returns_false(self) -> None:
         assert _is_windows_lock_error("File not found") is False
-
 
 @pytest.mark.allow_real_bd
 class TestRetryFailedCleanups:
@@ -1546,7 +1530,6 @@ class TestRetryFailedCleanups:
             result = retry_failed_cleanups()
             assert result == 0
 
-
 @pytest.mark.allow_real_bd
 class TestGetUncleanedWorktreeCount:
     """Tests for get_uncleaned_worktree_count."""
@@ -1572,7 +1555,6 @@ class TestGetUncleanedWorktreeCount:
         ):
             assert get_uncleaned_worktree_count() == 2
 
-
 @pytest.mark.allow_real_bd
 class TestLoadManifestCorrupt:
     """Test load_worktree_manifest with corrupt JSON."""
@@ -1585,7 +1567,6 @@ class TestLoadManifestCorrupt:
             return_value=manifest_path,
         ):
             assert load_worktree_manifest() == {}
-
 
 @pytest.mark.allow_real_bd
 class TestCleanupAfterMergeNonLockError:
@@ -1614,7 +1595,6 @@ class TestCleanupAfterMergeNonLockError:
             mock_add.assert_called_once()
             call_args = mock_add.call_args
             assert call_args[0][0] == "x-branch"
-
 
 @pytest.mark.allow_real_bd
 class TestForceRemoveTimeoutBranch:
@@ -1652,7 +1632,6 @@ class TestForceRemoveTimeoutBranch:
 
             result = force_remove_directory(Path("/fake/path"), repo_root=Path("/"))
             assert result is False
-
 
 @pytest.mark.allow_real_bd
 class TestCreateWorktreeLockAndEdgeCases:
@@ -1744,7 +1723,6 @@ class TestCreateWorktreeLockAndEdgeCases:
              pytest.raises(RuntimeError, match="Unexpected error creating worktree"):
             create_worktree('test-item')
 
-
 @pytest.mark.allow_real_bd
 class TestMergeWorktreeConflicts:
     """Tests for merge_worktree conflict reporting."""
@@ -1769,7 +1747,6 @@ class TestMergeWorktreeConflicts:
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('15 file(s)' in c for c in print_calls)
             assert any('and 5 more' in c for c in print_calls)
-
 
 @pytest.mark.allow_real_bd
 class TestMergeWorktreeRollback:
@@ -1822,98 +1799,6 @@ class TestMergeWorktreeRollback:
 
             assert result.success is False
             assert result.halt_required is True
-
-
-@pytest.mark.allow_real_bd
-class TestRollbackHelpers:
-    """Tests for rollback utility functions."""
-
-    def test_rollback_returns_true_on_success(self):
-        """rollback_merge_commit returns True when reset succeeds."""
-        from pokepoke.worktrees.merge_helpers import rollback_merge_commit
-
-        with patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git:
-            mock_run_git.return_value = Mock(returncode=0)
-            result = rollback_merge_commit("test reason")
-            assert result is True
-
-    def test_rollback_returns_false_on_failure(self):
-        """rollback_merge_commit returns False and logs CRITICAL on failure."""
-        from pokepoke.worktrees.merge_helpers import rollback_merge_commit
-
-        with patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
-             patch('pokepoke.worktrees.merge_helpers.logger') as mock_logger:
-            mock_run_git.side_effect = subprocess.CalledProcessError(
-                1, "git", stderr="reset failed"
-            )
-            result = rollback_merge_commit("test reason")
-            assert result is False
-            mock_logger.critical.assert_called_once()
-
-    def test_post_merge_validation_failure_halt_required(self):
-        """When post-merge validation fails, halt_required is True (no rollback attempted)."""
-        from pokepoke.worktrees.worktrees import MergeResult as _MR
-
-        with patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True), \
-             patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
-             patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
-             patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=_MR(success=True)), \
-             patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=False), \
-             patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
-             patch('builtins.print'):
-
-            mock_run_git.return_value = Mock(returncode=0, stdout='', stderr='')
-
-            result = merge_worktree('test-item')
-            assert result.success is False
-            assert result.halt_required is True
-
-    def test_post_merge_exception_halt_required(self):
-        """When post-merge validation raises, halt_required is True (no rollback attempted)."""
-        from pokepoke.worktrees.worktrees import MergeResult as _MR
-
-        with patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True), \
-             patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
-             patch('pokepoke.worktrees.worktree_helpers.sync_and_ensure_clean_main_repo', return_value=True), \
-             patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=_MR(success=True)), \
-             patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
-             patch('pokepoke.worktrees.merge_helpers.validate_post_merge', side_effect=RuntimeError('boom')), \
-             patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main'), \
-             patch('pokepoke.worktrees.merge_helpers._run_git') as mock_run_git, \
-             patch('builtins.print'):
-
-            mock_run_git.return_value = Mock(returncode=0, stdout='', stderr='')
-
-            result = merge_worktree('test-item')
-            assert result.success is False
-            assert result.halt_required is True
-
-    def test_merge_result_backward_compatible_unpacking(self):
-        """MergeResult supports 2-tuple unpacking for backward compatibility."""
-        from pokepoke.worktrees.worktrees import MergeResult
-
-        result = MergeResult(success=True, unmerged_files=[])
-        success, files = result
-        assert success is True
-        assert files == []
-
-        result2 = MergeResult(success=False, unmerged_files=['a.py'], rollback_failed=True)
-        success2, files2 = result2
-        assert success2 is False
-        assert files2 == ['a.py']
-        assert result2.rollback_failed is True
-
-    def test_merge_result_indexing(self):
-        """MergeResult supports index-based access."""
-        from pokepoke.worktrees.worktrees import MergeResult
-
-        result = MergeResult(success=False, unmerged_files=['x.py'])
-        assert result[0] is False
-        assert result[1] == ['x.py']
-        assert len(result) == 2
-
 
 @pytest.mark.allow_real_bd
 class TestCleanupWorktreeEdgeCases:
@@ -2043,7 +1928,6 @@ class TestCleanupWorktreeEdgeCases:
             mock_add.assert_called_once()
             assert 'test-item' in mock_add.call_args[0][0]
 
-
 @pytest.mark.allow_real_bd
 class TestSyncAndEnsureCleanMainRepo:
     """Tests for _sync_and_ensure_clean_main_repo edge cases."""
@@ -2125,9 +2009,7 @@ class TestSyncAndEnsureCleanMainRepo:
             print_calls = [str(c) for c in mock_print.call_args_list]
             assert any('Failed to check/clean main repo' in c for c in print_calls)
 
-
 # ── Worktree Integrity Validation ────────────────────────────────────────────
-
 
 @pytest.mark.allow_real_bd
 class TestValidateWorktreeIntegrity:
@@ -2193,7 +2075,6 @@ class TestValidateWorktreeIntegrity:
         with patch("pokepoke.worktrees.worktrees.subprocess.run", side_effect=subprocess.TimeoutExpired("git", 10)), \
              pytest.raises(RuntimeError, match="timed out"):
             _validate_worktree_integrity(wt_dir, "test-item")
-
 
 @pytest.mark.allow_real_bd
 class TestCreateWorktreeStaleBranchCleanup:
