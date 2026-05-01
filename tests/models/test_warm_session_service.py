@@ -7,11 +7,9 @@ import pytest
 from pokepoke.models.warm_session_service import (
     _build_exploration_prompt,
     _generate_warm_session_id,
-    get_warm_session_stats,
     refresh_pool_after_merge,
     warm_session_for_label,
     warm_up_pool,
-    warm_up_pool_sync,
 )
 
 
@@ -31,7 +29,6 @@ class TestGenerateWarmSessionId:
         assert a.startswith("warm-x-")
         assert b.startswith("warm-x-")
 
-
 class TestBuildExplorationPrompt:
     @patch("pokepoke.models.warm_session_service.PromptService")
     def test_returns_rendered_prompt(self, mock_cls):
@@ -43,7 +40,6 @@ class TestBuildExplorationPrompt:
 
         assert result == "rendered"
         svc.load_and_render.assert_called_once_with("explore-tpl", {"label": "orchestrator"})
-
 
 @pytest.mark.asyncio
 class TestWarmSessionForLabel:
@@ -138,7 +134,6 @@ class TestWarmSessionForLabel:
         assert result is None
         pool.clear_warming_in_progress.assert_called_once_with("test-label")
 
-
 @pytest.mark.asyncio
 class TestWarmUpPool:
 
@@ -191,19 +186,6 @@ class TestWarmUpPool:
 
         assert result == {"label-a": None}
 
-
-class TestWarmUpPoolSync:
-    @patch("pokepoke.models.warm_session_service.warm_up_pool")
-    def test_calls_async_version(self, mock_async):
-        mock_async.return_value = {"x": None}
-
-        with patch("pokepoke.models.warm_session_service.asyncio.run", return_value={"x": None}) as mock_run:
-            result = warm_up_pool_sync(cwd="/cwd", timeout_per_label=30.0)
-
-        assert result == {"x": None}
-        mock_run.assert_called_once()
-
-
 class TestRefreshPoolAfterMerge:
     @patch("pokepoke.models.warm_session_service.get_config")
     @patch("pokepoke.models.warm_session_service.get_warm_session_pool")
@@ -245,14 +227,3 @@ class TestRefreshPoolAfterMerge:
 
         pool.invalidate_all.assert_called_once()
 
-
-class TestGetWarmSessionStats:
-    @patch("pokepoke.models.warm_session_service.get_warm_session_pool")
-    def test_returns_pool_stats(self, mock_pool_getter):
-        pool = MagicMock()
-        pool.get_stats.return_value = {"total": 3, "active": 2}
-        mock_pool_getter.return_value = pool
-
-        result = get_warm_session_stats()
-
-        assert result == {"total": 3, "active": 2}

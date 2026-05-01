@@ -38,12 +38,10 @@ _GIT_FETCH_TIMEOUT = 60  # Timeout for git fetch during rebase
 _GIT_REBASE_TIMEOUT = 120  # Timeout for git rebase operation
 _MERGE_QUEUE_SHUTDOWN_TIMEOUT = 30.0  # Default timeout when shutting down the queue
 _DOUBLE_REBASE_SETTLE_DELAY = 1.0  # Pause between double-rebase on high-conflict items
-_RESET_SHUTDOWN_TIMEOUT = 5.0  # Timeout when resetting the singleton in tests
 
 class MergeStatus(Enum):
     """Result status for a merge request."""
     SUCCESS = "success"
-    CONFLICT = "conflict"
     FAILED = "failed"
     SHUTDOWN = "shutdown"
 
@@ -390,12 +388,3 @@ def get_merge_queue() -> MergeQueue:
         if _merge_queue is None:
             _merge_queue = MergeQueue()
         return _merge_queue
-
-
-def reset_merge_queue() -> None:
-    """Reset the singleton. Only for tests."""
-    global _merge_queue
-    with _singleton_lock:
-        if _merge_queue is not None:
-            _merge_queue.shutdown(timeout=_RESET_SHUTDOWN_TIMEOUT)
-        _merge_queue = None

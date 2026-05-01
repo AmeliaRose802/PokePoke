@@ -12,18 +12,6 @@ except ImportError:
     HAS_YAML = False
 
 
-def require_yaml(action: str = "perform this operation") -> None:
-    """Raise ``ImportError`` if PyYAML is not installed.
-
-    Args:
-        action: A short description of what needs YAML (used in the error message).
-    """
-    if not HAS_YAML:
-        raise ImportError(
-            f"PyYAML is required to {action}. Install it with: pip install pyyaml"
-        )
-
-
 def coerce_process_output(output: str | None) -> str | None:
     """Normalise subprocess output: strip whitespace and convert blanks to ``None``."""
     if output is None:

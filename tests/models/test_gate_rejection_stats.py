@@ -5,7 +5,6 @@ Covers:
 - load_gate_stats / save_gate_stats: persistence
 - get_gate_rejection_stats: read-only summary access
 - print_gate_rejection_leaderboard: human-readable output
-- _rebuild_gate_summary: summary recomputation from log
 - _update_gate_summary_incremental: incremental summary updates
 - _format_trend: trend visualization
 - gate_model field on ModelCompletionRecord
@@ -17,7 +16,6 @@ from pathlib import Path
 from pokepoke.stats.gate_rejection_tracker import (
     _empty_gate_store,
     _format_trend,
-    _rebuild_gate_summary,
     _update_gate_summary_incremental,
     get_gate_rejection_stats,
     load_gate_stats,
@@ -33,9 +31,7 @@ def _tmp_gate_path(tmp_path: Path) -> Path:
     """Return a temporary gate_rejection_stats.json path."""
     return tmp_path / "gate_rejection_stats.json"
 
-
 # ── ModelCompletionRecord gate_model field ───────────────────────────
-
 
 class TestModelCompletionRecordGateModel:
     """Verify the gate_model field on ModelCompletionRecord."""
@@ -51,9 +47,7 @@ class TestModelCompletionRecordGateModel:
         )
         assert rec.gate_model == "gate-model-abc"
 
-
 # ── _empty_gate_store ────────────────────────────────────────────────
-
 
 class TestEmptyGateStore:
 
@@ -67,9 +61,7 @@ class TestEmptyGateStore:
         a["log"].append("x")
         assert b["log"] == []
 
-
 # ── load_gate_stats ──────────────────────────────────────────────────
-
 
 class TestLoadGateStats:
 
@@ -97,9 +89,7 @@ class TestLoadGateStats:
         assert len(result["log"]) == 1
         assert result["log"][0]["gate_model"] == "m1"
 
-
 # ── save_gate_stats ──────────────────────────────────────────────────
-
 
 class TestSaveGateStats:
 
@@ -116,72 +106,7 @@ class TestSaveGateStats:
         assert loaded == data
 
 
-# ── _rebuild_gate_summary ────────────────────────────────────────────
-
-
-class TestRebuildGateSummary:
-
-    def test_empty_log(self):
-        assert _rebuild_gate_summary([]) == {}
-
-    def test_single_pass(self):
-        log = [{"gate_model": "m1", "passed": True, "timestamp": "2025-01-01T00:00:00"}]
-        result = _rebuild_gate_summary(log)
-        assert "m1" in result
-        assert result["m1"]["total_checks"] == 1
-        assert result["m1"]["total_passed"] == 1
-        assert result["m1"]["total_rejected"] == 0
-        assert result["m1"]["rejection_rate"] == 0.0
-
-    def test_single_rejection(self):
-        log = [{"gate_model": "m1", "passed": False, "timestamp": "2025-01-01T00:00:00"}]
-        result = _rebuild_gate_summary(log)
-        assert result["m1"]["total_rejected"] == 1
-        assert result["m1"]["rejection_rate"] == 1.0
-
-    def test_mixed_results(self):
-        log = [
-            {"gate_model": "m1", "passed": True, "timestamp": "2025-01-01T00:00:00"},
-            {"gate_model": "m1", "passed": False, "timestamp": "2025-01-02T00:00:00"},
-            {"gate_model": "m1", "passed": True, "timestamp": "2025-01-03T00:00:00"},
-            {"gate_model": "m1", "passed": False, "timestamp": "2025-01-04T00:00:00"},
-        ]
-        result = _rebuild_gate_summary(log)
-        assert result["m1"]["total_checks"] == 4
-        assert result["m1"]["total_passed"] == 2
-        assert result["m1"]["total_rejected"] == 2
-        assert result["m1"]["rejection_rate"] == 0.5
-
-    def test_multiple_models(self):
-        log = [
-            {"gate_model": "strict-model", "passed": False, "timestamp": "2025-01-01T00:00:00"},
-            {"gate_model": "strict-model", "passed": False, "timestamp": "2025-01-02T00:00:00"},
-            {"gate_model": "lenient-model", "passed": True, "timestamp": "2025-01-01T00:00:00"},
-            {"gate_model": "lenient-model", "passed": True, "timestamp": "2025-01-02T00:00:00"},
-        ]
-        result = _rebuild_gate_summary(log)
-        assert result["strict-model"]["rejection_rate"] == 1.0
-        assert result["lenient-model"]["rejection_rate"] == 0.0
-
-    def test_last_used_tracks_latest(self):
-        log = [
-            {"gate_model": "m1", "passed": True, "timestamp": "2025-01-01T00:00:00"},
-            {"gate_model": "m1", "passed": True, "timestamp": "2025-06-15T12:00:00"},
-        ]
-        result = _rebuild_gate_summary(log)
-        assert result["m1"]["last_used"] == "2025-06-15T12:00:00"
-
-    def test_trend_capped_at_50(self):
-        log = [
-            {"gate_model": "m1", "passed": True, "timestamp": f"2025-01-{i+1:02d}T00:00:00"}
-            for i in range(60)
-        ]
-        result = _rebuild_gate_summary(log)
-        assert len(result["m1"]["trend"]) == 50
-
-
 # ── _update_gate_summary_incremental ─────────────────────────────────
-
 
 class TestUpdateGateSummaryIncremental:
 
@@ -224,9 +149,7 @@ class TestUpdateGateSummaryIncremental:
         # Trend should be capped at 50
         assert len(summary["m1"]["trend"]) == 50
 
-
 # ── record_gate_check ────────────────────────────────────────────────
-
 
 class TestRecordGateCheck:
 
@@ -274,9 +197,7 @@ class TestRecordGateCheck:
         assert data["summary"]["strict"]["rejection_rate"] == 1.0
         assert data["summary"]["lenient"]["rejection_rate"] == 0.0
 
-
 # ── get_gate_rejection_stats ─────────────────────────────────────────
-
 
 class TestGetGateRejectionStats:
 
@@ -294,9 +215,7 @@ class TestGetGateRejectionStats:
         assert stats["m1"]["total_checks"] == 2
         assert stats["m1"]["rejection_rate"] == 0.5
 
-
 # ── print_gate_rejection_leaderboard ─────────────────────────────────
-
 
 class TestPrintGateRejectionLeaderboard:
 
@@ -330,9 +249,7 @@ class TestPrintGateRejectionLeaderboard:
         assert "50%" in output  # model-alpha rejection rate
         assert "0%" in output   # model-beta rejection rate
 
-
 # ── _format_trend ────────────────────────────────────────────────────
-
 
 class TestFormatTrend:
 

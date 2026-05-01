@@ -70,15 +70,6 @@ class TestMergeStepTracker:
         step = state["current_run"]["steps"]["3a"]
         assert step["status"] == "skipped"
 
-    def test_log_to_step(self) -> None:
-        tracker = MergeStepTracker()
-        tracker.begin_run("a1", "i1")
-        tracker.begin_step("8")
-        tracker.log_to_step("8", "line 1")
-        tracker.log_to_step("8", "line 2")
-        state = tracker.get_state()
-        assert state["current_run"]["steps"]["8"]["logs"] == ["line 1", "line 2"]
-
     def test_finish_run_archives_to_last_completed(self) -> None:
         tracker = MergeStepTracker()
         tracker.begin_run("a1", "i1")
@@ -108,7 +99,6 @@ class TestMergeStepTracker:
         tracker.complete_step("1")
         tracker.fail_step("1")
         tracker.skip_step("1")
-        tracker.log_to_step("1", "msg")
         tracker.finish_run("failed")
 
     def test_operations_on_nonexistent_step_are_noop(self) -> None:
@@ -118,20 +108,6 @@ class TestMergeStepTracker:
         tracker.begin_step("nonexistent")
         tracker.complete_step("nonexistent")
         tracker.fail_step("nonexistent")
-
-    def test_step_log_capped_at_50(self) -> None:
-        tracker = MergeStepTracker()
-        tracker.begin_run("a1", "i1")
-        tracker.begin_step("8")
-        for i in range(60):
-            tracker.log_to_step("8", f"line {i}")
-        state = tracker.get_state()
-        logs = state["current_run"]["steps"]["8"]["logs"]
-        assert len(logs) == 50
-        # Should be the last 50 lines
-        assert logs[0] == "line 10"
-        assert logs[-1] == "line 59"
-
 
 class TestMergeFlowRun:
     """Tests for MergeFlowRun dataclass."""
@@ -152,7 +128,6 @@ class TestMergeFlowRun:
         assert MergeStepStatus.DONE.value == "done"
         assert MergeStepStatus.FAILED.value == "failed"
         assert MergeStepStatus.SKIPPED.value == "skipped"
-
 
 class TestMergeStepDefinitions:
     """Tests for canonical step definitions and edges."""

@@ -7,7 +7,6 @@ from unittest.mock import patch
 from pokepoke.maintenance.maintenance_state import (
     MaintenanceState,
     RepoMaintenanceState,
-    get_items_completed_for_repo,
     get_repo_state,
     increment_items_completed,
     load_state,
@@ -28,7 +27,6 @@ class TestMaintenanceState:
         state = MaintenanceState(total_items_completed=5)
         assert state.total_items_completed == 5
 
-
 class TestRepoMaintenanceState:
     """Tests for RepoMaintenanceState dataclass."""
 
@@ -36,7 +34,6 @@ class TestRepoMaintenanceState:
         repo_state = RepoMaintenanceState()
         assert repo_state.items_completed == 0
         assert repo_state.last_run_timestamp == 0.0
-
 
 class TestLoadState:
     """Tests for load_state function."""
@@ -90,7 +87,6 @@ class TestLoadState:
             state = load_state()
         assert state.total_items_completed == 0
 
-
 class TestSaveState:
     """Tests for save_state function."""
 
@@ -105,7 +101,6 @@ class TestSaveState:
         assert data["total_items_completed"] == 7
         assert data["repos"]["repo-x"]["items_completed"] == 3
         assert data["repos"]["repo-x"]["last_run_timestamp"] == 50.0
-
 
 class TestIncrementItemsCompleted:
     """Tests for increment_items_completed function."""
@@ -156,7 +151,6 @@ class TestIncrementItemsCompleted:
         assert state.repos["repo-a"].items_completed == 2
         assert state.repos["repo-b"].items_completed == 1
 
-
 class TestGetRepoState:
     """Tests for get_repo_state function."""
 
@@ -173,7 +167,6 @@ class TestGetRepoState:
         repo = get_repo_state(state, "existing")
         assert repo.items_completed == 10
 
-
 class TestRecordMaintenanceRun:
     """Tests for record_maintenance_run function."""
 
@@ -184,20 +177,3 @@ class TestRecordMaintenanceRun:
             state = load_state()
         assert state.repos["repo-a"].last_run_timestamp > 0
 
-
-class TestGetItemsCompletedForRepo:
-    """Tests for get_items_completed_for_repo function."""
-
-    def test_returns_zero_for_unknown(self, tmp_path: Path) -> None:
-        fake_path = tmp_path / "maintenance_state.json"
-        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
-            assert get_items_completed_for_repo("unknown") == 0
-
-    def test_returns_count_for_known(self, tmp_path: Path) -> None:
-        fake_path = tmp_path / "maintenance_state.json"
-        fake_path.write_text(json.dumps({
-            "total_items_completed": 5,
-            "repos": {"repo-a": {"items_completed": 3, "last_run_timestamp": 0.0}},
-        }), encoding="utf-8")
-        with patch("pokepoke.maintenance.maintenance_state.STATE_FILE", fake_path):
-            assert get_items_completed_for_repo("repo-a") == 3

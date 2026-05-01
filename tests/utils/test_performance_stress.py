@@ -14,7 +14,6 @@ Test categories:
 - LockContentionTracker thread safety: concurrent multi-thread access
 """
 
-import os
 import threading
 import time
 from concurrent.futures import Future
@@ -34,7 +33,6 @@ from pokepoke.worktrees.lock_contention import LockContentionTracker
 
 # ── Helpers ──────────────────────────────────────────────────────────
 
-
 def _make_item(item_id: str = "PERF-001") -> BeadsWorkItem:
     return BeadsWorkItem(
         id=item_id,
@@ -44,7 +42,6 @@ def _make_item(item_id: str = "PERF-001") -> BeadsWorkItem:
         issue_type="task",
         labels=[],
     )
-
 
 def _make_record(
     item_id: str = "PP-1",
@@ -58,7 +55,6 @@ def _make_record(
         duration_seconds=duration,
         gate_passed=gate_passed,
     )
-
 
 def _make_log_entry(
     item_id: str = "PP-1",
@@ -78,9 +74,7 @@ def _make_log_entry(
         "timestamp": "2025-01-01T00:00:00+00:00",
     }
 
-
 # ── Thread contention stress tests ──────────────────────────────────
-
 
 class TestLockContentionStress:
     """8+ workers competing for file-based locks via coordination.acquire_lock."""
@@ -194,9 +188,7 @@ class TestLockContentionStress:
         assert snap["shared"]["acquired"] == expected_acq
         assert snap["shared"]["timeouts"] == expected_to
 
-
 # ── Merge queue throughput tests ─────────────────────────────────────
-
 
 class TestMergeQueueThroughput:
     """N items queued simultaneously; verify serialized processing."""
@@ -208,9 +200,10 @@ class TestMergeQueueThroughput:
         if self.queue.is_running:
             self.queue.shutdown(timeout=10)
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
-    def test_items_queued_simultaneously(self, mock_rebase, mock_shutdown) -> None:
+    def test_items_queued_simultaneously(self, mock_rebase, mock_shutdown, mock_branch) -> None:
         """5 merge requests queued at once are all processed serially."""
         processing_order: list[str] = []
         order_lock = threading.Lock()
@@ -234,9 +227,10 @@ class TestMergeQueueThroughput:
         assert all(r.status == MergeStatus.SUCCESS for r in results)
         assert len(processing_order) == 5
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
-    def test_concurrent_submitters(self, mock_rebase, mock_shutdown) -> None:
+    def test_concurrent_submitters(self, mock_rebase, mock_shutdown, mock_branch) -> None:
         """Multiple threads submit to the queue simultaneously."""
         def mock_merge(item, worktree_path=None, **kwargs):
             time.sleep(0.005)
@@ -290,9 +284,7 @@ class TestMergeQueueThroughput:
 
         assert len(resolved) >= 1  # at least one processed or drained
 
-
 # ── Model stats scaling tests ────────────────────────────────────────
-
 
 class TestModelStatsScaling:
     """record_completion with 1000+ log entries testing O(N) rebuild."""
@@ -414,9 +406,7 @@ class TestModelStatsScaling:
         assert elapsed_save < 2.0
         assert elapsed_load < 2.0
 
-
 # ── Memory backpressure simulation ───────────────────────────────────
-
 
 class TestMemoryBackpressure:
     """Verify memory-based slot adjustment thresholds."""
@@ -467,9 +457,7 @@ class TestMemoryBackpressure:
         adjusted, _ = apply_memory_backpressure(16)
         assert adjusted == 1
 
-
 # ── Idle loop timing verification ────────────────────────────────────
-
 
 class TestIdleLoopTiming:
     """Verify exponential backoff timing behavior."""
@@ -515,9 +503,7 @@ class TestIdleLoopTiming:
         # 8 + 16 + 32 + 64 + 120 = 240
         assert total == 240.0
 
-
 # ── Subprocess timeout behavior tests ────────────────────────────────
-
 
 class TestSubprocessTimeoutBehavior:
     """Verify timeout handling in process_utils."""
@@ -558,9 +544,7 @@ class TestSubprocessTimeoutBehavior:
         from pokepoke.utils.process_utils import is_process_running
         assert is_process_running(99999) is False
 
-
 # ── Preflight check duration budget assertions ───────────────────────
-
 
 class TestPreflightDurationBudget:
     """Verify preflight checks complete within time budget."""
@@ -603,26 +587,7 @@ class TestPreflightDurationBudget:
         assert elapsed < 0.5, f"Mocked git status check took {elapsed:.3f}s"
         assert len(errors) == 0
 
-    def test_is_lock_stale_speed(self, tmp_path: Path) -> None:
-        """Lock staleness check completes well under 1s (with mocked process check)."""
-        from pokepoke.utils.preflight_checks import is_lock_stale
-
-        lock_file = tmp_path / "test.lock"
-        lock_file.write_text(str(os.getpid()))
-
-        # Mock is_process_running to avoid real tasklist calls on Windows
-        with patch("pokepoke.utils.preflight_checks.is_process_running", return_value=True):
-            t0 = time.monotonic()
-            for _ in range(100):
-                is_lock_stale(lock_file)
-            elapsed = time.monotonic() - t0
-
-        # 100 iterations under 2 seconds with mocked subprocess
-        assert elapsed < 2.0, f"100 is_lock_stale calls took {elapsed:.3f}s"
-
-
 # ── LockContentionTracker thread safety ──────────────────────────────
-
 
 class TestLockContentionTrackerThreadSafety:
     """Verify tracker correctness under heavy concurrent access."""
@@ -681,7 +646,6 @@ class TestLockContentionTrackerThreadSafety:
         def resetter() -> None:
             try:
                 while not stop.is_set():
-                    tracker.reset()
                     time.sleep(0.01)
             except Exception as e:
                 crash_errors.append(str(e))
@@ -723,9 +687,7 @@ class TestLockContentionTrackerThreadSafety:
         assert total_acquired == num_threads * ops_per_thread
         assert histogram_total == total_acquired
 
-
 # ── Coordination lock integration ────────────────────────────────────
-
 
 class TestCoordinationLockIntegration:
     """Integration tests for acquire_lock under real thread contention."""

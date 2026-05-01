@@ -1,6 +1,5 @@
 """Tests for the shutdown coordination module."""
 
-import threading
 import time
 from unittest.mock import patch
 
@@ -17,27 +16,28 @@ from pokepoke.utils.shutdown import (
     request_shutdown,
     request_shutdown_from_signal,
     request_stop_after_current,
-    reset,
     set_executor,
     should_stop_after_current,
     start_shutdown_monitor,
     unregister_agent,
-    wait_for_shutdown,
 )
 
 
 @pytest.fixture(autouse=True)
 def _reset_shutdown():
     """Reset shutdown state before each test."""
-    reset()
     import pokepoke.utils.shutdown as _mod
+    _mod._shutdown_event.clear()
+    _mod._stop_after_current_event.clear()
+    _mod._coordination_done = False
     _mod._active_agent_count = 0
     _mod._executor = None
     yield
-    reset()
+    _mod._shutdown_event.clear()
+    _mod._stop_after_current_event.clear()
+    _mod._coordination_done = False
     _mod._active_agent_count = 0
     _mod._executor = None
-
 
 class TestIsShuttingDown:
     """Tests for is_shutting_down()."""
@@ -48,7 +48,6 @@ class TestIsShuttingDown:
     def test_true_after_request(self):
         request_shutdown()
         assert is_shutting_down() is True
-
 
 class TestRequestShutdown:
     """Tests for request_shutdown()."""
@@ -77,7 +76,6 @@ class TestRequestShutdown:
         # Only one Thread created (coordination runs once)
         assert mock_thread_cls.call_count == 1
 
-
 class TestRequestShutdownFromSignal:
     """Tests for request_shutdown_from_signal() — signal-safe variant."""
 
@@ -101,7 +99,6 @@ class TestRequestShutdownFromSignal:
             request_shutdown_from_signal()
             mock_thread_cls.assert_not_called()
 
-
 class TestCoordinateShutdown:
     """Tests for _coordinate_shutdown() — idempotent coordination."""
 
@@ -119,7 +116,6 @@ class TestCoordinateShutdown:
         call_kwargs = mock_thread_cls.call_args
         assert call_kwargs.kwargs["name"] == "shutdown-watchdog"
 
-
 class TestStartShutdownMonitor:
     """Tests for start_shutdown_monitor() — daemon monitor thread."""
 
@@ -132,48 +128,6 @@ class TestStartShutdownMonitor:
             # Give monitor time to wake and run
             time.sleep(0.2)
             mock_coord.assert_called_once()
-
-
-class TestWaitForShutdown:
-    """Tests for wait_for_shutdown()."""
-
-    def test_returns_false_on_timeout(self):
-        result = wait_for_shutdown(timeout=0.01)
-        assert result is False
-
-    def test_returns_true_when_set(self):
-        _shutdown_event.set()
-        result = wait_for_shutdown(timeout=0.1)
-        assert result is True
-
-    def test_unblocks_when_shutdown_requested(self):
-        """wait_for_shutdown unblocks promptly when shutdown is requested."""
-        result_holder = [None]
-
-        def waiter():
-            result_holder[0] = wait_for_shutdown(timeout=5.0)
-
-        t = threading.Thread(target=waiter)
-        t.start()
-        time.sleep(0.05)
-        _shutdown_event.set()
-        t.join(timeout=1.0)
-        assert result_holder[0] is True
-
-
-class TestReset:
-    """Tests for reset()."""
-
-    def test_clears_event(self):
-        _shutdown_event.set()
-        reset()
-        assert is_shutting_down() is False
-
-    def test_clears_stop_after_current(self):
-        request_stop_after_current()
-        reset()
-        assert should_stop_after_current() is False
-
 
 class TestStopAfterCurrent:
     """Tests for stop-after-current flag."""
@@ -200,7 +154,6 @@ class TestStopAfterCurrent:
         assert should_stop_after_current() is True
         cancel_stop_after_current()
         assert should_stop_after_current() is False
-
 
 class TestAgentRegistration:
     """Tests for register_agent / unregister_agent / get_active_agent_count."""
@@ -237,7 +190,6 @@ class TestAgentRegistration:
             # Base (5.0) + 3 agents * 3.0 = 14.0
             assert timeout_arg == 14.0
 
-
 class TestSetExecutor:
     """Tests for set_executor."""
 
@@ -269,7 +221,6 @@ class TestSetExecutor:
         with patch.object(mock_executor, "shutdown") as mock_sd:
             request_shutdown()
             mock_sd.assert_called_once_with(wait=False, cancel_futures=True)
-
 
 class TestWatchdogThread:
     """Tests for _watchdog_thread."""
@@ -346,7 +297,6 @@ class TestWatchdogThread:
 
         mock_interrupt.assert_called_once()
 
-
 class TestMergeQueueShutdown:
     """Tests for merge queue shutdown coordination in request_shutdown."""
 
@@ -400,7 +350,6 @@ class TestMergeQueueShutdown:
                 for call in mock_thread_cls.call_args_list
             )
 
-
 class TestHasActiveAgents:
     """Tests for has_active_agents()."""
 
@@ -421,15 +370,3 @@ class TestHasActiveAgents:
         register_agent()
         unregister_agent()
         assert has_active_agents() is False
-
-
-class TestShutdownReset:
-    """Additional shutdown coordination tests."""
-
-    def test_reset_clears_shutdown_and_stop(self):
-        """Verify reset clears shutdown event and stop flag."""
-        request_shutdown()
-        request_stop_after_current()
-        reset()
-        assert not is_shutting_down()
-        assert not should_stop_after_current()

@@ -205,35 +205,3 @@ class BeadsIssueCreator:
         except Exception as e:
             logger.warning(f"Failed to update description for {item_id}: {e}")
             return False
-
-    def get_created_items_info(self, item_ids: list[str]) -> list[dict[str, Any]]:
-        """Get info about created items."""
-        if not item_ids:
-            return []
-
-        items_info = []
-        for item_id in item_ids:
-            try:
-                result = _run_bd(
-                    ["show", item_id, "--json"],
-                    check=False,
-                    timeout=15,
-                )
-
-                if result.returncode == 0:
-                    try:
-                        # Parse JSON output
-                        output = result.stdout.strip()
-                        lines = [line for line in output.split('\n')
-                                if line.strip() and not line.startswith(('Note:', 'Warning:', 'Hint:'))]
-                        filtered_output = '\n'.join(lines)
-
-                        if filtered_output:
-                            item_data = json.loads(filtered_output)
-                            items_info.append(item_data)
-                    except json.JSONDecodeError:
-                        logger.warning(f"Failed to parse item {item_id} JSON")
-            except Exception as e:
-                logger.warning(f"Failed to get info for {item_id}: {e}")
-
-        return items_info

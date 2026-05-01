@@ -24,29 +24,6 @@ with suppress(ImportError):
     import yaml  # type: ignore[import-untyped]
 
 
-def _discover_log_roots() -> list[Path]:
-    """Return candidate directories that may contain run log folders."""
-    roots: list[Path] = []
-    env_override = os.environ.get("POKEPOKE_LOGS_DIR")
-    if env_override:
-        roots.append(Path(env_override).expanduser().resolve())
-
-    try:
-        from pokepoke.config import _find_repo_root
-
-        repo_root = _find_repo_root()
-    except Exception as e:
-        logger.debug(f"Failed to find repo root via config, using cwd: {e}")
-        repo_root = Path.cwd()
-
-    for candidate in (repo_root / ".pokepoke" / "logs", repo_root / "logs"):
-        resolved = candidate.resolve()
-        if resolved not in roots:
-            roots.append(resolved)
-
-    return [root for root in roots if root.is_dir()]
-
-
 def get_config(self: DesktopAPI) -> dict[str, Any]:
     """Load and validate project config as a JSON-serializable dict."""
     from pokepoke.config import ProjectConfig, _find_repo_root, _load_config_file

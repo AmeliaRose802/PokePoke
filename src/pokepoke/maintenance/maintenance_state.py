@@ -115,9 +115,3 @@ def record_maintenance_run(repo_id: str) -> None:
     repo = get_repo_state(state, repo_id)
     repo.last_run_timestamp = time.time()
     save_state(state)
-
-
-def get_items_completed_for_repo(repo_id: str) -> int:
-    """Return the items-completed count for *repo_id* (0 if unknown)."""
-    state = load_state()
-    return state.repos.get(repo_id, RepoMaintenanceState()).items_completed

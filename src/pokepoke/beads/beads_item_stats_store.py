@@ -362,32 +362,3 @@ def record_item_attempt(
         save_beads_item_stats(data, path)
         return dict(metrics)
 
-
-def get_item_stats(item_id: str, *, path: Path | None = None) -> dict[str, Any]:
-    """Return per-item metrics for a single item, or empty metrics if not tracked."""
-    data = load_beads_item_stats(path)
-    items = data.get("items", {})
-    if not isinstance(items, dict):
-        return _empty_item_metrics()
-    metrics = items.get(item_id)
-    if not isinstance(metrics, dict):
-        return _empty_item_metrics()
-    return dict(metrics)
-
-
-def get_items_needing_attention(*, path: Path | None = None) -> dict[str, dict[str, Any]]:
-    """Return all items flagged as needing human attention.
-
-    Returns a mapping of ``item_id`` → per-item metrics for items where
-    ``needs_human_attention`` is True.
-    """
-    data = load_beads_item_stats(path)
-    items = data.get("items", {})
-    if not isinstance(items, dict):
-        return {}
-    return {
-        item_id: dict(metrics)
-        for item_id, metrics in items.items()
-        if isinstance(metrics, dict) and metrics.get("needs_human_attention")
-    }
-

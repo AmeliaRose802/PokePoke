@@ -137,10 +137,6 @@ class HungCommandDetector:
         """
         return self._shell_states.get(shell_id)
 
-    def clear_all(self) -> None:
-        """Clear all tracked shell states."""
-        self._shell_states.clear()
-
     def _build_corrective_message(
         self,
         shell_id: str,

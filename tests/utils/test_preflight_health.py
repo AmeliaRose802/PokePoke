@@ -36,7 +36,6 @@ def temp_repo(tmp_path):
     (repo_path / '.pokepoke').mkdir()
     return repo_path
 
-
 @pytest.fixture
 def health_config():
     """Standard health check configuration for testing."""
@@ -49,7 +48,6 @@ def health_config():
         'enable_self_repair': True,
         'max_repair_attempts': 2,
     }
-
 
 class TestHealthCheckError:
     """Test HealthCheckError data class."""
@@ -68,7 +66,6 @@ class TestHealthCheckError:
         assert error.details == {'key': 'value'}
         assert not error.recovery_attempted
         assert not error.recovery_successful
-
 
 class TestHealthCheckResult:
     """Test HealthCheckResult data class and methods."""
@@ -109,7 +106,6 @@ class TestHealthCheckResult:
         recoverable = result.get_recoverable_errors()
         assert len(recoverable) == 2
         assert all(error.severity == ErrorSeverity.RECOVERABLE for error in recoverable)
-
 
 class TestPreflightChecker:
     """Test the main PreflightChecker class."""
@@ -228,126 +224,8 @@ class TestPreflightChecker:
         assert errors[0].check_name == 'repository_integrity_check'
         assert errors[0].severity == ErrorSeverity.RECOVERABLE
 
-    def test_is_lock_stale_old_lock(self, temp_repo):
-        # Create old lock file
-        lock_dir = temp_repo / '.pokepoke'
-        lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / 'test.lock'
-        lock_file.write_text('')
-
-        # Set modification time to very old
-        old_time = 0  # 1970-01-01
-        os.utime(str(lock_file), (old_time, old_time))
-
-        checker = PreflightChecker(temp_repo)
-        is_stale, details = checker._is_lock_stale(lock_file)
-
-        assert is_stale
-        assert details['reason'] == 'lock_too_old'
-
-    @patch('pokepoke.utils.preflight_checks.is_process_running')
-    def test_is_lock_stale_dead_pid(self, mock_is_running, temp_repo):
-        mock_is_running.return_value = False
-
-        # Create lock file with PID
-        lock_dir = temp_repo / '.pokepoke'
-        lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / 'test.lock'
-        lock_file.write_text('12345')  # Non-existent PID
-
-        checker = PreflightChecker(temp_repo)
-        is_stale, details = checker._is_lock_stale(lock_file)
-
-        assert is_stale
-        assert details['reason'] == 'process_not_running'
-        assert details['pid'] == 12345
-
-        mock_is_running.assert_called_once_with(12345)
-
-
 class TestSelfRepair:
     """Test self-repair functionality."""
-
-    @pytest.mark.allow_git_repair
-    @patch('subprocess.run')
-    def test_repair_git_status_auto_commit_success(self, mock_run, temp_repo, health_config):
-        # Mock successful git add -u and commit
-        mock_run.side_effect = [
-            MagicMock(returncode=0),  # git add -u
-            MagicMock(returncode=0),  # git commit
-        ]
-
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError('git_status_check', 'test', ErrorSeverity.RECOVERABLE)
-
-        success = checker._repair_git_status(error)
-
-        assert success
-        assert mock_run.call_count == 2
-        # Verify targeted staging (git add -u, not git add -A)
-        add_call = mock_run.call_args_list[0]
-        assert add_call[0][0] == ['git', 'add', '-u']
-
-    @pytest.mark.allow_git_repair
-    @patch('pokepoke.utils.preflight_repair._invoke_preflight_cleanup', return_value=True)
-    @patch('subprocess.run')
-    def test_repair_git_status_cleanup_agent_on_commit_failure(
-        self, mock_run, mock_cleanup, temp_repo, health_config
-    ):
-        """When commit fails, cleanup agent is invoked instead of stashing."""
-        mock_run.side_effect = [
-            MagicMock(returncode=0),  # git add -u
-            MagicMock(returncode=1, stderr='hook failed'),  # git commit fails
-        ]
-
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError('git_status_check', 'test', ErrorSeverity.RECOVERABLE)
-
-        success = checker._repair_git_status(error)
-
-        assert success
-        assert mock_run.call_count == 2
-        mock_cleanup.assert_called_once_with(temp_repo, 'hook failed')
-
-    @pytest.mark.allow_git_repair
-    @patch('pokepoke.utils.preflight_repair._invoke_preflight_cleanup', return_value=False)
-    @patch('subprocess.run')
-    def test_repair_git_status_cleanup_agent_failure(
-        self, mock_run, mock_cleanup, temp_repo, health_config
-    ):
-        """When cleanup agent fails, repair returns False (never stashes)."""
-        mock_run.side_effect = [
-            MagicMock(returncode=0),  # git add -u
-            MagicMock(returncode=1, stderr='hook failed'),  # git commit fails
-        ]
-
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError('git_status_check', 'test', ErrorSeverity.RECOVERABLE)
-
-        success = checker._repair_git_status(error)
-
-        assert not success
-        mock_cleanup.assert_called_once()
-
-    def test_repair_repository_integrity_orphaned_worktrees(self, temp_repo, health_config):
-        # Create orphaned worktree directories
-        worktrees_dir = temp_repo / 'worktrees'
-        orphan1 = worktrees_dir / 'orphan-1'
-        orphan2 = worktrees_dir / 'orphan-2'
-        orphan1.mkdir()
-        orphan2.mkdir()
-
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError(
-            'repository_integrity_check', 'test', ErrorSeverity.RECOVERABLE,
-            details={'orphaned_paths': [str(orphan1), str(orphan2)]}
-        )
-
-        success = checker._repair_repository_integrity(error)
-
-        assert success
-        assert not orphan1.exists()
-        assert not orphan2.exists()
 
     def test_attempt_self_repair_success(self, temp_repo, health_config):
         checker = PreflightChecker(temp_repo, health_config)
@@ -378,7 +256,6 @@ class TestSelfRepair:
 
         assert success  # Returns True when no recoverable errors
 
-
 class TestConvenienceFunctions:
     """Test convenience functions."""
 
@@ -401,7 +278,6 @@ class TestConvenienceFunctions:
         success = attempt_self_repair(result, temp_repo, health_config)
 
         assert success
-
 
 class TestIntegrationScenarios:
     """Test integration scenarios that simulate real-world issues."""
@@ -498,7 +374,6 @@ class TestIntegrationScenarios:
         assert len(disk_errors) == 1
         assert 'insufficient disk space' in disk_errors[0].message.lower()
 
-
 class TestGitStatusEdgeCases:
     """Test git status check edge cases for CalledProcessError, TimeoutExpired, beads changes."""
 
@@ -541,7 +416,6 @@ class TestGitStatusEdgeCases:
         assert len(errors) == 0
         assert any('Beads database' in w for w in warnings)
 
-
 class TestWorktreeCreationEdgeCases:
     """Test worktree creation error paths."""
 
@@ -577,7 +451,6 @@ class TestWorktreeCreationEdgeCases:
         assert len(errors) == 1
         assert 'timed out' in errors[0].message.lower()
 
-
 class TestLockAvailabilityEdgeCases:
     """Test lock availability check edge cases."""
 
@@ -595,7 +468,8 @@ class TestLockAvailabilityEdgeCases:
         assert any('Stale lock' in w for w in warnings)
         assert len(errors) == 0  # Stale lock = warning, not error (self-repair enabled)
 
-    def test_lock_active_detected(self, temp_repo, health_config):
+    @patch('pokepoke.utils.preflight_checks.is_process_running', return_value=True)
+    def test_lock_active_detected(self, mock_is_running, temp_repo, health_config):
         """Test detection of an active (non-stale) lock file."""
         lock_dir = temp_repo / '.pokepoke'
         lock_dir.mkdir(exist_ok=True)
@@ -608,74 +482,8 @@ class TestLockAvailabilityEdgeCases:
         assert len(errors) == 1
         assert errors[0].check_name == 'lock_availability_check'
 
-    @patch('pokepoke.utils.preflight_checks.is_process_running')
-    def test_is_lock_stale_process_running(self, mock_is_running, temp_repo):
-        """Test _is_lock_stale when process is still running."""
-        mock_is_running.return_value = True
-
-        lock_dir = temp_repo / '.pokepoke'
-        lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / 'test.lock'
-        lock_file.write_text('99999')
-
-        checker = PreflightChecker(temp_repo)
-        is_stale, details = checker._is_lock_stale(lock_file)
-
-        assert not is_stale
-        assert details['reason'] == 'process_still_running'
-
-
 class TestRepairEdgeCases:
     """Test repair edge cases."""
-
-    def test_repair_lock_availability_not_stale(self, temp_repo, health_config):
-        """Test lock repair when lock is not actually stale."""
-        lock_dir = temp_repo / '.pokepoke'
-        lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / 'test.lock'
-        lock_file.write_text('')
-
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError(
-            'lock_availability_check', 'test', ErrorSeverity.RECOVERABLE,
-            details={'lock_file': str(lock_file)}
-        )
-
-        # Lock is not stale (just created), so repair should fail
-        success = checker._repair_lock_availability(error)
-        assert not success
-
-    def test_repair_lock_availability_no_lock_file(self, temp_repo, health_config):
-        """Test lock repair when lock_file key missing."""
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError(
-            'lock_availability_check', 'test', ErrorSeverity.RECOVERABLE,
-            details={}
-        )
-        success = checker._repair_lock_availability(error)
-        assert not success
-
-    def test_repair_lock_availability_already_gone(self, temp_repo, health_config):
-        """Test lock repair when lock file doesn't exist."""
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError(
-            'lock_availability_check', 'test', ErrorSeverity.RECOVERABLE,
-            details={'lock_file': str(temp_repo / '.pokepoke' / 'nonexistent.lock')}
-        )
-        success = checker._repair_lock_availability(error)
-        assert success  # Already gone = success
-
-    @pytest.mark.allow_git_repair
-    @patch('subprocess.run')
-    def test_repair_git_status_called_process_error(self, mock_run, temp_repo, health_config):
-        """Test git status repair when subprocess raises CalledProcessError."""
-        mock_run.side_effect = subprocess.CalledProcessError(1, 'git', stderr='fail')
-
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError('git_status_check', 'test', ErrorSeverity.RECOVERABLE)
-
-        success = checker._repair_git_status(error)
-        assert not success
 
     def test_check_raises_exception_in_run_all_checks(self, temp_repo, health_config):
         """Test that an exception in a check function is handled gracefully."""
@@ -725,49 +533,6 @@ class TestRepairEdgeCases:
         assert len(errors) == 0
         assert any('orphaned' in w.lower() for w in warnings)
 
-    def test_repair_lock_availability_stale_lock_removed(self, temp_repo, health_config):
-        """Test successful removal of a stale lock file."""
-        lock_dir = temp_repo / '.pokepoke'
-        lock_dir.mkdir(exist_ok=True)
-        lock_file = lock_dir / 'test.lock'
-        lock_file.write_text('')
-        # Make it old so is_lock_stale returns True
-        os.utime(str(lock_file), (0, 0))
-
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError(
-            'lock_availability_check', 'test', ErrorSeverity.RECOVERABLE,
-            details={'lock_file': str(lock_file)}
-        )
-        success = checker._repair_lock_availability(error)
-        assert success
-        assert not lock_file.exists()
-
-    def test_repair_lock_availability_exception(self, temp_repo, health_config):
-        """Test lock repair when an unexpected exception occurs."""
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError(
-            'lock_availability_check', 'test', ErrorSeverity.RECOVERABLE,
-            details={'lock_file': str(temp_repo / '.pokepoke' / 'test.lock')}
-        )
-        with patch('pokepoke.utils.preflight_repair.is_lock_stale', side_effect=RuntimeError('boom')):
-            # File exists check passes, but is_lock_stale raises
-            lock_dir = temp_repo / '.pokepoke'
-            lock_dir.mkdir(exist_ok=True)
-            (lock_dir / 'test.lock').write_text('')
-            success = checker._repair_lock_availability(error)
-        assert not success
-
-    @pytest.mark.allow_git_repair
-    @patch('subprocess.run')
-    def test_repair_git_status_generic_exception(self, mock_run, temp_repo, health_config):
-        """Test git status repair when a generic exception occurs."""
-        mock_run.side_effect = RuntimeError('unexpected error')
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError('git_status_check', 'test', ErrorSeverity.RECOVERABLE)
-        success = checker._repair_git_status(error)
-        assert not success
-
     @pytest.mark.allow_git_repair
     @patch('pokepoke.agents.cleanup_agents.invoke_cleanup_agent', return_value=(True, None))
     def test_invoke_preflight_cleanup_success(self, mock_agent, temp_repo, health_config):
@@ -789,33 +554,6 @@ class TestRepairEdgeCases:
         """Test _invoke_preflight_cleanup when cleanup agent raises exception."""
         from pokepoke.utils.preflight_repair import _invoke_preflight_cleanup
         success = _invoke_preflight_cleanup(temp_repo, 'hook failed')
-        assert not success
-
-    def test_repair_repository_integrity_rmtree_fails(self, temp_repo, health_config):
-        """Test repository integrity repair when removal fails."""
-        worktrees_dir = temp_repo / 'worktrees'
-        orphan = worktrees_dir / 'orphan-stubborn'
-        orphan.mkdir()
-
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError(
-            'repository_integrity_check', 'test', ErrorSeverity.RECOVERABLE,
-            details={'orphaned_paths': [str(orphan)]}
-        )
-        # Mock rmtree to do nothing so path still exists after "removal"
-        with patch('pokepoke.utils.preflight_repair.shutil.rmtree'):
-            success = checker._repair_repository_integrity(error)
-        assert not success
-
-    def test_repair_repository_integrity_exception(self, temp_repo, health_config):
-        """Test repository integrity repair when exception occurs."""
-        checker = PreflightChecker(temp_repo, health_config)
-        error = HealthCheckError(
-            'repository_integrity_check', 'test', ErrorSeverity.RECOVERABLE,
-            details={'orphaned_paths': ['nonexistent']}
-        )
-        with patch('pokepoke.utils.preflight_repair.Path.exists', side_effect=RuntimeError('boom')):
-            success = checker._repair_repository_integrity(error)
         assert not success
 
     def test_attempt_self_repair_retry_and_failure(self, temp_repo, health_config):
@@ -864,7 +602,6 @@ class TestRepairEdgeCases:
 
         success = checker.attempt_self_repair(result)
         assert not success
-
 
 if __name__ == '__main__':
     pytest.main([__file__])

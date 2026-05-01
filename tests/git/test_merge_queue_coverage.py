@@ -15,8 +15,6 @@ from pokepoke.git.merge_queue import (
     MergeStatus,
     _abort_rebase,
     _rebase_worktree,
-    get_merge_queue,
-    reset_merge_queue,
 )
 from pokepoke.types import BeadsWorkItem
 
@@ -25,13 +23,11 @@ def _item(id: str = "test-1") -> BeadsWorkItem:
     return BeadsWorkItem(id=id, title=f"Item {id}", status="ready",
                          priority=1, issue_type="task")
 
-
 # ── MergeStatus / MergeResult ──────────────────────────────────────
 
 class TestMergeEnums:
     def test_status_values(self):
         assert MergeStatus.SUCCESS.value == "success"
-        assert MergeStatus.CONFLICT.value == "conflict"
         assert MergeStatus.FAILED.value == "failed"
         assert MergeStatus.SHUTDOWN.value == "shutdown"
 
@@ -39,7 +35,6 @@ class TestMergeEnums:
         r = MergeResult(status=MergeStatus.SUCCESS, item_id="x")
         assert r.message == ""
         assert r.item_id == "x"
-
 
 # ── MergeQueue lifecycle ───────────────────────────────────────────
 
@@ -104,7 +99,6 @@ class TestMergeQueueLifecycle:
             assert result.status in (MergeStatus.SUCCESS, MergeStatus.FAILED,
                                      MergeStatus.SHUTDOWN)
 
-
 # ── _rebase_worktree ───────────────────────────────────────────────
 
 class TestRebaseWorktree:
@@ -153,7 +147,6 @@ class TestRebaseWorktree:
         result = _rebase_worktree(Path("/nonexistent/path"))
         assert result is False
 
-
 # ── _abort_rebase ──────────────────────────────────────────────────
 
 class TestAbortRebase:
@@ -179,25 +172,7 @@ class TestAbortRebase:
         ]
         _abort_rebase(tmp_path)  # Should not raise
 
-
 # ── Singleton management ───────────────────────────────────────────
-
-class TestSingleton:
-    def test_get_returns_same_instance(self):
-        reset_merge_queue()
-        q1 = get_merge_queue()
-        q2 = get_merge_queue()
-        assert q1 is q2
-        reset_merge_queue()
-
-    def test_reset_creates_new_instance(self):
-        reset_merge_queue()
-        q1 = get_merge_queue()
-        reset_merge_queue()
-        q2 = get_merge_queue()
-        assert q1 is not q2
-        reset_merge_queue()
-
 
 # ── _process_request (high-conflict path) ──────────────────────────
 

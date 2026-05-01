@@ -6,7 +6,6 @@ import os
 import subprocess
 import threading
 import time
-from collections.abc import Generator
 from typing import Any
 
 try:
@@ -66,15 +65,6 @@ class ActivePidRegistry:
         """Snapshot of currently registered PIDs."""
         with self._lock:
             return frozenset(self._pids)
-
-    @contextlib.contextmanager
-    def tracked(self, pid: int) -> Generator[None, None, None]:
-        """Context manager: register on entry, deregister on exit."""
-        self.register(pid)
-        try:
-            yield
-        finally:
-            self.deregister(pid)
 
     def clear(self) -> None:
         """Remove all registered PIDs (for testing or reset)."""

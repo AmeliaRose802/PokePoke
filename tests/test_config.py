@@ -26,9 +26,7 @@ from pokepoke.config import (
     reset_config,
 )
 from pokepoke.git.repo_config_loader import (
-    parse_repos_cli,
     validate_repo_config,
-    validate_repo_configs,
 )
 
 
@@ -1023,111 +1021,6 @@ class TestValidateRepoConfig:
             quality_gate_overrides=qg,
         ))
         assert any("coverage_threshold" in w for w in result.warnings)
-
-
-class TestValidateRepoConfigs:
-    """Tests for validate_repo_configs (batch validation)."""
-
-    def test_empty_list(self):
-        assert validate_repo_configs([]) == []
-
-    def test_disabled_repo_skipped(self):
-        results = validate_repo_configs([RepoConfig(path="", enabled=False)])
-        assert len(results) == 1
-        assert results[0].valid is True
-
-    def test_mixed_valid_invalid(self, tmp_path):
-        (tmp_path / ".beads").mkdir()
-        repos = [
-            RepoConfig(path=str(tmp_path)),
-            RepoConfig(path=str(tmp_path / "bad")),
-        ]
-        results = validate_repo_configs(repos)
-        assert results[0].valid is True
-        assert results[1].valid is False
-
-
-class TestParseReposCli:
-    """Tests for parse_repos_cli function."""
-
-    def test_plain_path(self):
-        configs = parse_repos_cli(["/repo/alpha"])
-        assert len(configs) == 1
-        assert configs[0].path == "/repo/alpha"
-        assert configs[0].priority_weight == 1
-        assert configs[0].max_workers == 0
-        assert configs[0].enabled is True
-
-    def test_path_with_weight(self):
-        configs = parse_repos_cli(["/repo/alpha:weight=5"])
-        assert configs[0].priority_weight == 5
-
-    def test_path_with_multiple_options(self):
-        configs = parse_repos_cli(["/repo/alpha:weight=3:max_workers=2"])
-        assert configs[0].priority_weight == 3
-        assert configs[0].max_workers == 2
-
-    def test_disabled_option(self):
-        configs = parse_repos_cli(["/repo/x:disabled=true"])
-        assert configs[0].enabled is False
-
-    def test_multiple_repos(self):
-        configs = parse_repos_cli(["/repo/a", "/repo/b:weight=10"])
-        assert len(configs) == 2
-        assert configs[0].path == "/repo/a"
-        assert configs[0].priority_weight == 1
-        assert configs[1].path == "/repo/b"
-        assert configs[1].priority_weight == 10
-
-    def test_empty_list(self):
-        assert parse_repos_cli([]) == []
-
-    def test_disabled_yes_variant(self):
-        configs = parse_repos_cli(["/repo/x:disabled=yes"])
-        assert configs[0].enabled is False
-
-    def test_disabled_1_variant(self):
-        configs = parse_repos_cli(["/repo/x:disabled=1"])
-        assert configs[0].enabled is False
-
-    def test_disabled_false_stays_enabled(self):
-        configs = parse_repos_cli(["/repo/x:disabled=false"])
-        assert configs[0].enabled is True
-
-    def test_windows_drive_letter_plain_path(self):
-        configs = parse_repos_cli([r"C:\src\repo"])
-        assert len(configs) == 1
-        assert configs[0].path == r"C:\src\repo"
-        assert configs[0].priority_weight == 1
-
-    def test_windows_drive_letter_with_weight(self):
-        configs = parse_repos_cli([r"C:\src\repo:weight=5"])
-        assert configs[0].path == r"C:\src\repo"
-        assert configs[0].priority_weight == 5
-
-    def test_windows_drive_letter_with_multiple_options(self):
-        configs = parse_repos_cli([r"C:\src\repo:weight=3:max_workers=2"])
-        assert configs[0].path == r"C:\src\repo"
-        assert configs[0].priority_weight == 3
-        assert configs[0].max_workers == 2
-
-    def test_windows_drive_letter_disabled(self):
-        configs = parse_repos_cli([r"D:\projects\myrepo:disabled=true"])
-        assert configs[0].path == r"D:\projects\myrepo"
-        assert configs[0].enabled is False
-
-    def test_windows_forward_slash_drive_path(self):
-        configs = parse_repos_cli(["C:/src/repo:weight=7"])
-        assert configs[0].path == "C:/src/repo"
-        assert configs[0].priority_weight == 7
-
-    def test_mixed_windows_and_unix_repos(self):
-        configs = parse_repos_cli([r"C:\repo\a:weight=2", "/repo/b:weight=3"])
-        assert len(configs) == 2
-        assert configs[0].path == r"C:\repo\a"
-        assert configs[0].priority_weight == 2
-        assert configs[1].path == "/repo/b"
-        assert configs[1].priority_weight == 3
 
 
 class TestConfigThreadSafety:

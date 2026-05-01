@@ -7,7 +7,6 @@ from pokepoke.models.warm_session_pool import (
     WarmSession,
     WarmSessionPool,
     get_warm_session_pool,
-    reset_warm_session_pool,
 )
 
 
@@ -56,7 +55,6 @@ class TestWarmSession:
 
         session.mark_used()
         assert session.use_count == 2
-
 
 class TestWarmSessionPool:
     """Tests for WarmSessionPool class."""
@@ -188,20 +186,6 @@ class TestWarmSessionPool:
         assert pool.get_warm_session([]) is None
         assert pool.get_warm_session(None) is None
 
-    def test_invalidate_label(self) -> None:
-        """Test invalidating sessions for a specific label."""
-        config = WarmSessionConfig(enabled=True, labels=["a", "b"])
-        pool = WarmSessionPool(config)
-
-        pool.register_session(label="a", session_id="warm-a")
-        pool.register_session(label="b", session_id="warm-b")
-
-        count = pool.invalidate_label("a")
-
-        assert count == 1
-        assert pool.get_warm_session(["a"]) is None
-        assert pool.get_warm_session(["b"]) is not None
-
     def test_invalidate_all(self) -> None:
         """Test invalidating all sessions."""
         config = WarmSessionConfig(enabled=True, labels=["a", "b"])
@@ -215,32 +199,6 @@ class TestWarmSessionPool:
         assert count == 2
         assert pool.get_warm_session(["a"]) is None
         assert pool.get_warm_session(["b"]) is None
-
-    def test_invalidate_expired(self) -> None:
-        """Test removing expired sessions."""
-        config = WarmSessionConfig(enabled=True, labels=["test"], max_age_hours=1.0)
-        pool = WarmSessionPool(config)
-
-        # Add expired and valid sessions
-        expired = WarmSession(
-            session_id="expired",
-            label="test",
-            created_at=time.time() - 7200,
-            exploration_complete=True,
-        )
-        valid = WarmSession(
-            session_id="valid",
-            label="test",
-            created_at=time.time(),
-            exploration_complete=True,
-        )
-        pool._sessions["test"] = [expired, valid]
-
-        removed = pool.invalidate_expired()
-
-        assert removed == 1
-        assert len(pool._sessions["test"]) == 1
-        assert pool._sessions["test"][0].session_id == "valid"
 
     def test_pool_size_limit(self) -> None:
         """Test that pool respects size limit per label."""
@@ -334,13 +292,11 @@ class TestWarmSessionPool:
         assert result is not None
         assert result.session_id == "warm-orch"
 
-
 class TestGlobalPool:
     """Tests for the global pool singleton."""
 
     def test_get_warm_session_pool_creates_singleton(self) -> None:
         """Test that get_warm_session_pool returns consistent instance."""
-        reset_warm_session_pool()
 
         with patch("pokepoke.config.get_config") as mock_config:
             mock_config.return_value = MagicMock(
@@ -352,21 +308,5 @@ class TestGlobalPool:
 
             assert pool1 is pool2
 
-    def test_reset_warm_session_pool(self) -> None:
-        """Test that reset creates a new instance."""
-        reset_warm_session_pool()
-
-        with patch("pokepoke.config.get_config") as mock_config:
-            mock_config.return_value = MagicMock(
-                warm_sessions=WarmSessionConfig(enabled=True, labels=["test"])
-            )
-
-            pool1 = get_warm_session_pool()
-            reset_warm_session_pool()
-            pool2 = get_warm_session_pool()
-
-            assert pool1 is not pool2
-
     def teardown_method(self) -> None:
         """Reset global pool after each test."""
-        reset_warm_session_pool()

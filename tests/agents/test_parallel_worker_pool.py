@@ -5,8 +5,6 @@ import threading
 import time
 from unittest.mock import Mock, patch
 
-import pytest
-
 from pokepoke.agents.parallel_worker_pool import (
     ParallelWorkerPool,
     collect_done_futures,
@@ -23,11 +21,9 @@ def _make_item(item_id: str = "t1") -> BeadsWorkItem:
         priority=1, issue_type="task",
     )
 
-
 # ---------------------------------------------------------------------------
 # ParallelWorkerPool.__init__
 # ---------------------------------------------------------------------------
-
 
 class TestParallelWorkerPoolInit:
     """Verify pool construction creates the right resources."""
@@ -39,162 +35,19 @@ class TestParallelWorkerPoolInit:
             assert isinstance(pool.semaphore, threading.Semaphore)
             assert pool.futures == {}
             assert pool.active_count == 0
-            assert pool.active_ids == set()
-            assert pool.has_active_workers() is False
         finally:
             pool.shutdown()
 
     def test_pool_size_one(self) -> None:
         pool = ParallelWorkerPool(pool_size=1)
         try:
-            assert pool.has_active_workers() is False
+            assert pool.active_count == 0
         finally:
             pool.shutdown()
-
-
-# ---------------------------------------------------------------------------
-# dispatch_item
-# ---------------------------------------------------------------------------
-
-
-class TestDispatchItem:
-    """Tests for ParallelWorkerPool.dispatch_item."""
-
-    def test_dispatch_tracks_future_and_item(self) -> None:
-        pool = ParallelWorkerPool(pool_size=2)
-        try:
-            item = _make_item("dispatch-1")
-            process_fn = Mock(return_value=WorkItemResult(success=True, request_count=1))
-            logger = Mock()
-
-            pool.dispatch_item(item, logger, process_fn, "worker-1")
-
-            assert pool.has_active_workers()
-            assert pool.active_count == 1
-            assert "dispatch-1" in pool.active_ids
-        finally:
-            pool.shutdown(wait=True)
-
-    def test_dispatch_releases_semaphore_on_submit_failure(self) -> None:
-        pool = ParallelWorkerPool(pool_size=2)
-        pool.shutdown()  # shutdown executor so submit will fail
-
-        pool._executor = concurrent.futures.ThreadPoolExecutor(max_workers=1)
-        pool._executor.shutdown(wait=False)
-
-        item = _make_item("fail-submit")
-        with pytest.raises(RuntimeError):
-            pool.dispatch_item(item, Mock(), Mock(side_effect=RuntimeError("boom")), "w")
-
-        assert not pool.has_active_workers()
-
-    def test_dispatch_multiple_items(self) -> None:
-        pool = ParallelWorkerPool(pool_size=4)
-        try:
-            process_fn = Mock(return_value=WorkItemResult(success=True, request_count=1))
-            logger = Mock()
-            for i in range(3):
-                pool.dispatch_item(_make_item(f"m-{i}"), logger, process_fn, f"w-{i}")
-
-            assert pool.active_count == 3
-            assert pool.active_ids == {"m-0", "m-1", "m-2"}
-        finally:
-            pool.shutdown(wait=True)
-
-
-# ---------------------------------------------------------------------------
-# collect_done
-# ---------------------------------------------------------------------------
-
-
-class TestCollectDone:
-    """Tests for ParallelWorkerPool.collect_done (instance method)."""
-
-    def test_collect_done_harvests_completed_futures(self) -> None:
-        pool = ParallelWorkerPool(pool_size=2)
-        try:
-            barrier = threading.Event()
-            result_val = WorkItemResult(success=True, request_count=1)
-
-            def process_fn(item, run_logger, sem, worker_name):
-                barrier.wait(timeout=5)
-                return result_val
-
-            item = _make_item("cd-1")
-            pool.dispatch_item(item, Mock(), process_fn, "w-1")
-            barrier.set()  # let worker finish
-
-            # Wait for future to complete
-            concurrent.futures.wait(list(pool.futures.keys()), timeout=5)
-
-            failed: set[str] = set()
-            stats = SessionStats(agent_stats=AgentStats())
-            record_fn = Mock()
-            logger = Mock()
-
-            total, any_ok, successes, failures = pool.collect_done(
-                failed, 0, stats, logger, record_fn,
-            )
-
-            assert total == 1
-            assert any_ok is True
-            assert successes == 1
-            assert failures == 0
-            assert not pool.has_active_workers()
-            assert record_fn.call_count == 1
-        finally:
-            pool.shutdown(wait=True)
-
-    def test_collect_done_returns_zeros_when_no_futures(self) -> None:
-        pool = ParallelWorkerPool(pool_size=1)
-        try:
-            stats = SessionStats(agent_stats=AgentStats())
-            total, any_ok, successes, failures = pool.collect_done(
-                set(), 5, stats, Mock(), Mock(),
-            )
-            assert total == 5
-            assert any_ok is False
-            assert successes == 0
-            assert failures == 0
-        finally:
-            pool.shutdown()
-
-
-# ---------------------------------------------------------------------------
-# has_active_workers
-# ---------------------------------------------------------------------------
-
-
-class TestHasActiveWorkers:
-    """Tests for ParallelWorkerPool.has_active_workers."""
-
-    def test_false_when_empty(self) -> None:
-        pool = ParallelWorkerPool(pool_size=1)
-        try:
-            assert pool.has_active_workers() is False
-        finally:
-            pool.shutdown()
-
-    def test_true_after_dispatch(self) -> None:
-        pool = ParallelWorkerPool(pool_size=2)
-        try:
-            blocker = threading.Event()
-
-            def slow_fn(item, run_logger, sem, worker_name):
-                blocker.wait(timeout=10)
-                return WorkItemResult(success=True, request_count=0)
-
-            pool.dispatch_item(_make_item("active-1"), Mock(), slow_fn, "w")
-            assert pool.has_active_workers() is True
-            blocker.set()
-        finally:
-            pool.shutdown(wait=True)
-
 
 # ---------------------------------------------------------------------------
 # shutdown
 # ---------------------------------------------------------------------------
-
 
 class TestShutdown:
     """Tests for ParallelWorkerPool.shutdown."""
@@ -208,11 +61,9 @@ class TestShutdown:
         pool = ParallelWorkerPool(pool_size=1)
         pool.shutdown(wait=False, cancel_futures=True)
 
-
 # ---------------------------------------------------------------------------
 # collect_done_futures (module-level function)
 # ---------------------------------------------------------------------------
-
 
 class TestCollectDoneFuturesStandalone:
     """Tests for the standalone collect_done_futures function."""
@@ -341,11 +192,9 @@ class TestCollectDoneFuturesStandalone:
         assert any_ok is True
         assert record_fn.call_count == 3
 
-
 # ---------------------------------------------------------------------------
 # Backward-compat: verify parallel.py alias
 # ---------------------------------------------------------------------------
-
 
 class TestBackwardCompatAlias:
     """Ensure parallel._collect_done_futures is the same function."""
@@ -354,11 +203,9 @@ class TestBackwardCompatAlias:
         from pokepoke.agents.parallel import _collect_done_futures
         assert _collect_done_futures is collect_done_futures
 
-
 # ---------------------------------------------------------------------------
 # Thread-safety tests
 # ---------------------------------------------------------------------------
-
 
 class TestThreadSafety:
     """Tests for thread-safe access to shared collections."""
@@ -371,57 +218,6 @@ class TestThreadSafety:
             assert isinstance(pool.lock, type(threading.Lock()))
         finally:
             pool.shutdown()
-
-    def test_concurrent_dispatch_and_collect(self) -> None:
-        """Test that concurrent dispatch/collect operations don't raise errors."""
-        pool = ParallelWorkerPool(pool_size=4)
-        errors: list[Exception] = []
-        completed_count = [0]
-
-        def process_fn(item, run_logger, sem, worker_name):
-            time.sleep(0.05)
-            sem.release()
-            return WorkItemResult(success=True, request_count=1)
-
-        def dispatcher():
-            for i in range(10):
-                try:
-                    item = _make_item(f"dispatch-{i}")
-                    pool._semaphore.acquire()
-                    with pool.lock:
-                        fut = pool._executor.submit(
-                            process_fn, item, Mock(), pool._semaphore, f"w-{i}",
-                        )
-                        pool._futures[fut] = item
-                except Exception as e:
-                    errors.append(e)
-                time.sleep(0.01)
-
-        def collector():
-            failed: set[str] = set()
-            stats = SessionStats(agent_stats=AgentStats())
-            for _ in range(20):
-                try:
-                    _, _, successes, _ = pool.collect_done(
-                        failed, 0, stats, Mock(), Mock(),
-                    )
-                    completed_count[0] += successes
-                except Exception as e:
-                    errors.append(e)
-                time.sleep(0.02)
-
-        dispatch_thread = threading.Thread(target=dispatcher)
-        collect_thread = threading.Thread(target=collector)
-
-        try:
-            dispatch_thread.start()
-            collect_thread.start()
-            dispatch_thread.join(timeout=5)
-            collect_thread.join(timeout=5)
-
-            assert not errors, f"Unexpected errors: {errors}"
-        finally:
-            pool.shutdown(wait=True)
 
     def test_collect_done_futures_with_lock_no_race(self) -> None:
         """Test collect_done_futures uses lock to prevent race conditions."""
@@ -535,11 +331,9 @@ class TestThreadSafety:
 
         assert not errors, f"Set race errors: {errors}"
 
-
 # ---------------------------------------------------------------------------
 # compute_slots
 # ---------------------------------------------------------------------------
-
 
 class TestComputeSlots:
     """Tests for the compute_slots function."""
@@ -626,11 +420,9 @@ class TestComputeSlots:
         log_msg = run_logger.log_polling.call_args[0][0]
         assert "rss=0MB" in log_msg
 
-
 # ---------------------------------------------------------------------------
 # update_circuit_breaker
 # ---------------------------------------------------------------------------
-
 
 class TestUpdateCircuitBreaker:
     """Tests for update_circuit_breaker."""
@@ -653,11 +445,9 @@ class TestUpdateCircuitBreaker:
         assert count == 3
         assert tripped is True
 
-
 # ---------------------------------------------------------------------------
 # update_memory_circuit_breaker
 # ---------------------------------------------------------------------------
-
 
 class TestUpdateMemoryCircuitBreaker:
     """Tests for update_memory_circuit_breaker."""

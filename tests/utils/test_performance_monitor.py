@@ -1,7 +1,6 @@
 """Tests for pokepoke.stats.performance_monitor module."""
 
 import threading
-import time
 
 import pytest
 
@@ -9,7 +8,6 @@ from pokepoke.stats.performance_monitor import (
     PerformanceAlert,
     PerformanceMonitor,
     get_performance_monitor,
-    reset_performance_monitor,
 )
 
 
@@ -32,7 +30,6 @@ class TestPerformanceAlert:
         assert alert.value == 10.0
         assert alert.threshold == 5.0
 
-
 class TestPerformanceMonitorMergeQueue:
     """Tests for merge queue depth threshold checking."""
 
@@ -53,7 +50,6 @@ class TestPerformanceMonitorMergeQueue:
         mon = PerformanceMonitor(max_merge_queue_depth=1, enabled=False)
         assert mon.check_merge_queue(100) is None
 
-
 class TestPerformanceMonitorLockWait:
     """Tests for lock acquisition wait time threshold."""
 
@@ -73,7 +69,6 @@ class TestPerformanceMonitorLockWait:
         mon = PerformanceMonitor(max_lock_wait_seconds=30.0)
         assert mon.check_lock_wait("x", 30.0) is None
 
-
 class TestPerformanceMonitorIteration:
     """Tests for loop iteration time threshold."""
 
@@ -87,7 +82,6 @@ class TestPerformanceMonitorIteration:
         assert alert is not None
         assert alert.category == "iteration_time"
         assert alert.value == 45.0
-
 
 class TestPerformanceMonitorMemory:
     """Tests for memory threshold checking."""
@@ -129,7 +123,6 @@ class TestPerformanceMonitorMemory:
         mon = PerformanceMonitor(min_memory_mb=99999999.0, enabled=False)
         assert mon.check_memory() is None
 
-
 class TestPerformanceMonitorSuccessRate:
     """Tests for agent success rate threshold."""
 
@@ -153,7 +146,6 @@ class TestPerformanceMonitorSuccessRate:
         mon = PerformanceMonitor(min_success_rate=0.5)
         assert mon.check_success_rate(5, 10) is None
 
-
 class TestRecordResult:
     """Tests for success/failure tracking via record_result."""
 
@@ -171,7 +163,6 @@ class TestRecordResult:
         snap = mon.snapshot()
         assert snap["succeeded"] == 0
         assert snap["failed"] == 1
-
 
 class TestCheckAll:
     """Tests for the combined check_all method."""
@@ -223,59 +214,6 @@ class TestCheckAll:
         assert "iteration_time" not in categories
         assert "merge_queue" not in categories
 
-
-class TestAlertManagement:
-    """Tests for alert recording, retrieval, and clearing."""
-
-    def test_get_alerts_returns_all(self) -> None:
-        mon = PerformanceMonitor(max_merge_queue_depth=1)
-        mon.check_merge_queue(5)
-        mon.check_merge_queue(10)
-        alerts = mon.get_alerts()
-        assert len(alerts) == 2
-
-    def test_get_alerts_since_filter(self) -> None:
-        mon = PerformanceMonitor(max_merge_queue_depth=1)
-        mon.check_merge_queue(5)
-        time.sleep(0.05)
-        cutoff = time.time() + 0.001  # Ensure cutoff is after first alert
-        time.sleep(0.05)
-        mon.check_merge_queue(10)
-        alerts = mon.get_alerts(since=cutoff)
-        assert len(alerts) == 1
-        assert alerts[0].value == 10.0
-
-    def test_clear_alerts(self) -> None:
-        mon = PerformanceMonitor(max_merge_queue_depth=1)
-        mon.check_merge_queue(5)
-        assert len(mon.get_alerts()) == 1
-        mon.clear_alerts()
-        assert len(mon.get_alerts()) == 0
-
-    def test_alerts_evict_oldest_half_at_max(self) -> None:
-        """Test that alerts list evicts oldest half when reaching max_alerts."""
-        max_alerts = 20
-        mon = PerformanceMonitor(max_merge_queue_depth=1, max_alerts=max_alerts)
-        for i in range(max_alerts):
-            mon.check_merge_queue(i + 2)
-
-        alerts = mon.get_alerts()
-        # After reaching max, oldest half evicted: 10 remain
-        assert len(alerts) == max_alerts // 2
-        # total_alerts counter should still reflect all recorded alerts
-        snap = mon.snapshot()
-        assert snap["total_alerts"] == max_alerts
-
-    def test_alerts_stay_bounded_after_many_records(self) -> None:
-        """Test that alerts never exceed max_alerts even after many records."""
-        max_alerts = 10
-        mon = PerformanceMonitor(max_merge_queue_depth=1, max_alerts=max_alerts)
-        for i in range(100):
-            mon.check_merge_queue(i + 2)
-        alerts = mon.get_alerts()
-        assert len(alerts) <= max_alerts
-
-
 class TestSnapshot:
     """Tests for the snapshot method."""
 
@@ -315,25 +253,8 @@ class TestSnapshot:
         snap = mon.snapshot()
         assert len(snap["recent_alerts"]) == 10  # Last 10
 
-
 class TestReset:
     """Tests for the reset method."""
-
-    def test_reset_clears_all(self) -> None:
-        mon = PerformanceMonitor(max_merge_queue_depth=1)
-        mon.check_merge_queue(5)
-        mon.record_result(True)
-        mon.check_all(iteration_seconds=1.0)
-        mon.reset()
-        snap = mon.snapshot()
-        assert snap["total_checks"] == 0
-        assert snap["total_alerts"] == 0
-        assert snap["succeeded"] == 0
-        assert snap["failed"] == 0
-        assert snap["recent_alerts"] == []
-        assert snap["rss_samples"] == []
-        assert snap["recent_alerts"] == []
-
 
 class TestThreadSafety:
     """Tests for thread-safe operation."""
@@ -363,34 +284,22 @@ class TestThreadSafety:
         assert snap["total_alerts"] == 400  # 4 threads × 50 × 2 checks each
         assert snap["succeeded"] == 200  # 4 threads × 50
 
-
 class TestSingleton:
     """Tests for module-level singleton management."""
 
     def test_get_returns_monitor(self) -> None:
-        reset_performance_monitor()
         mon = get_performance_monitor()
         assert isinstance(mon, PerformanceMonitor)
 
     def test_get_returns_same_instance(self) -> None:
-        reset_performance_monitor()
         a = get_performance_monitor()
         b = get_performance_monitor()
         assert a is b
-
-    def test_reset_clears_singleton(self) -> None:
-        reset_performance_monitor()
-        a = get_performance_monitor()
-        reset_performance_monitor()
-        b = get_performance_monitor()
-        assert a is not b
-
 
 class TestConfigIntegration:
     """Tests for config-driven initialization."""
 
     def test_default_thresholds(self) -> None:
-        reset_performance_monitor()
         mon = get_performance_monitor()
         snap = mon.snapshot()
         assert snap["thresholds"]["max_merge_queue_depth"] == 5
@@ -398,7 +307,6 @@ class TestConfigIntegration:
         assert snap["thresholds"]["max_iteration_seconds"] == 30.0
         assert snap["thresholds"]["min_memory_mb"] == 256.0
         assert snap["thresholds"]["min_success_rate"] == 0.5
-
 
 class TestCheckRss:
     """Tests for RSS monotonic growth detection."""

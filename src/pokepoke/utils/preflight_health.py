@@ -25,13 +25,12 @@ from pokepoke.utils.preflight_checks import (
     check_lock_availability,
     check_repository_integrity,
     check_worktree_creation,
-    is_lock_stale,
 )
 from pokepoke.utils.preflight_repair import (
     attempt_repair,
-    repair_git_status,
-    repair_lock_availability,
-    repair_repository_integrity,
+    repair_git_status,  # noqa: F401 - re-exported for test patching
+    repair_lock_availability,  # noqa: F401 - re-exported for test patching
+    repair_repository_integrity,  # noqa: F401 - re-exported for test patching
 )
 
 logger = logging.getLogger(__name__)
@@ -189,25 +188,9 @@ class PreflightChecker:
         """Delegate to check_beads_health."""
         return check_beads_health(self.repo_path, self.config)
 
-    def _is_lock_stale(self, lock_path: Path) -> tuple[bool, dict[str, Any]]:
-        """Delegate to is_lock_stale."""
-        return is_lock_stale(lock_path)
-
     def attempt_self_repair(self, health_result: HealthCheckResult) -> bool:
         """Delegate to attempt_repair."""
         return attempt_repair(health_result, self.repo_path, self.config)
-
-    def _repair_git_status(self, error: HealthCheckError) -> bool:
-        """Delegate to repair_git_status."""
-        return repair_git_status(error, self.repo_path)
-
-    def _repair_repository_integrity(self, error: HealthCheckError) -> bool:
-        """Delegate to repair_repository_integrity."""
-        return repair_repository_integrity(error)
-
-    def _repair_lock_availability(self, error: HealthCheckError) -> bool:
-        """Delegate to repair_lock_availability."""
-        return repair_lock_availability(error, self.repo_path)
 
     def _rerun_failed_checks(self, original_result: HealthCheckResult) -> HealthCheckResult:
         """Re-run checks without self-repair to verify repairs were successful."""

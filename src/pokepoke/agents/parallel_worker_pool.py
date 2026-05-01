@@ -11,7 +11,6 @@ import concurrent.futures
 import logging
 import threading
 import time
-from typing import Any
 
 from pokepoke.beads.beads_hierarchy import is_high_conflict_risk
 from pokepoke.types import WorkItemResult
@@ -296,46 +295,7 @@ class ParallelWorkerPool:
         """Number of futures currently tracked."""
         with self._lock:
             return len(self._futures)
-    @property
-    def active_ids(self) -> set[str]:
-        """Set of work-item IDs with a tracked future."""
-        with self._lock:
-            return {item.id for item in self._futures.values()}
 
-    def dispatch_item(self, item: BeadsWorkItem, run_logger: RunLogger,
-                      process_item_fn: Any, worker_name: str) -> None:
-        """Acquire semaphore and submit item to the pool."""
-        self._semaphore.acquire()
-        try:
-            fut = self._executor.submit(process_item_fn, item, run_logger, self._semaphore, worker_name)
-        except Exception:
-            self._semaphore.release()
-            raise
-        with self._lock:
-            self._futures[fut] = item
-    def collect_done(self, failed_claim_ids: set[str], total_requests: int,
-                     session_stats: SessionStats, run_logger: RunLogger,
-                     record_fn: RecordFn) -> tuple[int, bool, int, int]:
-        """Collect completed futures and record results."""
-        # Always pass future_start_times for health monitoring
-        # The collect_done_futures function will decide when to run checks
-        # based on the _AGENT_HEALTH_CHECK_INTERVAL
-        current_time = time.time()
-        should_check_health = (current_time - self._last_health_check) >= _AGENT_HEALTH_CHECK_INTERVAL
-
-        result = collect_done_futures(
-            self._futures, failed_claim_ids, total_requests,
-            session_stats, run_logger, record_fn, lock=self._lock,
-            future_start_times=self._future_start_times if should_check_health else None)
-
-        if should_check_health:
-            self._last_health_check = current_time
-
-        return result
-    def has_active_workers(self) -> bool:
-        """Return True if any futures are still pending or running."""
-        with self._lock:
-            return bool(self._futures)
     def shutdown(self, *, wait: bool = True, cancel_futures: bool = False) -> None:
         """Shut down the underlying ThreadPoolExecutor."""
         self._executor.shutdown(wait=wait, cancel_futures=cancel_futures)

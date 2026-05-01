@@ -170,14 +170,6 @@ def is_shutting_down() -> bool:
     return _shutdown_event.is_set()
 
 
-def wait_for_shutdown(timeout: float | None = None) -> bool:
-    """Block until shutdown is requested or timeout expires.
-
-    Returns True if shutdown was requested, False on timeout.
-    """
-    return _shutdown_event.wait(timeout=timeout)
-
-
 def reset() -> None:
     """Reset the shutdown state. Only for tests."""
     global _coordination_done

@@ -173,24 +173,6 @@ class WarmSessionPool:
         with self._lock:
             self._warming_in_progress.discard(label.lower())
 
-    def invalidate_label(self, label: str) -> int:
-        """Invalidate all sessions for a specific label.
-
-        Args:
-            label: The label to invalidate.
-
-        Returns:
-            Number of sessions invalidated.
-        """
-        with self._lock:
-            label_lower = label.lower()
-            sessions = self._sessions.pop(label_lower, [])
-            count = len(sessions)
-
-        if count > 0:
-            logger.info(f"🗑️  Invalidated {count} warm session(s) for label '{label}'")
-        return count
-
     def invalidate_all(self) -> int:
         """Invalidate all warm sessions (e.g., after a merge changes codebase).
 
@@ -205,32 +187,6 @@ class WarmSessionPool:
         if total > 0:
             logger.info(f"🗑️  Invalidated all {total} warm session(s)")
         return total
-
-    def invalidate_expired(self) -> int:
-        """Remove expired sessions from the pool.
-
-        Returns:
-            Number of sessions removed.
-        """
-        removed = 0
-        max_age = self._config.max_age_hours
-
-        with self._lock:
-            for label, sessions in list(self._sessions.items()):
-                expired = [s for s in sessions if s.is_expired(max_age)]
-                for session in expired:
-                    sessions.remove(session)
-                    removed += 1
-                    logger.debug(
-                        f"Removed expired warm session for '{label}': "
-                        f"{session.session_id} (age: {session.age_hours():.1f}h)"
-                    )
-                if not sessions:
-                    del self._sessions[label]
-
-        if removed > 0:
-            logger.info(f"🧹 Removed {removed} expired warm session(s)")
-        return removed
 
     def get_labels_needing_warmup(self) -> list[str]:
         """Get labels that are configured but don't have valid warm sessions.
@@ -318,10 +274,3 @@ def get_warm_session_pool() -> WarmSessionPool:
             _global_pool = WarmSessionPool(config.warm_sessions)
 
     return _global_pool
-
-
-def reset_warm_session_pool() -> None:
-    """Reset the global pool (useful for testing)."""
-    global _global_pool
-    with _pool_lock:
-        _global_pool = None

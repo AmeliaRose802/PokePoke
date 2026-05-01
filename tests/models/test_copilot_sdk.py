@@ -10,7 +10,6 @@ from pokepoke.models.copilot_sdk import (
     _build_copilot_result,
     _build_token_usage_callback,
     _fail_result,
-    _try_get_warm_session_id,
     _try_get_warm_session_id_async,
     build_prompt_from_work_item,
     invoke_copilot_sdk_sync,
@@ -117,7 +116,6 @@ class TestBuildPromptFromWorkItem:
         call_args = mock_service.load_and_render.call_args
         assert call_args[0][0] == "beads-item"
 
-
 class TestInvokeCopilotSDKSync:
     """Tests for invoke_copilot_sdk_sync function signature."""
 
@@ -176,7 +174,6 @@ class TestInvokeCopilotSDKSync:
         assert result.work_item_id == sample_work_item.id
         mock_asyncio_run.assert_called_once()
 
-
 class TestCopilotClientNone:
     """Test behavior when CopilotClient SDK is not installed."""
 
@@ -188,7 +185,6 @@ class TestCopilotClientNone:
                 work_item=sample_work_item,
                 prompt="test prompt",
             )
-
 
 @pytest.mark.asyncio
 class TestInvokeCopilotSDKAsync:
@@ -1400,7 +1396,6 @@ class TestInvokeCopilotSDKAsync:
         # Should still complete normally despite get_state errors
         assert result.success
 
-
 @pytest.mark.asyncio
 class TestAPIStatsIntegration:
     """Tests for API duration stats integration."""
@@ -1418,7 +1413,6 @@ class TestAPIStatsIntegration:
         assert result.api_duration == 5.0
         assert result.wall_duration == 10.0
 
-
 class TestFailResult:
     """Tests for _fail_result helper."""
 
@@ -1433,7 +1427,6 @@ class TestFailResult:
         result = _fail_result("x", "")
         assert result.success is False
         assert result.error == ""
-
 
 class TestBuildTokenUsageCallback:
     """Tests for _build_token_usage_callback."""
@@ -1458,7 +1451,6 @@ class TestBuildTokenUsageCallback:
         with patch('pokepoke.desktop.thread_output_router._thread_output', mock_thread):
             callback(100, 50)
         mock_ui.ui.push_agent_tokens.assert_not_called()
-
 
 class TestBuildCopilotResult:
     """Tests for _build_copilot_result."""
@@ -1557,7 +1549,6 @@ class TestBuildCopilotResult:
         )
         assert result.work_agent_outcome is None
 
-
 @pytest.mark.asyncio
 class TestRateLimitFallback:
     """Tests for RateLimitError fallback to FALLBACK_MODEL."""
@@ -1568,7 +1559,7 @@ class TestRateLimitFallback:
             yield
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
-    async def test_rate_limit_triggers_fallback_to_fallback_model(
+    async def test_rate_limit_triggers_fallback_to_fallback_model(  # noqa: PLR0915
         self, mock_client_class, sample_work_item
     ):
         """RateLimitError on first attempt retries with FALLBACK_MODEL."""
@@ -1958,7 +1949,6 @@ class TestRateLimitFallback:
         # Exactly 2 attempts: original + one fallback (no infinite loop)
         assert attempt_count == 2
 
-
 @pytest.mark.asyncio
 class TestAwaitCompletionAbortOSError:
     """Tests that _await_completion handles OSError during session.abort() gracefully."""
@@ -2242,54 +2232,8 @@ class TestAwaitCompletionAbortOSError:
         assert result == "tool_timeout"
         mock_session.abort.assert_called_once()
 
-
 class TestWarmSessionIntegration:
     """Tests for warm session lookup and on-demand creation."""
-
-    def test_try_get_warm_session_id_sync_fallback(self):
-        """Test sync warm session lookup returns existing session."""
-        work_item = BeadsWorkItem(
-            id="test-1",
-            title="Test item",
-            description="Test",
-            status="open",
-            priority=1,
-            issue_type="task",
-            labels=["orchestrator"]
-        )
-
-        with patch('pokepoke.models.warm_session_pool.get_warm_session_pool') as mock_pool_getter:
-            mock_pool = MagicMock()
-            mock_pool.enabled = True
-            mock_warm_session = MagicMock()
-            mock_warm_session.session_id = "warm-orchestrator-123"
-            mock_pool.get_warm_session.return_value = mock_warm_session
-            mock_pool_getter.return_value = mock_pool
-
-            result = _try_get_warm_session_id(work_item, None, False, True)
-
-            assert result == "warm-orchestrator-123"
-            mock_pool.get_warm_session.assert_called_once_with(["orchestrator"])
-
-    def test_try_get_warm_session_id_disabled(self):
-        """Test warm session lookup returns None when disabled."""
-        work_item = BeadsWorkItem(
-            id="test-1", title="Test", description="Test", status="open",
-            priority=1, issue_type="task", labels=["orchestrator"]
-        )
-
-        result = _try_get_warm_session_id(work_item, None, False, False)
-        assert result is None
-
-    def test_try_get_warm_session_id_with_existing_session_id(self):
-        """Test warm session lookup skips when session_id provided."""
-        work_item = BeadsWorkItem(
-            id="test-1", title="Test", description="Test", status="open",
-            priority=1, issue_type="task", labels=["orchestrator"]
-        )
-
-        result = _try_get_warm_session_id(work_item, "existing-session", False, True)
-        assert result == "existing-session"
 
     @pytest.mark.asyncio
     async def test_try_get_warm_session_id_async_on_demand_creation(self):
@@ -2375,7 +2319,6 @@ class TestWarmSessionIntegration:
 
             assert result is None  # Should return None on error
 
-
 class TestBuildAddDirArgs:
     """Tests for _build_add_dir_args function."""
 
@@ -2399,7 +2342,6 @@ class TestBuildAddDirArgs:
         result = _build_add_dir_args(str(tmp_path))
 
         assert result == []
-
 
 class TestCreateSdkClientAddParentDir:
     """Tests for _create_sdk_client add_parent_dir parameter."""

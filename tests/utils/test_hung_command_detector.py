@@ -1,7 +1,5 @@
 """Tests for hung command detection."""
 
-
-
 from pokepoke.utils.hung_command_detector import HungCommandDetector, ShellReadState
 
 
@@ -16,7 +14,6 @@ class TestShellReadState:
         assert state.total_wait_seconds == 0.0
         assert state.last_output_hash is None
         assert state.consecutive_empty_reads == 0
-
 
 class TestHungCommandDetector:
     """Tests for HungCommandDetector."""
@@ -201,23 +198,6 @@ class TestHungCommandDetector:
         # Should not raise
         detector.record_stop_powershell("nonexistent-shell")
 
-    def test_clear_all(self):
-        """Test that clear_all removes all tracked states."""
-        detector = HungCommandDetector()
-        detector.record_powershell_start("shell-1")
-        detector.record_powershell_start("shell-2")
-        detector.record_powershell_start("shell-3")
-
-        assert detector.get_state("shell-1") is not None
-        assert detector.get_state("shell-2") is not None
-        assert detector.get_state("shell-3") is not None
-
-        detector.clear_all()
-
-        assert detector.get_state("shell-1") is None
-        assert detector.get_state("shell-2") is None
-        assert detector.get_state("shell-3") is None
-
     def test_corrective_message_contains_shell_id(self):
         """Test that corrective message includes the shell ID."""
         detector = HungCommandDetector(max_retries=1)
@@ -303,7 +283,6 @@ class TestHungCommandDetector:
         # Fourth read - same output, NOW hung
         is_hung, _ = detector.record_read_powershell("shell-1", 30, "same output")
         assert is_hung
-
 
 class TestHungCommandDetectorIntegration:
     """Integration-style tests for hung command scenarios."""

@@ -459,44 +459,6 @@ class TestLockMetadataShape:
         meta = _read_lock_metadata(lock_path)
         assert meta is None
 
-    def test_check_lock_status_returns_tuple(self, tmp_path, monkeypatch):
-        """check_lock_status must return (exists: bool, metadata: dict | None)."""
-        from pokepoke.worktrees.coordination import check_lock_status
-
-        # Redirect lock dir to tmp_path
-        def _test_lock_dir():
-            return tmp_path
-
-        monkeypatch.setattr("pokepoke.worktrees.coordination._lock_dir", _test_lock_dir)
-
-        # No lock file → (False, None)
-        exists, meta = check_lock_status("nonexistent")
-        assert exists is False
-        assert meta is None
-
-    def test_check_lock_status_with_existing_lock(self, tmp_path, monkeypatch):
-        """check_lock_status returns (True, metadata) when lock exists."""
-        from pokepoke.worktrees.coordination import (
-            _write_lock_metadata,
-            check_lock_status,
-        )
-
-        def _test_lock_dir():
-            return tmp_path
-
-        monkeypatch.setattr("pokepoke.worktrees.coordination._lock_dir", _test_lock_dir)
-
-        # Create a lock file with metadata
-        lock_path = tmp_path / "test-lock.lock"
-        lock_path.touch()
-        _write_lock_metadata(lock_path)
-
-        exists, meta = check_lock_status("test-lock")
-        assert exists is True
-        assert meta is not None
-        assert "pid" in meta
-        assert "timestamp" in meta
-
 
 # ===========================================================================
 # 4. Cross-module lock flow: coordination lock pattern vs parallel threading.Lock

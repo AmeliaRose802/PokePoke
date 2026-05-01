@@ -41,7 +41,6 @@ def reset_copilot_cache():
     memory_utils_mod._rss_cache = None
     get_active_pid_registry().clear()
 
-
 class TestActivePidRegistry:
     """Tests for ActivePidRegistry."""
 
@@ -57,19 +56,6 @@ class TestActivePidRegistry:
         registry = ActivePidRegistry()
         registry.deregister(999)  # Should not raise
         assert registry.active_pids == frozenset()
-
-    def test_tracked_context_manager(self) -> None:
-        registry = ActivePidRegistry()
-        with registry.tracked(42):
-            assert 42 in registry.active_pids
-        assert 42 not in registry.active_pids
-
-    def test_tracked_context_manager_deregisters_on_exception(self) -> None:
-        registry = ActivePidRegistry()
-        with pytest.raises(ValueError), registry.tracked(42):
-            assert 42 in registry.active_pids
-            raise ValueError("boom")
-        assert 42 not in registry.active_pids
 
     def test_clear(self) -> None:
         registry = ActivePidRegistry()
@@ -108,7 +94,6 @@ class TestActivePidRegistry:
         r1 = get_active_pid_registry()
         r2 = get_active_pid_registry()
         assert r1 is r2
-
 
 class TestCheckCopilotProcesses:
     """Tests for check_copilot_processes."""
@@ -203,7 +188,6 @@ class TestCheckCopilotProcesses:
         assert check_copilot_processes() == 1
         assert mock_run.call_count == 2
 
-
 class TestWaitForProcessCleanup:
     """Tests for wait_for_process_cleanup."""
 
@@ -227,7 +211,6 @@ class TestWaitForProcessCleanup:
         mock_check.side_effect = [1, 1, 0]
         wait_for_process_cleanup(max_wait=1.0)
         assert mock_check.call_count == 3
-
 
 class TestGetAvailableMemoryMb:
     """Tests for get_available_memory_mb."""
@@ -258,7 +241,6 @@ class TestGetAvailableMemoryMb:
         memory_utils_mod._memory_cache = (time.time(), 8000)
         assert get_available_memory_mb() == 8000
 
-
 class TestGetProcessRssMb:
     """Tests for get_process_rss_mb."""
 
@@ -281,7 +263,6 @@ class TestGetProcessRssMb:
         with patch('pokepoke.utils.memory_utils.psutil') as mock_psutil:
             mock_psutil.Process.side_effect = RuntimeError("fail")
             assert get_process_rss_mb() == 0
-
 
 class TestIsMemoryPressure:
     """Tests for is_memory_pressure."""
@@ -310,7 +291,6 @@ class TestIsMemoryPressure:
         mock_mem.return_value = 0
         assert is_memory_pressure() is True
 
-
 class TestIsMemoryCritical:
     """Tests for is_memory_critical."""
 
@@ -337,7 +317,6 @@ class TestIsMemoryCritical:
         mock_os.name = 'nt'
         mock_mem.return_value = 0
         assert is_memory_critical() is True
-
 
 class TestKillOrphanedCopilotProcesses:
     """Tests for kill_orphaned_copilot_processes (PID-set based)."""
@@ -464,7 +443,6 @@ class TestKillOrphanedCopilotProcesses:
         killed = kill_orphaned_copilot_processes()
         assert killed == 2
 
-
 class TestApplyMemoryBackpressure:
     """Tests for apply_memory_backpressure."""
 
@@ -507,7 +485,6 @@ class TestApplyMemoryBackpressure:
         assert slots == 0  # Fails closed: critical on Windows
         assert avail == 0
 
-
 class TestIsProcessRunning:
     """Tests for is_process_running."""
 
@@ -533,7 +510,6 @@ class TestIsProcessRunning:
         mock_os.name = 'nt'
         mock_run.side_effect = subprocess.TimeoutExpired(cmd='tasklist', timeout=10)
         assert is_process_running(1234) is False
-
 
 class TestShutdownCopilotClient:
     """Tests for shutdown_copilot_client."""
@@ -583,7 +559,6 @@ class TestShutdownCopilotClient:
         client.stop = AsyncMock(side_effect=RuntimeError("boom"))
         with patch('pokepoke.utils.process_utils.asyncio.sleep', new_callable=AsyncMock):
             await shutdown_copilot_client(client)
-
 
 class TestCacheLockThreadSafety:
     """Tests for thread-safe cache access via _cache_lock."""
@@ -710,7 +685,6 @@ class TestCacheLockThreadSafety:
         assert hasattr(process_utils_mod, '_cache_lock')
         assert isinstance(process_utils_mod._cache_lock, type(threading.Lock()))
 
-
 class TestLogProcessTreeSnapshot:
     """Tests for log_process_tree_snapshot (now in process_snapshot module)."""
 
@@ -806,7 +780,6 @@ class TestLogProcessTreeSnapshot:
         mock_run.return_value = MagicMock(stdout=wmic_csv)
         log_process_tree_snapshot('test_tool', 'args', 60.0)
 
-
 class TestIsProcessRunningUnix:
     """Tests for is_process_running on Unix/Linux."""
 
@@ -822,7 +795,6 @@ class TestIsProcessRunningUnix:
         mock_os.name = 'posix'
         mock_os.kill = MagicMock(side_effect=OSError("No such process"))
         assert is_process_running(99999) is False
-
 
 class TestShutdownCopilotClientAdvanced:
     """Additional tests for shutdown_copilot_client edge cases."""
@@ -905,7 +877,6 @@ class TestShutdownCopilotClientAdvanced:
             mock_wait_for.side_effect = [TimeoutError(), RuntimeError("boom")]
             await shutdown_copilot_client(client)
 
-
 class TestGetAvailableMemoryMbWindows:
     """Tests for get_available_memory_mb Windows ctypes path."""
 
@@ -926,7 +897,6 @@ class TestGetAvailableMemoryMbWindows:
         result = get_available_memory_mb()
         # Should return 0 on exception
         assert result == 0
-
 
 class TestExtractClientPid:
     """Tests for extract_client_pid helper."""
@@ -953,7 +923,6 @@ class TestExtractClientPid:
         client = MagicMock()
         type(client)._process = property(lambda self: (_ for _ in ()).throw(RuntimeError("boom")))
         assert extract_client_pid(client) is None
-
 
 class TestKillProcessTree:
     """Tests for kill_process_tree."""
@@ -1125,7 +1094,6 @@ class TestKillProcessTree:
         result = kill_process_tree(5678)
 
         assert result is False
-
 
 class TestShutdownKillsProcessTree:
     """Tests that shutdown_copilot_client kills the full process tree."""

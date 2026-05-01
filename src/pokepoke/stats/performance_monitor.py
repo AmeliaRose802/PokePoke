@@ -270,18 +270,6 @@ class PerformanceMonitor:
                 del self._alerts[: len(self._alerts) // 2]
             self._total_alerts += 1
 
-    def get_alerts(self, *, since: float | None = None) -> list[PerformanceAlert]:
-        """Return recorded alerts, optionally filtered by timestamp."""
-        with self._lock:
-            if since is None:
-                return list(self._alerts)
-            return [a for a in self._alerts if a.timestamp >= since]
-
-    def clear_alerts(self) -> None:
-        """Reset all recorded alerts."""
-        with self._lock:
-            self._alerts.clear()
-
     # ── Snapshot for reporting ───────────────────────────────────
 
     def snapshot(self) -> dict[str, Any]:
@@ -317,15 +305,6 @@ class PerformanceMonitor:
                 ],
             }
 
-    def reset(self) -> None:
-        """Clear all state (useful for testing)."""
-        with self._lock:
-            self._alerts.clear()
-            self._total_checks = 0
-            self._total_alerts = 0
-            self._succeeded = 0
-            self._failed = 0
-            self._rss_samples.clear()
 
 
 # ── Module-level singleton ───────────────────────────────────────
@@ -358,13 +337,6 @@ def _create_from_config() -> PerformanceMonitor:
         min_success_rate=cfg.min_success_rate,
         enabled=cfg.enabled,
     )
-
-
-def reset_performance_monitor() -> None:
-    """Reset the singleton (useful for testing)."""
-    global _performance_monitor
-    with _singleton_lock:
-        _performance_monitor = None
 
 
 def run_iteration_checks(iteration_seconds: float, success: bool) -> None:

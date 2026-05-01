@@ -13,8 +13,6 @@ from pokepoke.git.merge_queue import (
     MergeStatus,
     _MergeRequest,
     _rebase_worktree,
-    get_merge_queue,
-    reset_merge_queue,
 )
 from pokepoke.types import BeadsWorkItem
 
@@ -34,16 +32,13 @@ def _make_item(
         labels=labels,
     )
 
-
 class TestMergeStatus:
     """Tests for MergeStatus enum."""
 
     def test_status_values(self):
         assert MergeStatus.SUCCESS.value == "success"
-        assert MergeStatus.CONFLICT.value == "conflict"
         assert MergeStatus.FAILED.value == "failed"
         assert MergeStatus.SHUTDOWN.value == "shutdown"
-
 
 class TestMergeResult:
     """Tests for MergeResult dataclass."""
@@ -59,7 +54,6 @@ class TestMergeResult:
         assert result.status == MergeStatus.FAILED
         assert result.item_id == "Y"
         assert result.message == "conflict"
-
 
 class TestMergeQueue:
     """Tests for MergeQueue class."""
@@ -100,9 +94,10 @@ class TestMergeQueue:
         result = future.result(timeout=5)
         assert result.status == MergeStatus.SUCCESS
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
-    def test_submit_and_merge_success(self, mock_rebase, mock_shutdown):
+    def test_submit_and_merge_success(self, mock_rebase, mock_shutdown, mock_branch):
         with patch(
             "pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", return_value=True
         ):
@@ -115,9 +110,10 @@ class TestMergeQueue:
         assert result.item_id == "TEST-001"
         mock_rebase.assert_called_once()
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
-    def test_submit_merge_failure(self, mock_rebase, mock_shutdown):
+    def test_submit_merge_failure(self, mock_rebase, mock_shutdown, mock_branch):
         with patch(
             "pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", return_value=False
         ):
@@ -129,9 +125,10 @@ class TestMergeQueue:
         assert result.status == MergeStatus.FAILED
         assert result.item_id == "TEST-001"
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
-    def test_submit_merge_exception(self, mock_rebase, mock_shutdown):
+    def test_submit_merge_exception(self, mock_rebase, mock_shutdown, mock_branch):
         with patch(
             "pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev",
             side_effect=RuntimeError("git exploded"),
@@ -144,10 +141,11 @@ class TestMergeQueue:
         assert result.status == MergeStatus.FAILED
         assert "git exploded" in result.message
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=True)
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=False)
-    def test_rebase_failure_clean_worktree_attempts_merge(self, mock_rebase, mock_shutdown, mock_clean):
+    def test_rebase_failure_clean_worktree_attempts_merge(self, mock_rebase, mock_shutdown, mock_clean, mock_branch):
         """If rebase fails but worktree is clean (abort succeeded), merge proceeds."""
         with patch(
             "pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev", return_value=True
@@ -159,12 +157,13 @@ class TestMergeQueue:
 
         assert result.status == MergeStatus.SUCCESS
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.worktrees.worktree_cleanup.add_uncleaned_worktree")
     @patch("pokepoke.git.merge_queue.is_worktree_clean", return_value=False)
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=False)
     def test_rebase_failure_dirty_worktree_skips_merge(
-        self, mock_rebase, mock_shutdown, mock_clean, mock_add_uncleaned
+        self, mock_rebase, mock_shutdown, mock_clean, mock_add_uncleaned, mock_branch
     ):
         """If rebase fails and worktree is dirty, skip merge and track worktree."""
         with patch(
@@ -185,11 +184,12 @@ class TestMergeQueue:
             reason="Rebase failed and abort left worktree in dirty state",
         )
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.time.sleep")
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
     def test_high_conflict_triggers_cautious_strategy(
-        self, mock_rebase, mock_shutdown, mock_sleep
+        self, mock_rebase, mock_shutdown, mock_sleep, mock_branch
     ):
         """High-conflict items should apply slower, double-rebase strategy."""
         with patch(
@@ -204,9 +204,10 @@ class TestMergeQueue:
         assert mock_rebase.call_count == 2
         mock_sleep.assert_called_once()
 
+    @patch("pokepoke.git.merge_queue.get_default_branch", return_value="main")
     @patch("pokepoke.git.merge_queue.is_shutting_down", return_value=False)
     @patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True)
-    def test_serialized_merges(self, mock_rebase, mock_shutdown):
+    def test_serialized_merges(self, mock_rebase, mock_shutdown, mock_branch):
         """Verify merges are processed one at a time in order."""
         merge_order: list[str] = []
         merge_lock = threading.Lock()
@@ -332,7 +333,6 @@ class TestMergeQueue:
         assert "Beads read failure" in result.message or "Unhandled exception" in result.message
         assert self.queue.is_running  # Worker still alive
 
-
 class TestRebaseWorktree:
     """Tests for _rebase_worktree helper."""
 
@@ -404,29 +404,3 @@ class TestRebaseWorktree:
         assert fetch_call[0][0] == ["git", "fetch", "origin", "develop"]
         rebase_call = mock_run.call_args_list[1]
         assert rebase_call[0][0] == ["git", "rebase", "origin/develop"]
-
-
-class TestSingleton:
-    """Tests for module-level singleton management."""
-
-    def teardown_method(self):
-        reset_merge_queue()
-
-    def test_get_merge_queue_returns_same_instance(self):
-        q1 = get_merge_queue()
-        q2 = get_merge_queue()
-        assert q1 is q2
-
-    def test_reset_creates_new_instance(self):
-        q1 = get_merge_queue()
-        reset_merge_queue()
-        q2 = get_merge_queue()
-        assert q1 is not q2
-
-    def test_reset_shuts_down_existing(self):
-        q = get_merge_queue()
-        q.start()
-        assert q.is_running
-        reset_merge_queue()
-        # After reset, the old queue should be shut down
-        assert not q.is_running

@@ -21,10 +21,8 @@ def _make_pattern(**kwargs) -> FailurePattern:
     defaults.update(kwargs)
     return FailurePattern(**defaults)
 
-
 def _completed(stdout: str = "", stderr: str = "", rc: int = 0):
     return subprocess.CompletedProcess(args=[], returncode=rc, stdout=stdout, stderr=stderr)
-
 
 class TestBeadsIssueCreator:
     """Tests for BeadsIssueCreator."""
@@ -254,47 +252,3 @@ class TestBeadsIssueCreator:
         mock_bd.side_effect = Exception("connection lost")
         creator = BeadsIssueCreator()
         assert creator._create_beads_item(_make_pattern()) is None
-
-    # ── get_created_items_info ──
-
-    @patch("pokepoke.agents.post_mortem_issue_creator._run_bd")
-    def test_get_created_items_info_empty(self, mock_bd):
-        creator = BeadsIssueCreator()
-        assert creator.get_created_items_info([]) == []
-        mock_bd.assert_not_called()
-
-    @patch("pokepoke.agents.post_mortem_issue_creator._run_bd")
-    def test_get_created_items_info_success(self, mock_bd):
-        import json
-        mock_bd.return_value = _completed(stdout=json.dumps({"id": "1", "title": "t"}))
-        creator = BeadsIssueCreator()
-        result = creator.get_created_items_info(["1"])
-        assert len(result) == 1
-        assert result[0]["id"] == "1"
-
-    @patch("pokepoke.agents.post_mortem_issue_creator._run_bd")
-    def test_get_created_items_info_filters_notes(self, mock_bd):
-        import json
-        output = "Note: synced\n" + json.dumps({"id": "1"})
-        mock_bd.return_value = _completed(stdout=output)
-        creator = BeadsIssueCreator()
-        result = creator.get_created_items_info(["1"])
-        assert len(result) == 1
-
-    @patch("pokepoke.agents.post_mortem_issue_creator._run_bd")
-    def test_get_created_items_info_bad_json(self, mock_bd):
-        mock_bd.return_value = _completed(stdout="not json")
-        creator = BeadsIssueCreator()
-        assert creator.get_created_items_info(["1"]) == []
-
-    @patch("pokepoke.agents.post_mortem_issue_creator._run_bd")
-    def test_get_created_items_info_nonzero_rc(self, mock_bd):
-        mock_bd.return_value = _completed(rc=1)
-        creator = BeadsIssueCreator()
-        assert creator.get_created_items_info(["1"]) == []
-
-    @patch("pokepoke.agents.post_mortem_issue_creator._run_bd")
-    def test_get_created_items_info_exception(self, mock_bd):
-        mock_bd.side_effect = Exception("fail")
-        creator = BeadsIssueCreator()
-        assert creator.get_created_items_info(["1"]) == []

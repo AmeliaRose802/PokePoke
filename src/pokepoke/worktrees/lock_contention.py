@@ -79,11 +79,6 @@ class LockContentionTracker:
             result: dict[str, Any] = json.loads(json.dumps(self._stats))
             return result
 
-    def reset(self) -> None:
-        """Clear all recorded stats (useful for testing)."""
-        with self._mu:
-            self._stats.clear()
-
 
 # Module-level singleton used by coordination.acquire_lock.
 _contention_tracker = LockContentionTracker()

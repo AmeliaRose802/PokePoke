@@ -61,12 +61,6 @@ class TestLockContentionTracker:
         snap["copy"]["acquired"] = 999
         assert tracker.snapshot()["copy"]["acquired"] == 1
 
-    def test_reset_clears_stats(self) -> None:
-        tracker = LockContentionTracker()
-        tracker.record_acquisition("r", 0.1)
-        tracker.reset()
-        assert tracker.snapshot() == {}
-
     def test_multiple_lock_names_independent(self) -> None:
         tracker = LockContentionTracker()
         tracker.record_acquisition("a", 1.0)
@@ -91,17 +85,14 @@ class TestLockContentionTracker:
         for b in _HISTOGRAM_BUCKETS:
             assert snap["full"]["histogram"][str(b)] >= 1
 
-
 class TestGetLockContentionStats:
     """Tests for the module-level get_lock_contention_stats function."""
 
     def test_returns_dict(self) -> None:
-        _contention_tracker.reset()
         result = get_lock_contention_stats()
         assert isinstance(result, dict)
 
     def test_reflects_global_tracker(self) -> None:
-        _contention_tracker.reset()
         _contention_tracker.record_acquisition("global-test", 0.42)
         result = get_lock_contention_stats()
         assert "global-test" in result

@@ -1,18 +1,11 @@
 """Performance timing infrastructure for PokePoke operations.
 
-Provides a centralized, thread-safe timing registry with a decorator and
+Provides a centralized, thread-safe timing registry with a
 context manager for recording wall-clock durations of operations.
 
 Usage::
 
-    from pokepoke.stats.perf_timing import timed_operation, timed_block, get_registry
-
-
-logger = logging.getLogger(__name__)
-
-    @timed_operation("worktree.create")
-    def create_worktree(...):
-        ...
+    from pokepoke.stats.perf_timing import timed_block, get_registry
 
     with timed_block("merge_queue.rebase"):
         do_rebase()
@@ -21,15 +14,12 @@ logger = logging.getLogger(__name__)
     logger.info(registry.percentile("worktree.create", 95))
 """
 
-import functools
 import threading
 import time
 from collections import defaultdict
-from collections.abc import Callable, Iterator
+from collections.abc import Iterator
 from contextlib import contextmanager
-from typing import Any, TypeVar, overload
-
-_F = TypeVar("_F", bound=Callable[..., Any])
+from typing import Any
 
 
 class OperationTimingRegistry:
@@ -161,46 +151,6 @@ def get_registry() -> OperationTimingRegistry:
         if _global_registry is None:
             _global_registry = OperationTimingRegistry()
         return _global_registry
-
-
-def reset_registry() -> None:
-    """Replace the global registry with a fresh instance. For tests only."""
-    global _global_registry
-    with _registry_lock:
-        _global_registry = OperationTimingRegistry()
-
-
-# ── Decorator ────────────────────────────────────────────────────────
-
-@overload
-def timed_operation(name: str) -> Callable[[_F], _F]: ...
-
-@overload
-def timed_operation(name: str, registry: OperationTimingRegistry) -> Callable[[_F], _F]: ...
-
-def timed_operation(
-    name: str, registry: OperationTimingRegistry | None = None
-) -> Callable[[_F], _F]:
-    """Decorator that records wall-clock duration of the wrapped function.
-
-    Usage::
-
-        @timed_operation("worktree.create")
-        def create_worktree(...):
-            ...
-    """
-    def decorator(func: _F) -> _F:
-        @functools.wraps(func)
-        def wrapper(*args: Any, **kwargs: Any) -> Any:
-            reg = registry or get_registry()
-            start = time.monotonic()
-            try:
-                return func(*args, **kwargs)
-            finally:
-                elapsed = time.monotonic() - start
-                reg.record(name, elapsed)
-        return wrapper  # type: ignore[return-value]
-    return decorator
 
 
 # ── Context manager ──────────────────────────────────────────────────

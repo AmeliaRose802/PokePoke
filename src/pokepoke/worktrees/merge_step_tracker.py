@@ -195,17 +195,6 @@ class MergeStepTracker:
             if log:
                 step.logs.append(log)
 
-    def log_to_step(self, step_id: str, message: str) -> None:
-        """Append a log line to a step without changing its status."""
-        with self._lock:
-            run = self._current_run
-            if run is None:
-                return
-            step = run.steps.get(step_id)
-            if step is None:
-                return
-            step.logs.append(message)
-
     def finish_run(self, outcome: str) -> None:
         """Finalize the current run with an outcome."""
         with self._lock:

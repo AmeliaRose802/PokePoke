@@ -217,33 +217,6 @@ async def _try_get_warm_session_id_async(
     return session_id
 
 
-def _try_get_warm_session_id(
-    work_item: BeadsWorkItem,
-    session_id: str | None,
-    is_resume: bool,
-    use_warm_session: bool,
-) -> str | None:
-    """Synchronous wrapper for warm session lookup (existing sessions only).
-
-    This is a fallback for sync contexts that can't do async warming.
-    """
-    if not use_warm_session or session_id is not None or is_resume or work_item.is_ephemeral:
-        return session_id
-
-    try:
-        from pokepoke.models.warm_session_pool import get_warm_session_pool
-        pool = get_warm_session_pool()
-        if pool.enabled and work_item.labels:
-            warm_session = pool.get_warm_session(work_item.labels)
-            if warm_session:
-                logger.info(f"[SDK] Using warm session for labels {work_item.labels}: {warm_session.session_id}")
-                return warm_session.session_id
-    except Exception as e:
-        logger.debug(f"Warm session lookup failed (will use cold start): {e}")
-
-    return session_id
-
-
 async def invoke_copilot_sdk(  # noqa: C901
     work_item: BeadsWorkItem,
     prompt: str | None = None,

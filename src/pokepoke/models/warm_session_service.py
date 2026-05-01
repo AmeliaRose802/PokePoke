@@ -5,7 +5,6 @@ and refresh them when needed.
 """
 from __future__ import annotations
 
-import asyncio
 import logging
 import time
 from typing import TYPE_CHECKING
@@ -188,15 +187,6 @@ async def warm_up_pool(
     return results
 
 
-def warm_up_pool_sync(
-    *,
-    cwd: str | None = None,
-    timeout_per_label: float = 120.0,
-) -> dict[str, WarmSession | None]:
-    """Synchronous wrapper for warm_up_pool."""
-    return asyncio.run(warm_up_pool(cwd=cwd, timeout_per_label=timeout_per_label))
-
-
 def refresh_pool_after_merge(*, cwd: str | None = None) -> None:
     """Refresh warm sessions after a merge changes the codebase.
 
@@ -222,8 +212,3 @@ def refresh_pool_after_merge(*, cwd: str | None = None) -> None:
             f"🔄 Invalidated {invalidated} warm session(s) after merge; "
             f"will re-warm on next startup or dispatch"
         )
-
-
-def get_warm_session_stats() -> dict[str, int | dict[str, int]]:
-    """Get statistics about the warm session pool."""
-    return get_warm_session_pool().get_stats()

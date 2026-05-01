@@ -15,55 +15,13 @@ from pokepoke.desktop.desktop_api_ext import (
     _build_label_error_result,
     _update_current_labels,
 )
-from pokepoke.desktop.desktop_api_ext import (
-    _discover_log_roots as _real_discover_log_roots,
-)
 from pokepoke.desktop.desktop_api_utils import coerce_process_output as _coerce_process_output
 
 
 @pytest.fixture(autouse=True)
 def _isolate_desktop_api(monkeypatch):
     """Prevent DesktopAPI from loading real historical agents or calling git."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     monkeypatch.setattr("pokepoke.desktop.desktop_api.get_repository_name", lambda: "test-repo")
-
-
-# ── _discover_log_roots ──────────────────────────────────────────────────
-
-
-def test_discover_log_roots_with_env_var(tmp_path, monkeypatch) -> None:
-    logs_dir = tmp_path / "custom_logs"
-    logs_dir.mkdir()
-    monkeypatch.setenv("POKEPOKE_LOGS_DIR", str(logs_dir))
-    monkeypatch.setattr("pokepoke.config._find_repo_root", lambda: tmp_path)
-    roots = _real_discover_log_roots()
-    assert logs_dir.resolve() in roots
-
-
-def test_discover_log_roots_without_env_var(tmp_path, monkeypatch) -> None:
-    monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
-    repo_logs = tmp_path / ".pokepoke" / "logs"
-    repo_logs.mkdir(parents=True)
-    monkeypatch.setattr("pokepoke.config._find_repo_root", lambda: tmp_path)
-    roots = _real_discover_log_roots()
-    assert repo_logs.resolve() in roots
-
-
-def test_discover_log_roots_find_repo_root_fails(tmp_path, monkeypatch) -> None:
-    monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
-    monkeypatch.setattr("pokepoke.config._find_repo_root", lambda: (_ for _ in ()).throw(RuntimeError("no repo")))
-    roots = _real_discover_log_roots()
-    assert isinstance(roots, list)
-
-
-def test_discover_log_roots_deduplicates(tmp_path, monkeypatch) -> None:
-    """Env dir same as repo candidate should not appear twice."""
-    logs_dir = tmp_path / ".pokepoke" / "logs"
-    logs_dir.mkdir(parents=True)
-    monkeypatch.setenv("POKEPOKE_LOGS_DIR", str(logs_dir))
-    monkeypatch.setattr("pokepoke.config._find_repo_root", lambda: tmp_path)
-    roots = _real_discover_log_roots()
-    assert roots.count(logs_dir.resolve()) == 1
 
 
 # ── _coerce_process_output ───────────────────────────────────────────────

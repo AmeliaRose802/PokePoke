@@ -8,10 +8,7 @@ import pytest
 from pokepoke.stats.perf_timing import (
     OperationTimingRegistry,
     _percentile,
-    get_registry,
-    reset_registry,
     timed_block,
-    timed_operation,
 )
 
 
@@ -43,7 +40,6 @@ class TestPercentile:
     def test_empty_raises(self):
         with pytest.raises(ValueError, match="empty"):
             _percentile([], 50)
-
 
 class TestOperationTimingRegistry:
     """Tests for OperationTimingRegistry."""
@@ -196,68 +192,6 @@ class TestOperationTimingRegistry:
         for i in range(8):
             assert reg.count(f"op{i}") == 100
 
-
-class TestTimedOperation:
-    """Tests for the @timed_operation decorator."""
-
-    def test_records_duration(self):
-        reg = OperationTimingRegistry()
-
-        @timed_operation("test.op", registry=reg)
-        def slow_fn():
-            time.sleep(0.05)
-            return 42
-
-        result = slow_fn()
-        assert result == 42
-        assert reg.count("test.op") == 1
-        duration = reg.snapshot("test.op")[0]
-        assert duration >= 0.04  # allow some timing slack
-
-    def test_preserves_exceptions(self):
-        reg = OperationTimingRegistry()
-
-        @timed_operation("test.fail", registry=reg)
-        def failing_fn():
-            raise ValueError("boom")
-
-        with pytest.raises(ValueError, match="boom"):
-            failing_fn()
-        # Duration still recorded even on exception
-        assert reg.count("test.fail") == 1
-
-    def test_preserves_function_metadata(self):
-        reg = OperationTimingRegistry()
-
-        @timed_operation("test.meta", registry=reg)
-        def my_function():
-            """My docstring."""
-
-        assert my_function.__name__ == "my_function"
-        assert my_function.__doc__ == "My docstring."
-
-    def test_uses_global_registry_by_default(self):
-        reset_registry()
-        global_reg = get_registry()
-
-        @timed_operation("test.global")
-        def fn():
-            return 1
-
-        fn()
-        assert global_reg.count("test.global") == 1
-
-    def test_with_args_and_kwargs(self):
-        reg = OperationTimingRegistry()
-
-        @timed_operation("test.args", registry=reg)
-        def add(a, b, extra=0):
-            return a + b + extra
-
-        assert add(1, 2, extra=3) == 6
-        assert reg.count("test.args") == 1
-
-
 class TestTimedBlock:
     """Tests for the timed_block context manager."""
 
@@ -275,13 +209,6 @@ class TestTimedBlock:
             raise RuntimeError("fail")
         assert reg.count("test.block_fail") == 1
 
-    def test_uses_global_registry_by_default(self):
-        reset_registry()
-        global_reg = get_registry()
-        with timed_block("test.global_block"):
-            pass
-        assert global_reg.count("test.global_block") == 1
-
     def test_nested_blocks(self):
         reg = OperationTimingRegistry()
         with timed_block("outer", registry=reg), timed_block("inner", registry=reg):
@@ -292,27 +219,3 @@ class TestTimedBlock:
         inner_dur = reg.snapshot("inner")[0]
         assert outer_dur >= inner_dur
 
-
-class TestGlobalRegistry:
-    """Tests for get_registry / reset_registry singleton."""
-
-    def test_get_registry_returns_same_instance(self):
-        reset_registry()
-        a = get_registry()
-        b = get_registry()
-        assert a is b
-
-    def test_reset_creates_new_instance(self):
-        reset_registry()
-        a = get_registry()
-        reset_registry()
-        b = get_registry()
-        assert a is not b
-
-    def test_reset_clears_data(self):
-        reset_registry()
-        reg = get_registry()
-        reg.record("test", 1.0)
-        reset_registry()
-        new_reg = get_registry()
-        assert new_reg.count("test") == 0
