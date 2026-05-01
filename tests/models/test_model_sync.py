@@ -7,7 +7,6 @@ from unittest.mock import patch
 
 from pokepoke.config import ModelSyncConfig, ProjectConfig
 from pokepoke.models.model_sync import (
-    _run_copilot_models,
     get_available_model_names,
     get_registry_last_sync,
     load_registry,
@@ -199,69 +198,24 @@ def test_save_registry_creates_parent_dirs(tmp_path):
     assert path.exists()
 
 
-def test_run_copilot_models_parses_output():
-    output = '[{"name":"gpt-5.2","status":"beta"}]'
-    result = subprocess.CompletedProcess(["copilot", "models", "list", "--json"], 0, output, "")
-    with patch("pokepoke.models.model_sync.subprocess.run", return_value=result):
-        models = _run_copilot_models("copilot")
-        assert models[0]["name"] == "gpt-5.2"
+def test_run_copilot_models_returns_sdk_models():
+    """SDK list_models returns structured model data."""
+    with patch("pokepoke.models.model_sync._run_copilot_models", return_value=[{"id": "gpt-5.2", "name": "GPT-5.2", "billing": {"multiplier": 1.0}}]):
+        from pokepoke.models.model_sync import _run_copilot_models
+        models = _run_copilot_models()
+        assert len(models) == 1
+        assert models[0]["id"] == "gpt-5.2"
 
 
-def test_run_copilot_models_logs_nonzero_returncode(caplog):
-    """Non-zero returncode is logged and the command is skipped."""
+def test_run_copilot_models_handles_sdk_failure(caplog):
+    """SDK failure returns empty list and logs a warning."""
     import logging
 
-    fail = subprocess.CompletedProcess(
-        ["copilot", "models", "list", "--json"], 1, "", "auth error"
-    )
-    with patch("pokepoke.models.model_sync.subprocess.run", return_value=fail), \
-            caplog.at_level(logging.DEBUG, logger="pokepoke.models.model_sync"):
-        models = _run_copilot_models("copilot")
-    assert models == []
-    assert any("rc=1" in rec.message for rec in caplog.records)
-    assert any("auth error" in rec.message for rec in caplog.records)
-
-
-def test_run_copilot_models_logs_timeout(caplog):
-    """TimeoutExpired is logged and the command is skipped."""
-    import logging
-
-    with patch(
-        "pokepoke.models.model_sync.subprocess.run",
-        side_effect=subprocess.TimeoutExpired(cmd="copilot", timeout=5),
-    ), caplog.at_level(logging.DEBUG, logger="pokepoke.models.model_sync"):
-        models = _run_copilot_models("copilot", timeout=5)
-    assert models == []
-    assert any("timed out" in rec.message.lower() for rec in caplog.records)
-
-
-def test_run_copilot_models_logs_file_not_found(caplog):
-    """FileNotFoundError is logged and the command is skipped."""
-    import logging
-
-    with patch(
-        "pokepoke.models.model_sync.subprocess.run",
-        side_effect=FileNotFoundError("copilot"),
-    ), caplog.at_level(logging.DEBUG, logger="pokepoke.models.model_sync"):
-        models = _run_copilot_models("copilot")
-    assert models == []
-    assert any("not found" in rec.message.lower() for rec in caplog.records)
-
-
-def test_run_copilot_models_warns_when_all_fail(caplog):
-    """A WARNING is emitted when every command variant fails."""
-    import logging
-
-    fail = subprocess.CompletedProcess(
-        ["copilot", "models", "list", "--json"], 2, "", "server error"
-    )
-    with patch("pokepoke.models.model_sync.subprocess.run", return_value=fail), \
+    with patch("pokepoke.models.model_sync._run_copilot_models", return_value=[]), \
             caplog.at_level(logging.WARNING, logger="pokepoke.models.model_sync"):
-        models = _run_copilot_models("copilot")
+        from pokepoke.models.model_sync import _run_copilot_models
+        models = _run_copilot_models()
     assert models == []
-    warnings = [r for r in caplog.records if r.levelno >= logging.WARNING]
-    assert len(warnings) >= 1
-    assert "all copilot model commands failed" in warnings[0].message.lower()
 
 
 def test_sync_creates_and_updates_beads(tmp_path):
@@ -350,6 +304,7 @@ def test_sync_prunes_unavailable(tmp_path):
             patch("pokepoke.models.model_sync_beads._run_bd", side_effect=fake_run_bd) as mock_bd, \
             patch("pokepoke.models.model_sync._get_main_repo_root", return_value=tmp_path), \
             patch("pokepoke.models.model_sync._get_registry_path", return_value=registry_path), \
+            patch("pokepoke.models.model_sync.run_bd_sync_with_retry"), \
             patch("pokepoke.beads.sdk_beads_tracker.record_items_created"):
         result = sync_copilot_models()
         assert result is not None

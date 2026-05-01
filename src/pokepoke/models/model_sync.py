@@ -2,7 +2,6 @@
 
 import json
 import logging
-import subprocess
 import time
 from datetime import UTC, datetime
 from pathlib import Path
@@ -20,7 +19,6 @@ from pokepoke.models.model_sync_beads import (
 from pokepoke.models.model_sync_parsing import (
     CopilotModelSnapshot,
     normalize_model_entry,
-    parse_copilot_models_output,
 )
 from pokepoke.types import AgentStats
 
@@ -51,45 +49,30 @@ def _log(item_logger: Any | None, message: str) -> None:
 
 
 
-def _run_copilot_models(cli_path: str, timeout: int = 30) -> list[dict[str, Any]]:
-    # Copilot CLI requires -p (prompt mode) for non-interactive commands
-    commands = [
-        [cli_path, "-p", "models list"],
-    ]
-    last_error: str | None = None
-    for cmd in commands:
-        cmd_str = " ".join(cmd)
-        try:
-            result = subprocess.run(
-                cmd,
-                capture_output=True,
-                text=True,
-                encoding="utf-8",
-                errors="replace",
-                timeout=timeout,
-            )
-        except subprocess.TimeoutExpired:
-            last_error = f"Command timed out after {timeout}s: {cmd_str}"
-            logger.debug(last_error)
-            continue
-        except FileNotFoundError:
-            last_error = f"CLI not found: {cmd_str}"
-            logger.debug(last_error)
-            continue
-        if result.returncode != 0:
-            stderr_snippet = (result.stderr or "").strip()[:200]
-            last_error = (
-                f"Command failed (rc={result.returncode}): {cmd_str}"
-                + (f" — {stderr_snippet}" if stderr_snippet else "")
-            )
-            logger.debug(last_error)
-            continue
-        models = parse_copilot_models_output(result.stdout)
-        if models:
-            return models
-    if last_error:
-        logger.warning("All Copilot model commands failed. Last error: %s", last_error)
-    return []
+def _run_copilot_models(cli_path: str = "", timeout: int = 30) -> list[dict[str, Any]]:
+    """Fetch available models via the Copilot Python SDK.
+
+    Uses ``CopilotClient.list_models()`` which returns structured data
+    directly from the SDK's JSON-RPC API — no subprocess or text parsing.
+    """
+    try:
+        import asyncio
+
+        from copilot import CopilotClient
+
+        async def _fetch() -> list[dict[str, Any]]:
+            client = CopilotClient()
+            await client.start()
+            try:
+                models = await client.list_models()
+                return [m.to_dict() for m in models]
+            finally:
+                await client.stop()
+
+        return asyncio.run(_fetch())
+    except Exception as e:
+        logger.warning("SDK list_models failed: %s", e)
+        return []
 
 
 def load_registry(path: Path | None = None) -> dict[str, Any]:
