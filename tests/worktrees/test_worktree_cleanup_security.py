@@ -5,6 +5,7 @@ and enforces path boundary validation to prevent deletion of files outside
 the worktrees directory.
 """
 
+import _winapi
 import contextlib
 import os
 import stat
@@ -144,19 +145,14 @@ class TestIsJunction:
 
         assert _is_junction(nonexistent) is False
 
-    @pytest.mark.allow_subprocess
     def test_detects_actual_junction(self, tmp_path: Path) -> None:
         """Detect actual NTFS junction points on Windows."""
         target = tmp_path / "target"
         target.mkdir()
         junction = tmp_path / "junction"
 
-        # Create junction using mklink /J
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(junction), str(target)],
-            check=True,
-            capture_output=True,
-        )
+        # Create junction using _winapi (no subprocess)
+        _winapi.CreateJunction(str(target), str(junction))
 
         assert _is_junction(junction) is True
 
@@ -213,7 +209,6 @@ class TestSafeRmtree:
         # Real directory should still exist
         assert real_dir.exists()
 
-    @pytest.mark.allow_subprocess
     def test_raises_if_root_is_junction(self, tmp_path: Path) -> None:
         """Refuse to remove if the directory path itself is a junction."""
         worktrees_dir = tmp_path / "worktrees"
@@ -222,11 +217,7 @@ class TestSafeRmtree:
         real_dir.mkdir()
 
         junction_dir = worktrees_dir / "junction-task"
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(junction_dir), str(real_dir)],
-            check=True,
-            capture_output=True,
-        )
+        _winapi.CreateJunction(str(real_dir), str(junction_dir))
 
         with pytest.raises(SymlinkFoundError, match="is a symlink or junction"):
             _safe_rmtree(junction_dir)
@@ -290,7 +281,6 @@ class TestSafeRmtree:
         assert critical_file.exists()
         assert critical_file.read_text() == "CRITICAL FILE - MUST NOT DELETE"
 
-    @pytest.mark.allow_subprocess
     def test_unlinks_junction_inside_tree(self, tmp_path: Path) -> None:
         """Remove junctions inside the tree without traversing them."""
         worktrees_dir = tmp_path / "worktrees"
@@ -304,14 +294,9 @@ class TestSafeRmtree:
         critical_file = outside_dir / "critical.txt"
         critical_file.write_text("CRITICAL FILE - MUST NOT DELETE")
 
-        # Create junction inside worktree
+        # Create junction inside worktree (no subprocess)
         junction = task_dir / "junction_to_dir"
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(junction), str(outside_dir)],
-            check=True,
-            capture_output=True,
-            text=True,
-        )
+        _winapi.CreateJunction(str(outside_dir), str(junction))
 
         assert junction.exists(), "Junction creation failed"
 
@@ -388,7 +373,6 @@ class TestForceRemoveDirectorySecurity:
         assert real_dir.exists()
         assert (real_dir / "data.txt").exists()
 
-    @pytest.mark.allow_subprocess
     def test_rejects_junction_worktree_path(self, tmp_path: Path) -> None:
         """Refuse to remove if worktree path itself is a junction."""
         worktrees_dir = tmp_path / "worktrees"
@@ -398,11 +382,7 @@ class TestForceRemoveDirectorySecurity:
         (real_dir / "data.txt").write_text("data")
 
         junction_task = worktrees_dir / "junction-task"
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(junction_task), str(real_dir)],
-            check=True,
-            capture_output=True,
-        )
+        _winapi.CreateJunction(str(real_dir), str(junction_task))
 
         with pytest.raises(SymlinkFoundError, match="the worktree path itself is a symlink or junction"):
             force_remove_directory(junction_task, repo_root=tmp_path)
@@ -517,7 +497,6 @@ class TestAttackVectorPrevention:
         assert (git_dir / "config").exists()
         assert (git_dir / "config").read_text() == "IMPORTANT GIT CONFIG"
 
-    @pytest.mark.allow_subprocess
     def test_malicious_junction_to_other_worktree(self, tmp_path: Path) -> None:
         """Prevent attack: junction pointing to another worktree."""
         worktrees_dir = tmp_path / "worktrees"
@@ -533,13 +512,9 @@ class TestAttackVectorPrevention:
         malicious_task = worktrees_dir / "task-attacker"
         malicious_task.mkdir()
 
-        # Attacker creates junction to legitimate worktree
+        # Attacker creates junction to legitimate worktree (no subprocess)
         junction = malicious_task / "junction_to_other_task"
-        subprocess.run(
-            ["cmd", "/c", "mklink", "/J", str(junction), str(legit_task)],
-            check=True,
-            capture_output=True,
-        )
+        _winapi.CreateJunction(str(legit_task), str(junction))
 
         # Mock git to force _safe_rmtree
         def run_side_effect(cmd, **kwargs):
