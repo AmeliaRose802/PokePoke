@@ -81,12 +81,17 @@ def _create_sdk_client(cwd: str | None, add_parent_dir: bool = False) -> Copilot
         "log_level": "info",
         "env": _build_worker_env(cwd),
     }
+    # Always grant full tool and path permissions — agents run autonomously
+    # and cannot respond to interactive permission prompts.  Without these
+    # flags the CLI returns "unexpected user permission response" errors
+    # for every file-access and shell tool call.
+    base_cli_args = ["--allow-all-tools", "--allow-all-paths"]
     if cwd:
         client_opts["cwd"] = cwd
         if add_parent_dir:
             add_dir_args = _build_add_dir_args(cwd)
-            if add_dir_args:
-                client_opts["cli_args"] = add_dir_args
+            base_cli_args.extend(add_dir_args)
+    client_opts["cli_args"] = base_cli_args
     if not _HAS_COPILOT:
         raise ImportError(
             "The 'copilot' SDK package is required but not installed. "

@@ -2352,7 +2352,7 @@ class TestCreateSdkClientAddParentDir:
     def test_no_cli_args_when_add_parent_dir_false(
         self, mock_config, mock_which, mock_client_class, tmp_path
     ):
-        """Work agents (add_parent_dir=False) should NOT get --add-dir cli_args."""
+        """Work agents (add_parent_dir=False) get base permissions but no --add-dir."""
         from pokepoke.models.copilot_sdk import _create_sdk_client
 
         mock_config.return_value = MagicMock(
@@ -2368,7 +2368,8 @@ class TestCreateSdkClientAddParentDir:
 
         call_args = mock_client_class.call_args[0][0]
         assert call_args["cwd"] == str(task_dir)
-        assert "cli_args" not in call_args
+        assert call_args["cli_args"] == ["--allow-all-tools", "--allow-all-paths"]
+        assert "--add-dir" not in call_args["cli_args"]
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     @patch('pokepoke.models.copilot_sdk.shutil.which', return_value='/usr/bin/copilot')
@@ -2392,7 +2393,7 @@ class TestCreateSdkClientAddParentDir:
 
         call_args = mock_client_class.call_args[0][0]
         assert call_args["cwd"] == str(task_dir)
-        assert call_args["cli_args"] == ["--add-dir", str(tmp_path)]
+        assert call_args["cli_args"] == ["--allow-all-tools", "--allow-all-paths", "--add-dir", str(tmp_path)]
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     @patch('pokepoke.models.copilot_sdk.shutil.which', return_value='/usr/bin/copilot')
@@ -2400,7 +2401,7 @@ class TestCreateSdkClientAddParentDir:
     def test_default_add_parent_dir_is_false(
         self, mock_config, mock_which, mock_client_class, tmp_path
     ):
-        """Default behavior (no add_parent_dir) should not add --add-dir."""
+        """Default behavior (no add_parent_dir) gets base permissions but no --add-dir."""
         from pokepoke.models.copilot_sdk import _create_sdk_client
 
         mock_config.return_value = MagicMock(
@@ -2415,4 +2416,5 @@ class TestCreateSdkClientAddParentDir:
         _create_sdk_client(str(task_dir))
 
         call_args = mock_client_class.call_args[0][0]
-        assert "cli_args" not in call_args
+        assert call_args["cli_args"] == ["--allow-all-tools", "--allow-all-paths"]
+        assert "--add-dir" not in call_args["cli_args"]
