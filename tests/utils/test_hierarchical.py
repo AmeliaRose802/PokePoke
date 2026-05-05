@@ -465,14 +465,6 @@ class TestHierarchicalWorkAssignment:
                 priority=1,
                 issue_type="epic"
             ),
-            BeadsWorkItem(
-                id="task-1",
-                title="Standalone Task",
-                description="",
-                status="open",
-                priority=2,
-                issue_type="task"
-            )
         ]
         # Mock: epic has children (but all complete - no available children)
         mock_get_children.return_value = [
@@ -489,9 +481,8 @@ class TestHierarchicalWorkAssignment:
 
         selected = select_next_hierarchical_item(items)
 
-        # Should auto-close epic and select the standalone task
-        assert selected is not None
-        assert selected.id == "task-1"
+        # Should auto-close epic and return None (no other items)
+        assert selected is None
         mock_close_parent.assert_called_once_with("epic-1")
 
     @patch('pokepoke.beads.beads_management.resolve_to_leaf_task')

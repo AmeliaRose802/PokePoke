@@ -1,7 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from pokepoke.orchestration.gate_agent_loop import _handle_gate_verdict, run_gate_loop
+from pokepoke.orchestration.gate_agent_loop import GateOutcomeDetails, _handle_gate_verdict, run_gate_loop
 from pokepoke.types_agent import GateAgentResult
 
 
@@ -60,6 +60,10 @@ def make_ctx():
         item_logger=None,
         comment_fn=lambda _id, msg: setattr(ctx, 'last_comment', msg) if False else None,
         defer_fn=lambda _id, msg: setattr(ctx, 'deferred', msg) if False else None,
+        resume_session_id=None,
+        resume_reason=None,
+        resume_output_summary=None,
+        resume_feedback=None,
     )
     return ctx
 
@@ -105,7 +109,8 @@ def test_handle_gate_infra_failure_no_commits(monkeypatch):
     # When there are no commits, infra failure should produce gate_success False
     from pokepoke.orchestration.gate_agent_loop import _handle_gate_infra_failure
 
-    result = _handle_gate_infra_failure(ctx, gt, timed_out=False, gate_agent_runs=0)
+    details = GateOutcomeDetails(gate_agent_runs=0, session_id=None, last_output_summary=None, timed_out=False)
+    result = _handle_gate_infra_failure(ctx, gt, details)
     assert result.gate_success is False
     assert hasattr(gt, 'failed') and gt.failed is True
 
@@ -135,7 +140,8 @@ def test_handle_gate_verdict_exceeded_defer(monkeypatch):
     import pokepoke.beads.beads_management as bm
     monkeypatch.setattr(bm, "increment_gate_rejection_count", lambda _id: 2)
 
-    res = _handle_gate_verdict(ctx, gt, "Some failure", gate_agent_runs=1)
+    details = GateOutcomeDetails(gate_agent_runs=1, session_id=None, last_output_summary=None, gate_reason="Some failure")
+    res = _handle_gate_verdict(ctx, gt, details)
     assert res.exceeded_max is True
     assert called.get('defer') is not None
     assert called.get('max') is True

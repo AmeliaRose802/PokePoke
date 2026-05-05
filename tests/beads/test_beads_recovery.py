@@ -145,7 +145,7 @@ class TestRetryFailedUnassigns:
                 "pokepoke.beads.beads_manifest_utils._get_failed_unassign_manifest_path",
                 return_value=manifest_path,
             ),
-            patch("pokepoke.beads.beads_management.unassign_item", return_value=True),
+            patch("pokepoke.beads.beads_recovery._unassign", return_value=True),
             patch("pokepoke.beads.beads_manifest_utils.manifest_lock", return_value=MagicMock()),
         ):
             assert retry_failed_unassigns() == 1

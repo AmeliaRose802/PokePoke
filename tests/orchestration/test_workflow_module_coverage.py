@@ -419,6 +419,7 @@ class TestProcessWorkItemGateAgentEnabled:
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
+        monkeypatch.setattr("pokepoke.beads.reconciliation.worktree_branch_has_commits", lambda *a, **kw: False)
         gate_timeout = GateAgentResult(
             success=False, reason="timed out", crashed=False, is_timeout=True,
             session_id="gate-sess-1", last_output_summary="partial",
@@ -721,6 +722,7 @@ class TestProcessWorkItemGateResumeInPlace:
         monkeypatch.setattr("pokepoke.orchestration.workflow._extract_agent_stats", lambda r: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow._log_commit_status", lambda *a: None)
         monkeypatch.setattr("pokepoke.orchestration.workflow.run_cleanup_with_timeout", lambda *a, **kw: (True, 0))
+        monkeypatch.setattr("pokepoke.beads.reconciliation.worktree_branch_has_commits", lambda *a, **kw: False)
 
         gate_n = {"n": 0}
         def fake_gate(*a, **kw):

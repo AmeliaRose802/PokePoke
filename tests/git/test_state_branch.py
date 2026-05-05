@@ -217,9 +217,10 @@ class TestCommitStateBranch:
         # Should commit even though has_state_changes returned False
         assert result is True
 
+    @patch('pokepoke.git.state_branch._has_state_changes', return_value=False)
     @patch('pokepoke.git.state_branch._create_state_branch_if_needed')
     @patch('pokepoke.git.state_branch.main_repo_git_lock')
-    def test_commit_state_branch_uses_lock(self, mock_lock: Mock, mock_create: Mock) -> None:
+    def test_commit_state_branch_uses_lock(self, mock_lock: Mock, mock_create: Mock, mock_has_changes: Mock) -> None:
         """Acquires main repo git lock during commit."""
         mock_context = MagicMock()
         mock_lock.return_value = mock_context

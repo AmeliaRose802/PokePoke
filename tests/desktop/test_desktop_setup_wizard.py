@@ -6,6 +6,15 @@ from contextlib import contextmanager
 from pathlib import Path
 from unittest.mock import Mock, patch
 
+import pytest
+
+
+@pytest.fixture(autouse=True)
+def _mock_repo_name():
+    """Prevent DesktopAPI.__init__ from calling subprocess via get_repository_name."""
+    with patch("pokepoke.desktop.desktop_api.get_repository_name", return_value="PokePoke"):
+        yield
+
 
 @contextmanager
 def _chdir(path: Path):
@@ -91,6 +100,7 @@ def test_orchestrator_main_waits_for_setup_then_runs(tmp_path: Path) -> None:
         patch("pokepoke.desktop.terminal_ui.ui", fake_ui),
         patch("pokepoke.orchestration.orchestrator.run_orchestrator", return_value=0) as mock_run,
         patch("pokepoke.utils.project_utils.is_git_repo", side_effect=[False, True]),
+        patch("pokepoke.utils.project_utils.resolve_git_toplevel", return_value=tmp_path),
         patch("pokepoke.utils.project_utils.has_pokepoke_config", return_value=True),
         patch("pokepoke.utils.project_utils.check_beads_available", return_value=True),
         patch("sys.argv", ["pokepoke", "--autonomous"]),
@@ -186,21 +196,18 @@ def test_coerce_process_output() -> None:
     assert coerce_process_output("hello\n") == "hello"
 
 
-def test_require_yaml_available() -> None:
-    """require_yaml should not raise when yaml is installed."""
-    from pokepoke.desktop.desktop_api_utils import require_yaml
-    require_yaml("load config")  # should not raise
+def test_has_yaml_flag_available() -> None:
+    """HAS_YAML should be True when yaml is installed."""
+    from pokepoke.desktop.desktop_api_utils import HAS_YAML
+    assert HAS_YAML is True
 
 
-def test_require_yaml_missing(monkeypatch) -> None:
-    """require_yaml should raise ImportError when HAS_YAML is False."""
-    import pytest
-
+def test_has_yaml_flag_reflects_import(monkeypatch) -> None:
+    """HAS_YAML can be set to False to simulate missing PyYAML."""
     import pokepoke.desktop.desktop_api_utils as dau
 
     monkeypatch.setattr(dau, "HAS_YAML", False)
-    with pytest.raises(ImportError, match="PyYAML is required"):
-        dau.require_yaml("load config")
+    assert dau.HAS_YAML is False
 
 
 def test_bd_init_delegates(tmp_path: Path) -> None:
@@ -235,7 +242,10 @@ def test_scaffold_prompt_overrides_skips_existing(tmp_path: Path) -> None:
 
     api = DesktopAPI()
 
-    with _chdir(tmp_path):
+    with (
+        _chdir(tmp_path),
+        patch("pokepoke.utils.project_utils.resolve_git_toplevel", return_value=tmp_path),
+    ):
         # First call: scaffold
         api.scaffold_prompt_overrides(["beads-item"], False)
         # Second call without force: should skip

@@ -183,7 +183,9 @@ class TestCleanupAgents:
     @patch('pokepoke.agents.cleanup_agents.get_pokepoke_prompts_dir')
     @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
     @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
-    def test_invoke_merge_conflict_cleanup_agent(self, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
+    def test_invoke_merge_conflict_cleanup_agent(self, mock_unmerged, mock_merging, mock_invoke, mock_context, mock_get_dir, mock_merge_active):
         """Test invoking merge conflict cleanup agent."""
         mock_dir = MagicMock()
         mock_file = Mock()
@@ -658,8 +660,10 @@ class TestCleanupPostcondition:
     @patch('pokepoke.agents.cleanup_agents._get_current_git_context')
     @patch('pokepoke.agents.cleanup_agents.invoke_copilot')
     @patch('pokepoke.git.git_operations.has_uncommitted_changes', return_value=True)
+    @patch('pokepoke.git.merge_conflict.is_merge_in_progress', return_value=False)
+    @patch('pokepoke.git.merge_conflict.get_unmerged_files', return_value=[])
     def test_merge_conflict_cleanup_fails_when_repo_still_dirty(
-        self, mock_dirty, mock_invoke, mock_context, mock_get_dir, mock_merge_active,
+        self, mock_unmerged, mock_merging, mock_dirty, mock_invoke, mock_context, mock_get_dir, mock_merge_active,
     ):
         """Merge conflict cleanup exits 0 but repo dirty → failure."""
         mock_dir = MagicMock()

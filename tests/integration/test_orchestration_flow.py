@@ -7,6 +7,8 @@ import pytest
 
 from pokepoke.agents import parallel
 from pokepoke.orchestration import finalization, orchestrator, workflow, workflow_helpers
+from pokepoke.orchestration import gate_agent_loop as _gate_agent_loop_mod
+from pokepoke.orchestration import workflow_loop as _workflow_loop_mod
 from pokepoke.types import WorkItemResult
 from pokepoke.types_agent import CopilotResult, GateAgentResult
 from pokepoke.types_beads import BeadsWorkItem
@@ -152,6 +154,7 @@ class WorkflowHarness:
             max_parallel_agents=2,
             gate_agent_enabled=True,
             max_gate_rejections_per_item=3,
+            gate_reverify_resume_enabled=False,
         )
         monkeypatch.setattr(workflow, "get_config", lambda: config)
 
@@ -160,13 +163,14 @@ class WorkflowHarness:
         monkeypatch.setattr(workflow_helpers, "create_worktree", self._create_worktree)
         monkeypatch.setattr(workflow, "cleanup_worktree", self._cleanup_worktree)
         monkeypatch.setattr(workflow, "invoke_copilot", self._invoke_copilot)
-        monkeypatch.setattr(workflow, "run_gate_agent", self._run_gate_agent)
+        monkeypatch.setattr(_gate_agent_loop_mod, "run_gate_agent", self._run_gate_agent)
         monkeypatch.setattr(workflow_helpers, "run_cleanup_loop", self._run_cleanup_loop)
         monkeypatch.setattr(workflow_helpers, "has_uncommitted_changes", self._has_uncommitted)
         monkeypatch.setattr("pokepoke.git.git_operations.has_commits_ahead", lambda **_kwargs: 0)
         monkeypatch.setattr(finalization, "finalize_work_item", self._finalize_work_item)
         monkeypatch.setattr(workflow, "add_comment", self._add_comment)
         monkeypatch.setattr(workflow, "build_prompt_from_work_item", self._build_prompt)
+        monkeypatch.setattr(_workflow_loop_mod, "build_prompt_from_work_item", self._build_prompt)
         monkeypatch.setattr(workflow, "select_model_for_item", lambda *_args, **_kwargs: "test-model")
         monkeypatch.setattr(workflow, "get_assignment_for_item", lambda *_args, **_kwargs: ("work", "beads-item"))
         monkeypatch.setattr(finalization, "run_beta_tester", self._run_beta)

@@ -230,8 +230,8 @@ class TestBeadsClientReturnsMatchWorkflow:
         ann = params["item"].annotation
         assert ann is BeadsWorkItem or (isinstance(ann, str) and "BeadsWorkItem" in ann)
 
-        # beads_client keyword accepts BeadsClient | None
-        assert "beads_client" in params
+        # beads_client is now inside WorkItemConfig, not a direct param
+        assert "config" in params
 
 
 # ---------------------------------------------------------------------------

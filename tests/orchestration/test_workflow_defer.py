@@ -176,6 +176,9 @@ class TestInLoopGateRejectionDefer:
         ), patch(
             "pokepoke.beads.reconciliation.reconcile_completed_item",
             return_value=(False, {}),
+        ), patch(
+            "pokepoke.git.git_operations.build_handoff_context",
+            return_value="mocked handoff ctx",
         ):
             result = process_work_item(_item(), interactive=False)
 

@@ -16,7 +16,6 @@ from pokepoke.types_stats import AgentStats, SessionStats
 @pytest.fixture(autouse=True)
 def _isolate_desktop_api(monkeypatch):
     """Prevent DesktopAPI from loading real historical agents or calling git."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     monkeypatch.setattr("pokepoke.desktop.desktop_api.get_repository_name", lambda: "test-repo")
 
 

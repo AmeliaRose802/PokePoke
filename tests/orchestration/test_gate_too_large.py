@@ -1,7 +1,7 @@
 from pathlib import Path
 from types import SimpleNamespace
 
-from pokepoke.orchestration.gate_agent_loop import _handle_gate_verdict
+from pokepoke.orchestration.gate_agent_loop import GateOutcomeDetails, _handle_gate_verdict
 
 
 def test_gate_triggers_decomposition_on_too_large(monkeypatch):
@@ -12,6 +12,7 @@ def test_gate_triggers_decomposition_on_too_large(monkeypatch):
         pokepoke_root=Path.cwd(),
         max_gate_rejections=5,
         gate_rejection_count=0,
+        gate_agent_runs=0,
     )
     # Provide required callbacks used by the handler
     ctx.comment_fn = lambda _id, msg: setattr(ctx, 'last_comment', msg)
@@ -62,7 +63,8 @@ def test_gate_triggers_decomposition_on_too_large(monkeypatch):
     monkeypatch.setattr(da, "run_decomposition", fake_run_decomposition)
 
     # Invoke handler with a gate_reason containing 'too_large'
-    res = _handle_gate_verdict(ctx, gt, "too_large: scope exceeded", gate_agent_runs=1)
+    details = GateOutcomeDetails(gate_agent_runs=1, session_id=None, last_output_summary=None, gate_reason="too_large: scope exceeded")
+    res = _handle_gate_verdict(ctx, gt, details)
 
     assert res.exceeded_max is True
     assert called.get('invoked', False) is True
@@ -91,7 +93,8 @@ def test_handle_gate_infra_failure_accepts_when_commits(monkeypatch):
 
     from pokepoke.orchestration.gate_agent_loop import _handle_gate_infra_failure
 
-    result = _handle_gate_infra_failure(ctx, gt, timed_out=True, gate_agent_runs=0)
+    details = GateOutcomeDetails(gate_agent_runs=0, session_id=None, last_output_summary=None, timed_out=True)
+    result = _handle_gate_infra_failure(ctx, gt, details)
     assert result.gate_success is True
     assert hasattr(gt, 'marked') and gt.marked is True
 
@@ -122,7 +125,8 @@ def test_handle_gate_verdict_rejection_triggers_retry(monkeypatch):
     import pokepoke.beads.beads_management as bm
     monkeypatch.setattr(bm, "increment_gate_rejection_count", lambda _id: 1)
 
-    res = _handle_gate_verdict(ctx, gt, "Bad code", gate_agent_runs=1)
+    details = GateOutcomeDetails(gate_agent_runs=1, session_id=None, last_output_summary=None, gate_reason="Bad code")
+    res = _handle_gate_verdict(ctx, gt, details)
     assert res.feedback == "Bad code"
     assert res.exceeded_max is False
     assert hasattr(gt, 'retry_info') and gt.retry_info[0] == 1

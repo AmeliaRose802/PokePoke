@@ -144,6 +144,7 @@ class TestIsJunction:
 
         assert _is_junction(nonexistent) is False
 
+    @pytest.mark.allow_subprocess
     def test_detects_actual_junction(self, tmp_path: Path) -> None:
         """Detect actual NTFS junction points on Windows."""
         target = tmp_path / "target"
@@ -212,6 +213,7 @@ class TestSafeRmtree:
         # Real directory should still exist
         assert real_dir.exists()
 
+    @pytest.mark.allow_subprocess
     def test_raises_if_root_is_junction(self, tmp_path: Path) -> None:
         """Refuse to remove if the directory path itself is a junction."""
         worktrees_dir = tmp_path / "worktrees"
@@ -288,6 +290,7 @@ class TestSafeRmtree:
         assert critical_file.exists()
         assert critical_file.read_text() == "CRITICAL FILE - MUST NOT DELETE"
 
+    @pytest.mark.allow_subprocess
     def test_unlinks_junction_inside_tree(self, tmp_path: Path) -> None:
         """Remove junctions inside the tree without traversing them."""
         worktrees_dir = tmp_path / "worktrees"
@@ -385,6 +388,7 @@ class TestForceRemoveDirectorySecurity:
         assert real_dir.exists()
         assert (real_dir / "data.txt").exists()
 
+    @pytest.mark.allow_subprocess
     def test_rejects_junction_worktree_path(self, tmp_path: Path) -> None:
         """Refuse to remove if worktree path itself is a junction."""
         worktrees_dir = tmp_path / "worktrees"
@@ -513,6 +517,7 @@ class TestAttackVectorPrevention:
         assert (git_dir / "config").exists()
         assert (git_dir / "config").read_text() == "IMPORTANT GIT CONFIG"
 
+    @pytest.mark.allow_subprocess
     def test_malicious_junction_to_other_worktree(self, tmp_path: Path) -> None:
         """Prevent attack: junction pointing to another worktree."""
         worktrees_dir = tmp_path / "worktrees"

@@ -10,7 +10,6 @@ from pokepoke.desktop.desktop_api import DesktopAPI
 
 @pytest.fixture(autouse=True)
 def _isolate(monkeypatch: pytest.MonkeyPatch) -> None:
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     monkeypatch.setattr("pokepoke.desktop.desktop_api.get_repository_name", lambda: "test-repo")
 
 

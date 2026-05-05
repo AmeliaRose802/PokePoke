@@ -18,7 +18,6 @@ from pokepoke.desktop.desktop_api import DesktopAPI
 @pytest.fixture(autouse=True)
 def _isolate_desktop_api(monkeypatch):
     """Prevent DesktopAPI from loading real historical agents or calling git."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     monkeypatch.setattr("pokepoke.desktop.desktop_api.get_repository_name", lambda: "test-repo")
 
 
@@ -52,7 +51,6 @@ def test_spawn_agent_honors_effective_max_agents(monkeypatch) -> None:
 def test_initial_state_has_empty_agents(monkeypatch) -> None:
     """get_state should include an empty agents list initially."""
     monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     state = api.get_state()
     assert state["agents"] == []
@@ -60,7 +58,6 @@ def test_initial_state_has_empty_agents(monkeypatch) -> None:
 
 def test_push_agent_status_registers_agent(monkeypatch) -> None:
     """push_agent_status should add an agent to the tracked set."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Gate Agent", iteration=2, status="running", model="gpt-5.1")
 
@@ -79,7 +76,6 @@ def test_push_agent_status_registers_agent(monkeypatch) -> None:
 
 def test_push_agent_status_updates_existing(monkeypatch) -> None:
     """push_agent_status should update an existing agent's fields."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status(
         "agent-1",
@@ -144,7 +140,6 @@ def test_push_agent_log_trims_excess() -> None:
 
 def test_push_agent_log_ignores_unknown_agent(monkeypatch) -> None:
     """push_agent_log should silently ignore unknown agent IDs."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_log("nonexistent", "should not crash")
     assert api.get_agents() == []
@@ -152,7 +147,6 @@ def test_push_agent_log_ignores_unknown_agent(monkeypatch) -> None:
 
 def test_remove_agent(monkeypatch) -> None:
     """remove_agent should remove the agent from tracked set."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Agent A")
     api.push_agent_status("agent-2", "Agent B")
@@ -165,7 +159,6 @@ def test_remove_agent(monkeypatch) -> None:
 
 def test_remove_agent_ignores_unknown(monkeypatch) -> None:
     """remove_agent should silently ignore unknown agent IDs."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.remove_agent("nonexistent")
     assert api.get_agents() == []
@@ -173,7 +166,6 @@ def test_remove_agent_ignores_unknown(monkeypatch) -> None:
 
 def test_get_state_includes_agents(monkeypatch) -> None:
     """get_state should include agents in the returned state."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_status("agent-1", "Worker", iteration=3, status="running")
     api.push_agent_log("agent-1", "doing work")

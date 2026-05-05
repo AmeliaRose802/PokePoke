@@ -165,6 +165,7 @@ class TestBeadsMetadataMergeRetry:
 # ═══════════════════════════════════════════════════════════════════════════
 
 _WF = "pokepoke.orchestration.workflow"
+_WFL = "pokepoke.orchestration.workflow_loop"
 _FIN = "pokepoke.orchestration.finalization"
 
 
@@ -172,7 +173,7 @@ class TestMergeRetryFastPath:
     """Test that merge_retry items skip work+gate and go straight to merge."""
 
     @patch(f"{_FIN}.finalize_work_item", return_value=True)
-    @patch(f"{_WF}.get_gate_step_tracker")
+    @patch(f"{_WFL}.get_gate_step_tracker")
     @patch(f"{_WF}.select_model_for_item", return_value="gpt-4")
     @patch(f"{_WF}.get_assignment_for_item", return_value=(None, None))
     @patch(f"{_WF}.get_config")
@@ -221,7 +222,7 @@ class TestMergeRetryFastPath:
         assert result.success is True
 
     @patch(f"{_FIN}.finalize_work_item", return_value=False)
-    @patch(f"{_WF}.get_gate_step_tracker")
+    @patch(f"{_WFL}.get_gate_step_tracker")
     @patch(f"{_WF}.select_model_for_item", return_value="gpt-4")
     @patch(f"{_WF}.get_assignment_for_item", return_value=(None, None))
     @patch(f"{_WF}.get_config")
@@ -284,7 +285,7 @@ class TestMergeRetryFastPath:
     @patch(f"{_WF}.get_config")
     @patch(f"{_WF}.get_assignment_for_item", return_value=(None, None))
     @patch(f"{_WF}.select_model_for_item", return_value="gpt-4")
-    @patch(f"{_WF}.get_gate_step_tracker")
+    @patch(f"{_WFL}.get_gate_step_tracker")
     def test_merge_retry_no_commits_falls_through(
         self, _tracker, _select_model, _assign_for, mock_config,
         _assign, mock_setup, mock_invoke, _clear_retry,
@@ -346,7 +347,7 @@ class TestMergeRetryFastPath:
     @patch(f"{_WF}.get_config")
     @patch(f"{_WF}.get_assignment_for_item", return_value=(None, None))
     @patch(f"{_WF}.select_model_for_item", return_value="gpt-4")
-    @patch(f"{_WF}.get_gate_step_tracker")
+    @patch(f"{_WFL}.get_gate_step_tracker")
     def test_no_merge_retry_goes_through_normal_pipeline(
         self, _tracker, _select_model, _assign_for, mock_config,
         _assign, mock_setup, mock_invoke, _tui_wf, _shutdown,
@@ -405,7 +406,7 @@ class TestNormalPipelineSetsMergeRetry:
 
     @patch(f"{_FIN}.finalize_work_item", return_value=False)
     @patch(f"{_WF}.run_cleanup_with_timeout", return_value=(True, 0))
-    @patch(f"{_WF}.get_gate_step_tracker")
+    @patch(f"{_WFL}.get_gate_step_tracker")
     @patch(f"{_WF}.select_model_for_item", return_value="gpt-4")
     @patch(f"{_WF}.get_assignment_for_item", return_value=(None, None))
     @patch(f"{_WF}.get_config")
@@ -451,12 +452,13 @@ class TestNormalPipelineSetsMergeRetry:
             patch(f"{_WF}.set_current_repo_name"),
             patch(f"{_WF}.get_agent_name", return_value="test"),
             patch(f"{_WF}.verify_worktree_branch", return_value=None),
-            patch(f"{_WF}.run_gate_loop", return_value=GateLoopResult(
+            patch(f"{_WFL}.run_gate_loop", return_value=GateLoopResult(
                 gate_success=True, gate_agent_runs=1,
                 gate_rejection_count=0, exceeded_max=False,
             )),
             patch("pokepoke.orchestration.finalization.set_terminal_banner"),
             patch("pokepoke.orchestration.finalization.format_work_item_banner", return_value="b"),
+            patch("pokepoke.orchestration.workflow_helpers.has_uncommitted_changes", return_value=False),
             patch.object(WorkItemSession, "cleanup_on_failure"),
         ):
             result = process_work_item(item, interactive=False)

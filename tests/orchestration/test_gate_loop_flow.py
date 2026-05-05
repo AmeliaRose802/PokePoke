@@ -64,6 +64,10 @@ def test_run_gate_loop_success(monkeypatch):
     ctx = make_ctx()
     gt = DummyGT()
 
+    # Patch build_handoff_context to avoid subprocess calls
+    import pokepoke.git.git_operations as go
+    monkeypatch.setattr(go, "build_handoff_context", lambda cwd, work_agent_outcome: "ctx")
+
     # Patch run_gate_agent to return immediate success
     def fake_run_gate_agent(*args, **kwargs):
         return GateAgentResult(success=True, reason="ok")

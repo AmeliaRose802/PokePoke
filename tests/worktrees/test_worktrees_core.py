@@ -477,8 +477,9 @@ class TestMergeWorktree:
         assert success is True
         assert conflicts == []
 
+    @patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
-    def test_merge_worktree_dirty_worktree(self, mock_is_clean) -> None:
+    def test_merge_worktree_dirty_worktree(self, mock_is_clean, mock_default_branch) -> None:
         """Fail when worktree has uncommitted changes."""
         mock_is_clean.return_value = False
 

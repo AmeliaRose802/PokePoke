@@ -14,6 +14,14 @@ from pokepoke.types_agent import CopilotResult, GateAgentResult
 class TestRunGateAgent:
     """Test run_gate_agent function."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_subprocess_deps(self, monkeypatch):
+        """Mock functions that call subprocess internally."""
+        monkeypatch.setattr("pokepoke.agents.gate_agent_executor.get_default_branch", lambda: "main")
+        mock_config = Mock()
+        mock_config.command_timeout = 300
+        monkeypatch.setattr("pokepoke.agents.gate_agent_executor.get_config", lambda: mock_config)
+
     @pytest.fixture
     def work_item(self) -> BeadsWorkItem:
         """Create a test work item."""
@@ -532,6 +540,14 @@ class TestRunGateAgent:
 class TestGateAgentJsonDecodeError:
     """Test gate agent JSONDecodeError fallback (lines 112-113)."""
 
+    @pytest.fixture(autouse=True)
+    def _mock_subprocess_deps(self, monkeypatch):
+        """Mock functions that call subprocess internally."""
+        monkeypatch.setattr("pokepoke.agents.gate_agent_executor.get_default_branch", lambda: "main")
+        mock_config = Mock()
+        mock_config.command_timeout = 300
+        monkeypatch.setattr("pokepoke.agents.gate_agent_executor.get_config", lambda: mock_config)
+
     @pytest.fixture
     def work_item(self) -> BeadsWorkItem:
         return BeadsWorkItem(
@@ -564,6 +580,14 @@ class TestGateAgentJsonDecodeError:
 
 class TestGateAgentWithAgentId:
     """Test gate agent pushes agent status when agent_id is provided (line 88)."""
+
+    @pytest.fixture(autouse=True)
+    def _mock_subprocess_deps(self, monkeypatch):
+        """Mock functions that call subprocess internally."""
+        monkeypatch.setattr("pokepoke.agents.gate_agent_executor.get_default_branch", lambda: "main")
+        mock_config = Mock()
+        mock_config.command_timeout = 300
+        monkeypatch.setattr("pokepoke.agents.gate_agent_executor.get_config", lambda: mock_config)
 
     @patch('pokepoke.agents.gate_agent_executor.parse_agent_stats')
     @patch('pokepoke.agents.gate_agent_executor.invoke_copilot')

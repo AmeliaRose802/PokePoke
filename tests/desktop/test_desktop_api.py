@@ -7,15 +7,13 @@ from unittest.mock import Mock
 import pytest
 
 from pokepoke.desktop.desktop_api import DesktopAPI
-from pokepoke.desktop.desktop_api_ext import _discover_log_roots as _real_discover_log_roots
 from pokepoke.types import BeadsWorkItem
 from pokepoke.types_stats import AgentStats, SessionStats
 
 
 @pytest.fixture(autouse=True)
 def _isolate_desktop_api(monkeypatch):
-    """Prevent DesktopAPI from loading real historical agents or calling git."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
+    """Prevent DesktopAPI from calling git."""
     monkeypatch.setattr("pokepoke.desktop.desktop_api.get_repository_name", lambda: "test-repo")
 
 
@@ -65,12 +63,6 @@ def test_historical_agent_logs_not_loaded(tmp_path, monkeypatch) -> None:
     )
     log_path = items_dir / "PokePoke-9ikr.log"
     log_path.write_text(log_content, encoding="utf-8")
-
-    # Override the autouse fixture's patch to point to our test logs
-    monkeypatch.setattr(
-        "pokepoke.desktop.desktop_api_ext._discover_log_roots",
-        lambda: [logs_root],
-    )
 
     api = DesktopAPI()
     agents = api.get_state()["agents"]
@@ -491,7 +483,6 @@ def test_push_agent_log_trims_excess() -> None:
 
 def test_push_agent_log_ignores_unknown_agent(monkeypatch) -> None:
     """push_agent_log should silently ignore unknown agent IDs."""
-    monkeypatch.setattr("pokepoke.desktop.desktop_api_ext._discover_log_roots", lambda: [])
     api = DesktopAPI()
     api.push_agent_log("nonexistent", "should not crash")
     assert api.get_agents() == []
@@ -548,39 +539,3 @@ def test_get_agent_detail_includes_full_logs_and_timestamps() -> None:
     assert detail["last_updated"] is not None
 
 
-# ─── desktop_api_ext coverage tests ──────────────────────────────────────
-
-
-def test_discover_log_roots_with_env_var(tmp_path, monkeypatch) -> None:
-    """_discover_log_roots should include POKEPOKE_LOGS_DIR when set."""
-    logs_dir = tmp_path / "custom_logs"
-    logs_dir.mkdir()
-    monkeypatch.setenv("POKEPOKE_LOGS_DIR", str(logs_dir))
-    monkeypatch.setattr("pokepoke.config._find_repo_root", lambda: tmp_path)
-
-    roots = _real_discover_log_roots()
-    assert logs_dir.resolve() in roots
-
-
-def test_discover_log_roots_without_env_var(tmp_path, monkeypatch) -> None:
-    """_discover_log_roots should fall back to repo-relative paths."""
-    monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
-    repo_logs = tmp_path / ".pokepoke" / "logs"
-    repo_logs.mkdir(parents=True)
-    monkeypatch.setattr("pokepoke.config._find_repo_root", lambda: tmp_path)
-
-    roots = _real_discover_log_roots()
-    assert repo_logs.resolve() in roots
-
-
-def test_discover_log_roots_find_repo_root_fails(tmp_path, monkeypatch) -> None:
-    """_discover_log_roots should fall back to cwd when _find_repo_root fails."""
-    monkeypatch.delenv("POKEPOKE_LOGS_DIR", raising=False)
-
-    def _fail():
-        raise RuntimeError("no repo")
-
-    monkeypatch.setattr("pokepoke.config._find_repo_root", _fail)
-
-    roots = _real_discover_log_roots()
-    assert isinstance(roots, list)

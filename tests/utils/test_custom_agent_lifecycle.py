@@ -514,6 +514,7 @@ class TestCustomAgentExecution:
             "janitor.md",
             repo_root=Path("/repo"),
             needs_worktree=True,
+            needs_shell=False,
             merge_changes=True,
             model="claude-opus-4.6",
             item_logger=run_logger.start_maintenance_log.return_value,

@@ -77,8 +77,12 @@ class TestModelConfigCandidates:
 class TestSelectModelForItem:
     """Tests for random model selection from candidates."""
 
+    @patch("pokepoke.models.model_selection._filter_available_models", side_effect=lambda x: x)
+    @patch("pokepoke.models.model_selection._get_registry_candidates", return_value=[])
+    @patch("pokepoke.models.model_selection.get_model_weights", return_value={})
+    @patch("pokepoke.models.model_selection.get_assignment_for_item", return_value=(None, None))
     @patch("pokepoke.models.model_selection.get_config")
-    def test_returns_default_when_no_candidates(self, mock_config):
+    def test_returns_default_when_no_candidates(self, mock_config, mock_assign, mock_weights, mock_registry, mock_filter):
         mock_config.return_value = ProjectConfig(
             models=ModelConfig(default="claude-opus-4.6", fallback="claude-opus-4.6", candidate_models=[])
         )

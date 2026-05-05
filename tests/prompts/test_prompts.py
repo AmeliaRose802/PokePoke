@@ -812,11 +812,11 @@ def test_build_prompt_with_multiple_labels_uses_first_match(tmp_path, monkeypatc
     builtin_dir.mkdir()
     (builtin_dir / "orchestrator-work.md").write_text(
         "# Orchestrator Context\nHandle orchestrator tasks.\n"
-        "{{work_item_id}} {{work_item_title}} {{work_item_description}}"
+        "{{item_id}} {{title}} {{description}}"
     )
     (builtin_dir / "desktop-work.md").write_text(
         "# Desktop Context\nHandle desktop tasks.\n"
-        "{{work_item_id}} {{work_item_title}} {{work_item_description}}"
+        "{{item_id}} {{title}} {{description}}"
     )
 
     import pokepoke.config as config_module

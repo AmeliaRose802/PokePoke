@@ -4,7 +4,7 @@ from unittest.mock import MagicMock
 
 import pytest
 
-from pokepoke.agents.parallel_worker_pool import ParallelWorkerPool
+from pokepoke.agents.parallel_worker_pool import ParallelWorkerPool, collect_done_futures
 from pokepoke.types import WorkItemResult
 from pokepoke.types_beads import BeadsWorkItem
 
@@ -20,6 +20,15 @@ def create_test_item(item_id: str) -> BeadsWorkItem:
     )
 
 
+def _submit_to_pool(pool, item, task_fn, worker_name):
+    """Submit a task to the pool, tracking the future in pool.futures."""
+    run_logger = MagicMock()
+    fut = pool.executor.submit(task_fn, item, run_logger, pool.semaphore, worker_name)
+    with pool.lock:
+        pool.futures[fut] = item
+    return fut
+
+
 def test_parallel_worker_pool_integration_with_freeze_fix():
     """Integration test: ParallelWorkerPool uses freeze-safe collect_done_futures."""
     pool = ParallelWorkerPool(pool_size=2)
@@ -33,19 +42,21 @@ def test_parallel_worker_pool_integration_with_freeze_fix():
     item1 = create_test_item("int-1")
     item2 = create_test_item("int-2")
 
-    pool.dispatch_item(item1, MagicMock(), quick_task, "worker-1")
-    pool.dispatch_item(item2, MagicMock(), quick_task, "worker-2")
+    _submit_to_pool(pool, item1, quick_task, "worker-1")
+    _submit_to_pool(pool, item2, quick_task, "worker-2")
 
     # Wait for completion
     time.sleep(0.2)
 
     # Collect done futures using the freeze-safe implementation
-    _total_req, _any_success, success_count, _failure_count = pool.collect_done(
+    _total_req, _any_success, success_count, _failure_count = collect_done_futures(
+        pool.futures,
         failed_claim_ids=set(),
         total_requests=0,
         session_stats=MagicMock(),
         run_logger=MagicMock(),
         record_fn=MagicMock(),
+        lock=pool.lock,
     )
 
     # Verify collection worked without hanging
@@ -68,16 +79,18 @@ def test_parallel_worker_pool_handles_hung_futures_gracefully():
         return WorkItemResult(success=False, request_count=0)
 
     item = create_test_item("hung-1")
-    pool.dispatch_item(item, MagicMock(), stalled_task, "hung-worker")
+    _submit_to_pool(pool, item, stalled_task, "hung-worker")
 
     # Collect immediately (future not done yet)
     start_time = time.time()
-    _total, _any, success_count, _failures = pool.collect_done(
+    _total, _any, success_count, _failures = collect_done_futures(
+        pool.futures,
         failed_claim_ids=set(),
         total_requests=0,
         session_stats=MagicMock(),
         run_logger=MagicMock(),
         record_fn=MagicMock(),
+        lock=pool.lock,
     )
     elapsed = time.time() - start_time
 

@@ -97,11 +97,15 @@ class TestUnassignItemExceptionHandling:
     @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
     @patch("pokepoke.beads.beads_management._run_bd")
     def test_handles_timeout_error(self, mock_run_bd: Mock, mock_sync: Mock) -> None:
-        """Test unassign handles subprocess.TimeoutExpired."""
+        """Test unassign handles subprocess.TimeoutExpired gracefully.
+
+        unassign_item catches TimeoutExpired and falls back to status-only
+        reset.  If that also times out, it returns False.
+        """
         mock_run_bd.side_effect = subprocess.TimeoutExpired("bd", 30)
 
-        with pytest.raises(subprocess.TimeoutExpired):
-            unassign_item("item-1")
+        result = unassign_item("item-1")
+        assert result is False
 
     @patch("pokepoke.beads.beads_management.run_bd_sync_with_retry")
     @patch("pokepoke.beads.beads_management._run_bd")

@@ -131,7 +131,9 @@ class TestMergeQueueSerialization:
         # This validates the queue processes items (serialization is by design
         # since it uses a single-threaded worker).
         with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev") as mock_merge, \
-             patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True):
+             patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True), \
+             patch("pokepoke.git.merge_queue.get_default_branch", return_value="main"), \
+             patch("pokepoke.worktrees.coordination.main_repo_git_lock"):
             mock_merge.return_value = True
 
             fut_a = mq2.submit(Path("/fake/a"), item_a)
@@ -499,7 +501,9 @@ class TestStressConcurrentMerges:
         mq = MergeQueue()
 
         with patch("pokepoke.worktrees.worktree_finalization.merge_worktree_to_dev") as mock_merge, \
-             patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True):
+             patch("pokepoke.git.merge_queue._rebase_worktree", return_value=True), \
+             patch("pokepoke.git.merge_queue.get_default_branch", return_value="main"), \
+             patch("pokepoke.worktrees.coordination.main_repo_git_lock"):
             mock_merge.return_value = True
 
             futures = []
