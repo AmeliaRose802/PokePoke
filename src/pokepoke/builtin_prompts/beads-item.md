@@ -33,6 +33,16 @@ Previous workers attempted this item but failed. **Use this context to avoid rep
 **Important:** The worktree may already contain partial changes from previous attempts. Check `git log` and `git diff` before starting to understand what was already done.
 {{/previous_worker_context}}
 
+## 🔧 CRITICAL: How to Run Commands
+
+**To run ANY command, use the `powershell` tool — NOT `write_powershell`.**
+
+- ✅ **`powershell`** — Starts a new command. Use this for ALL commands (git, pytest, etc.)
+- ❌ **`write_powershell`** — Only sends input to an ALREADY RUNNING command (e.g. interactive prompts). NEVER use this to start commands.
+- ❌ **`list_powershell`** — Only lists running sessions. If it returns empty, use `powershell` to start one.
+
+If `list_powershell` returns "no active shell sessions", you MUST use the `powershell` tool — retrying `write_powershell` with different shell IDs will never work.
+
 ## ⚠️ CRITICAL: Avoiding Hung Commands
 
 **Command Timeout: {{command_timeout}} seconds**

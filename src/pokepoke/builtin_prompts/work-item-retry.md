@@ -62,6 +62,16 @@ Work independently and complete the task. When finished:
    [OK] Test coverage added
    [OK] Any blockers or dependencies discovered
 
+## 🔧 CRITICAL: How to Run Commands
+
+**To run ANY command, use the `powershell` tool — NOT `write_powershell`.**
+
+- ✅ **`powershell`** — Starts a new command. Use this for ALL commands (git, pytest, etc.)
+- ❌ **`write_powershell`** — Only sends input to an ALREADY RUNNING command (e.g. interactive prompts). NEVER use this to start commands.
+- ❌ **`list_powershell`** — Only lists running sessions. If it returns empty, use `powershell` to start one.
+
+If `list_powershell` returns "no active shell sessions", you MUST use the `powershell` tool — retrying `write_powershell` with different shell IDs will never work.
+
 ## Avoiding Hung Commands
 
 **Command Timeout: {{command_timeout}} seconds**
