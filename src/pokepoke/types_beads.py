@@ -34,6 +34,15 @@ class BeadsWorkItem:
     metadata: dict[str, Any] | None = None  # Metadata from beads (gate_rejection_count, etc.)
     is_ephemeral: bool = False  # True for synthetic items (cleanup, maintenance) not in beads DB
 
+    def __post_init__(self) -> None:
+        # bd v1.0.3+ may return metadata as a JSON string; normalise to dict.
+        if isinstance(self.metadata, str):
+            import json
+            try:
+                self.metadata = json.loads(self.metadata)
+            except (json.JSONDecodeError, TypeError):
+                self.metadata = None
+
 @dataclass(frozen=True)
 class BeadsCreatedItem:
     """A beads item created by an agent during the session."""
