@@ -56,6 +56,11 @@ if TYPE_CHECKING:
 def _build_worker_env(cwd: str | None) -> dict[str, str]:
     """Build environment variables for a worker session."""
     env = {**os.environ, "PYTHONIOENCODING": "utf-8:replace"}
+    # COPILOT_ALLOW_ALL grants full tool/path/url permissions to the CLI
+    # process AND any sub-agents it spawns via the 'task' tool.  CLI flags
+    # like --allow-all-tools only apply to the top-level process; sub-agents
+    # are new processes that only inherit environment variables.
+    env["COPILOT_ALLOW_ALL"] = "1"
     if cwd:
         env["GIT_CEILING_DIRECTORIES"] = str(Path(cwd).parent)
     return env
