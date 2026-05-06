@@ -105,3 +105,8 @@ bld/
 project.lock.json
 project.fragment.lock.json
 artifacts/
+
+# Beads / Dolt files (added by bd init)
+.dolt/
+*.db
+.beads-credential-key

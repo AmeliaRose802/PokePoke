@@ -1,4 +1,7 @@
 {
-  "database": "beads.db",
-  "jsonl_export": "sync_base.jsonl"
+  "database": "dolt",
+  "backend": "dolt",
+  "dolt_mode": "embedded",
+  "dolt_database": "PokePoke",
+  "project_id": "0cc3d717-7750-4baf-953a-99dc10c4b906"
 }
