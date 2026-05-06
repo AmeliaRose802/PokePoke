@@ -152,31 +152,40 @@ def _build_permission_handler(
         return None
 
     def handler(req: Any, ctx: Any = None) -> Any:
-        tool_name, tool_args, set_tool_args = _extract_tool_request(req)
-        if tool_name and str(tool_name).lower() == "powershell":
-            validation = validate_and_rewrite_powershell_tool_args(
-                tool_args,
-                required_cwd=required_cwd,
-            )
-            if validation.denied_reason:
-                violation = validation.denied_reason
-                message = f"Denied tool request: {violation}"
-                logger.warning(message)
-                if item_logger:
-                    item_logger.log_error(message)
-                if _PERMISSION_RESULT_CLS is not None:
-                    return _PERMISSION_RESULT_CLS(
-                        kind="denied-by-rules",
-                        rules=[],
-                        feedback=violation,
-                        message=message,
-                    )
-                return _approve_all(req, ctx) if _approve_all is not None else None
+        # CRITICAL: any unhandled exception here causes the SDK to return
+        # PermissionRequestResult() (default kind="denied-no-approval-rule-
+        # and-could-not-request-from-user") which the CLI reports as
+        # "unexpected user permission response".  We MUST always return
+        # an approved result except for explicitly denied commands.
+        try:
+            tool_name, tool_args, set_tool_args = _extract_tool_request(req)
+            if tool_name and str(tool_name).lower() == "powershell":
+                validation = validate_and_rewrite_powershell_tool_args(
+                    tool_args,
+                    required_cwd=required_cwd,
+                )
+                if validation.denied_reason:
+                    violation = validation.denied_reason
+                    message = f"Denied tool request: {violation}"
+                    logger.warning(message)
+                    if item_logger:
+                        item_logger.log_error(message)
+                    if _PERMISSION_RESULT_CLS is not None:
+                        return _PERMISSION_RESULT_CLS(
+                            kind="denied-by-rules",
+                            rules=[],
+                            feedback=violation,
+                            message=message,
+                        )
 
-            if validation.rewritten_tool_args is not None:
-                set_tool_args(validation.rewritten_tool_args)
+                if validation.rewritten_tool_args is not None:
+                    set_tool_args(validation.rewritten_tool_args)
+        except Exception:
+            # Never let handler errors bubble up — the SDK catch-all
+            # converts them into permission denials.
+            logger.debug("Permission handler error (approving anyway)", exc_info=True)
 
-        return _approve_all(req, ctx) if _approve_all is not None else None
+        return _approve_all(req, ctx) if _approve_all is not None else (_PERMISSION_RESULT_CLS(kind="approved") if _PERMISSION_RESULT_CLS is not None else None)
 
     return handler
 
