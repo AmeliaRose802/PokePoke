@@ -203,6 +203,8 @@ def _build_session_config(
     permission_handler = _build_permission_handler(item_logger, required_cwd=cwd)
     if permission_handler is not None:
         config["on_permission_request"] = permission_handler
+    if cwd:
+        config["working_directory"] = cwd
     if deny_write:
         # Exclude file modification tools AND command execution tools
         # This prevents gate agents from re-running tests/pre-commit hooks
