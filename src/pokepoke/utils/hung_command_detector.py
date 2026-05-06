@@ -21,6 +21,14 @@ class ShellReadState:
     consecutive_empty_reads: int = 0
 
 
+@dataclass
+class NoSessionState:
+    """Tracks write_powershell/list_powershell calls that find no active sessions."""
+    total_calls: int = 0
+    first_call_time: float = field(default_factory=time.time)
+    shell_ids_tried: list[str] = field(default_factory=list)
+
+
 class HungCommandDetector:
     """Detects hung commands based on read_powershell call patterns.
 
@@ -36,16 +44,21 @@ class HungCommandDetector:
         self,
         max_retries: int = 3,
         cumulative_timeout: float = 300.0,
+        max_no_session_calls: int = 3,
     ):
         """Initialize the detector.
 
         Args:
             max_retries: Maximum read_powershell calls before considering hung.
             cumulative_timeout: Maximum total wait time in seconds.
+            max_no_session_calls: Maximum write/list_powershell calls with no
+                active sessions before emitting corrective feedback.
         """
         self.max_retries = max_retries
         self.cumulative_timeout = cumulative_timeout
+        self.max_no_session_calls = max_no_session_calls
         self._shell_states: dict[str, ShellReadState] = {}
+        self._no_session_state: NoSessionState | None = None
 
     def record_powershell_start(self, shell_id: str) -> None:
         """Record that a new powershell command was started.
