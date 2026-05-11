@@ -1,6 +1,7 @@
 """Tests for worktree merge helper functions."""
 
 import subprocess
+from pathlib import Path
 from unittest.mock import MagicMock, patch
 
 import pytest
@@ -11,6 +12,7 @@ from pokepoke.worktrees.merge_helpers import (
     is_worktree_merged,
     log_merge_failure,
     validate_post_merge_or_rollback,
+    validate_pre_merge_quality,
 )
 
 # ---------------------------------------------------------------------------
@@ -156,3 +158,84 @@ class TestIsWorktreeMerged:
     ) -> None:
         mock_git.side_effect = subprocess.CalledProcessError(1, "git")
         assert is_worktree_merged("item-1") is False
+
+# ---------------------------------------------------------------------------
+# validate_pre_merge_quality
+# ---------------------------------------------------------------------------
+
+class TestValidatePreMergeQuality:
+    """Tests for the pre-merge quality gate that prevents violations landing on main."""
+
+    @patch("pokepoke.worktrees.merge_helpers._run_git")
+    def test_passes_when_files_under_limit(self, mock_git, tmp_path) -> None:
+        mock_git.return_value = MagicMock(
+            stdout="src/pokepoke/foo.py\n", returncode=0,
+        )
+        # Create a file under the limit
+        src = tmp_path / "src" / "pokepoke"
+        src.mkdir(parents=True)
+        (src / "foo.py").write_text("\n".join(f"line {i}" for i in range(100)))
+
+        violations = validate_pre_merge_quality(tmp_path, "main")
+        assert violations == []
+
+    @patch("pokepoke.worktrees.merge_helpers._run_git")
+    def test_fails_when_python_file_exceeds_limit(self, mock_git, tmp_path) -> None:
+        mock_git.return_value = MagicMock(
+            stdout="src/pokepoke/big.py\n", returncode=0,
+        )
+        src = tmp_path / "src" / "pokepoke"
+        src.mkdir(parents=True)
+        # 410 non-blank lines exceeds the 400 limit
+        (src / "big.py").write_text("\n".join(f"line {i}" for i in range(410)))
+
+        violations = validate_pre_merge_quality(tmp_path, "main")
+        assert len(violations) == 1
+        assert "big.py" in violations[0]
+        assert "+10" in violations[0]
+
+    @patch("pokepoke.worktrees.merge_helpers._run_git")
+    def test_ignores_test_files(self, mock_git, tmp_path) -> None:
+        mock_git.return_value = MagicMock(
+            stdout="tests/test_big.py\n", returncode=0,
+        )
+        tests_dir = tmp_path / "tests"
+        tests_dir.mkdir()
+        (tests_dir / "test_big.py").write_text("\n".join(f"line {i}" for i in range(500)))
+
+        violations = validate_pre_merge_quality(tmp_path, "main")
+        assert violations == []
+
+    @patch("pokepoke.worktrees.merge_helpers._run_git")
+    def test_blank_lines_not_counted(self, mock_git, tmp_path) -> None:
+        mock_git.return_value = MagicMock(
+            stdout="src/pokepoke/padded.py\n", returncode=0,
+        )
+        src = tmp_path / "src" / "pokepoke"
+        src.mkdir(parents=True)
+        # 300 real lines + 200 blank lines = under limit for non-blank
+        lines = [f"line {i}" if i % 2 == 0 else "" for i in range(500)]
+        (src / "padded.py").write_text("\n".join(lines))
+
+        violations = validate_pre_merge_quality(tmp_path, "main")
+        assert violations == []
+
+    @patch("pokepoke.worktrees.merge_helpers._run_git")
+    def test_handles_diff_failure_gracefully(self, mock_git, tmp_path) -> None:
+        mock_git.side_effect = subprocess.CalledProcessError(1, "git")
+
+        violations = validate_pre_merge_quality(tmp_path, "main")
+        assert violations == []
+
+    @patch("pokepoke.worktrees.merge_helpers._run_git")
+    def test_desktop_ts_file_over_limit(self, mock_git, tmp_path) -> None:
+        mock_git.return_value = MagicMock(
+            stdout="desktop/src/components/Big.tsx\n", returncode=0,
+        )
+        comp = tmp_path / "desktop" / "src" / "components"
+        comp.mkdir(parents=True)
+        (comp / "Big.tsx").write_text("\n".join(f"line {i}" for i in range(510)))
+
+        violations = validate_pre_merge_quality(tmp_path, "main")
+        assert len(violations) == 1
+        assert "Big.tsx" in violations[0]

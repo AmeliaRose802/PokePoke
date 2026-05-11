@@ -12,6 +12,7 @@ from pokepoke.git.repo_check import (
     _restore_conflicted_files,
     _stash_uncommitted_changes,
     _try_auto_commit,
+    _try_reset_working_tree,
     check_and_commit_main_repo,
     check_beads_available,
     initialize_beads_repo,
@@ -199,11 +200,12 @@ class TestCheckAndCommitMainRepo:
              patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=False), \
              patch('pokepoke.git.repo_check._try_reset_working_tree', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
-            # git status, auto-commit (add + commit fail), then stash commands
+            # git status, auto-commit (add + commit fail + reset), then stash commands
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
                 Mock(returncode=0),  # git add --all (auto-commit)
                 Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+                Mock(returncode=0),  # git reset HEAD (unstage after failed commit)
                 Mock(returncode=0),  # git add --all for stash
                 Mock(returncode=0, stdout="", stderr="")  # git stash push
             ]
@@ -231,11 +233,12 @@ class TestCheckAndCommitMainRepo:
              patch('pokepoke.git.repo_check._restore_conflicted_files', return_value=False), \
              patch('pokepoke.git.repo_check._try_reset_working_tree', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):  # Speed up test
-            # git status, auto-commit fails, then stash also fails
+            # git status, auto-commit fails (add + commit + reset), then stash also fails
             mock_run.side_effect = [
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
                 Mock(returncode=0),  # git add --all (auto-commit)
                 Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+                Mock(returncode=0),  # git reset HEAD (unstage after failed commit)
                 Mock(returncode=0),  # git add --all (stash)
                 Mock(returncode=1, stdout="", stderr="cannot stash")  # git stash fails
             ]
@@ -377,6 +380,7 @@ class TestCheckAndCommitMainRepo:
                 Mock(returncode=0, stdout=" M src/module.py", stderr=""),  # git status
                 Mock(returncode=0),  # git add --all (auto-commit)
                 Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+                Mock(returncode=0),  # git reset HEAD (unstage after failed commit)
                 Mock(returncode=0),  # git add --all (stash)
                 Mock(returncode=0, stdout="", stderr=""),  # git stash push
             ]
@@ -486,6 +490,61 @@ class TestTryAutoCommit:
             add_cmd = add_call[0][0]
             assert add_cmd == ["git", "add", "-u"], f"Expected git add -u, got {add_cmd}"
 
+    def test_auto_commit_unstages_on_hook_failure(self):
+        """When pre-commit hooks reject, git reset HEAD unstages the index."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add -u (stages files)
+                Mock(returncode=1, stdout="", stderr="pre-commit hook failed"),  # commit rejected
+                Mock(returncode=0),  # git reset HEAD (unstage)
+            ]
+
+            result = _try_auto_commit(repo_path, mock_logger)
+
+            assert result is False
+            # Third call should be git reset HEAD
+            reset_call = mock_run.call_args_list[2]
+            reset_cmd = reset_call[0][0]
+            assert reset_cmd == ["git", "reset", "HEAD"], f"Expected git reset HEAD, got {reset_cmd}"
+
+    def test_auto_commit_unstages_on_timeout(self):
+        """When commit times out, git reset HEAD unstages the index."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = [
+                Mock(returncode=0),  # git add -u (stages files)
+                subprocess.TimeoutExpired(cmd="git", timeout=120),  # commit timeout
+                Mock(returncode=0),  # git reset HEAD (unstage)
+            ]
+
+            result = _try_auto_commit(repo_path, mock_logger)
+
+            assert result is False
+            assert len(mock_run.call_args_list) == 3
+            reset_cmd = mock_run.call_args_list[2][0][0]
+            assert reset_cmd == ["git", "reset", "HEAD"]
+
+    def test_auto_commit_no_unstage_when_add_fails(self):
+        """When git add fails, no unstage needed (nothing was staged)."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run:
+            mock_run.side_effect = subprocess.CalledProcessError(
+                returncode=128, cmd=["git", "add"], stderr="error"
+            )
+
+            result = _try_auto_commit(repo_path, mock_logger)
+
+            assert result is False
+            # Only one call (git add) — no reset because staging failed
+            assert len(mock_run.call_args_list) == 1
+
 
 class TestStashUncommittedChanges:
     """Test _stash_uncommitted_changes function."""
@@ -578,6 +637,40 @@ class TestStashUncommittedChanges:
             add_call = mock_run.call_args_list[0]
             add_cmd = add_call[0][0]
             assert add_cmd == ["git", "add", "-u"], f"Expected git add -u, got {add_cmd}"
+
+
+class TestTryResetWorkingTree:
+    """Test _try_reset_working_tree function."""
+
+    def test_reset_uses_hard_reset(self):
+        """Reset uses git reset --hard HEAD to clear both index and working tree."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.git.repo_check.get_status_porcelain_and_changes') as mock_status:
+            mock_run.return_value = Mock(returncode=0)
+            mock_status.return_value = ("", {})
+
+            result = _try_reset_working_tree(repo_path, mock_logger)
+
+            assert result is True
+            reset_cmd = mock_run.call_args_list[0][0][0]
+            assert reset_cmd == ["git", "reset", "--hard", "HEAD"]
+
+    def test_reset_reports_remaining_dirty_files(self):
+        """Reset returns False when files remain dirty after reset."""
+        mock_logger = Mock()
+        repo_path = Path("/fake/repo")
+
+        with patch('subprocess.run') as mock_run, \
+             patch('pokepoke.git.repo_check.get_status_porcelain_and_changes') as mock_status:
+            mock_run.return_value = Mock(returncode=0)
+            mock_status.return_value = ("M src/foo.py", {})
+
+            result = _try_reset_working_tree(repo_path, mock_logger)
+
+            assert result is False
 
 
 class TestCheckBeadsAvailable:
@@ -1008,11 +1101,12 @@ class TestCleanupRetriesWithConflictMarkers:
              patch('pokepoke.git.repo_check._try_reset_working_tree', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):
             mock_run.side_effect = [
-                Mock(returncode=0, stdout=" M src/file.py", stderr=""),
-                Mock(returncode=0),
-                Mock(returncode=1, stdout="", stderr="hook failed"),
-                Mock(returncode=0),
-                Mock(returncode=0, stdout="", stderr=""),
+                Mock(returncode=0, stdout=" M src/file.py", stderr=""),  # git status
+                Mock(returncode=0),  # git add -u (auto-commit)
+                Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+                Mock(returncode=0),  # git reset HEAD (unstage)
+                Mock(returncode=0),  # git add -u (stash)
+                Mock(returncode=0, stdout="", stderr=""),  # git stash push
             ]
             mock_cleanup.return_value = (False, Mock())
             mock_restore.return_value = False
@@ -1034,11 +1128,12 @@ class TestCleanupRetriesWithConflictMarkers:
              patch('pokepoke.git.repo_check.merge_lock_active', return_value=False), \
              patch('pokepoke.git.repo_check.time.sleep'):
             mock_run.side_effect = [
-                Mock(returncode=0, stdout=" M src/file.py", stderr=""),
-                Mock(returncode=0),
-                Mock(returncode=1, stdout="", stderr="hook failed"),
-                Mock(returncode=0),
-                Mock(returncode=0, stdout="", stderr=""),
+                Mock(returncode=0, stdout=" M src/file.py", stderr=""),  # git status
+                Mock(returncode=0),  # git add -u (1st auto-commit)
+                Mock(returncode=1, stdout="", stderr="hook failed"),  # git commit fails
+                Mock(returncode=0),  # git reset HEAD (unstage)
+                Mock(returncode=0),  # git add -u (2nd auto-commit after restore)
+                Mock(returncode=0, stdout="", stderr=""),  # git commit succeeds
             ]
             mock_cleanup.return_value = (False, Mock())
 

@@ -128,13 +128,19 @@ def _try_auto_commit(repo_path: Path, run_logger: 'RunLogger') -> bool:
 
     Tried before the cleanup agent so trivial changes can be committed quickly.
     Returns True on success, False otherwise (e.g. pre-commit hooks reject).
+
+    On failure, unstages any files that were staged by ``git add -u`` so the
+    index doesn't remain dirty (``git checkout -- .`` only reverts the working
+    tree, not the index).
     """
     with main_repo_git_lock():
+        staged = False
         try:
             subprocess.run(
                 ["git", "add", "-u"], check=True, capture_output=True,
                 encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30,
             )
+            staged = True
             result = subprocess.run(
                 ["git", "commit", "-m", "chore: auto-commit uncommitted changes"],
                 capture_output=True, text=True, encoding='utf-8', errors='replace',
@@ -156,6 +162,19 @@ def _try_auto_commit(repo_path: Path, run_logger: 'RunLogger') -> bool:
             )
         except Exception as e:
             run_logger.log_orchestrator(f"Auto-commit failed: {e}", level="WARNING")
+
+        # Unstage files so the index matches HEAD — prevents phantom dirty
+        # state that git checkout -- . cannot fix.
+        if staged:
+            try:
+                subprocess.run(
+                    ["git", "reset", "HEAD"], capture_output=True,
+                    encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30,
+                )
+            except Exception:
+                run_logger.log_orchestrator(
+                    "Failed to unstage after auto-commit failure", level="WARNING",
+                )
     return False
 
 
@@ -294,16 +313,20 @@ def _restore_conflicted_files(repo_path: Path, run_logger: 'RunLogger') -> bool:
 
 
 def _try_reset_working_tree(repo_path: Path, run_logger: 'RunLogger') -> bool:
-    """Reset working tree to HEAD, discarding all unstaged modifications.
+    """Reset working tree AND index to HEAD, discarding all modifications.
 
-    Fast path for dirty merge residue: ``git checkout -- .`` reverts all
-    tracked files to their last-committed state in seconds, avoiding the
-    multi-minute cleanup-agent loop.
+    Fast path for dirty merge residue: ``git reset --hard HEAD`` reverts both
+    the index and working tree to their last-committed state in seconds,
+    avoiding the multi-minute cleanup-agent loop.
+
+    Note: ``git checkout -- .`` only reverts the working tree; staged-but-
+    uncommitted files survive it.  ``git reset --hard`` is the correct
+    operation to ensure a fully clean state.
     """
     with main_repo_git_lock():
         try:
             subprocess.run(
-                ["git", "checkout", "--", "."], check=True, capture_output=True,
+                ["git", "reset", "--hard", "HEAD"], check=True, capture_output=True,
                 encoding='utf-8', errors='replace', cwd=str(repo_path), timeout=30,
             )
             # Verify the reset actually cleaned up

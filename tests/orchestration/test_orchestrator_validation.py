@@ -92,17 +92,17 @@ class TestCheckAndCommitMainRepo:
             yield
         mock_cleanup_lock.return_value = _noop_lock()
 
-        # git status returns changes, auto-commit (add succeeds, commit fails),
-        # reset attempt (checkout succeeds but files still dirty), then cleanup agent
+        # git status returns changes, auto-commit (add succeeds, commit fails + unstage),
+        # reset attempt (git reset --hard HEAD succeeds and repo is clean)
         mock_subprocess.side_effect = [
             Mock(stdout=" M src/file.py\n M tests/test.py\n", returncode=0),  # git status
             Mock(returncode=0),  # git add --all (auto-commit)
             Mock(returncode=1, stdout="", stderr="pre-commit hook failed"),  # git commit fails
-            Mock(returncode=0),  # git checkout -- . (reset working tree)
-            Mock(stdout=" M src/file.py\n", returncode=0),  # git status after reset (still dirty)
-            Mock(stdout="", returncode=0),  # git status --porcelain (conflict detection)
+            Mock(returncode=0),  # git reset HEAD (unstage after failed commit)
+            Mock(returncode=0),  # git reset --hard HEAD (reset working tree)
+            Mock(stdout="", returncode=0),  # git status --porcelain (clean after reset)
         ]
-        # Mock cleanup agent to return success
+        # Mock cleanup agent (should NOT be called since reset succeeds)
         mock_cleanup.return_value = (True, AgentStats(
             wall_duration=1.0,
             api_duration=1.0,
@@ -121,16 +121,11 @@ class TestCheckAndCommitMainRepo:
             try:
                 result = check_and_commit_main_repo(repo_path, run_logger)
 
-                assert result is True  # Should return True after successful cleanup
-                # Should call subprocess for git status + auto-commit attempt
+                assert result is True  # Should return True after successful reset
+                # Should call subprocess for git status + auto-commit + reset
                 assert mock_subprocess.call_count >= 3
-                mock_cleanup.assert_called_once()
-
-                # Verify cleanup agent was called with correct work item
-                call_args = mock_cleanup.call_args
-                work_item = call_args[0][0]  # First positional argument
-                assert work_item.id == "cleanup-main-repo-1"  # First attempt
-                assert "uncommitted changes" in work_item.title.lower()
+                # Cleanup agent should NOT be called because reset --hard succeeds
+                mock_cleanup.assert_not_called()
             finally:
                 run_logger.close()
 

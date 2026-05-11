@@ -746,6 +746,7 @@ class TestMergeWorktree:
              patch('pokepoke.worktrees.worktree_helpers.commit_all_changes', return_value=(True, '')), \
              patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True), \
              patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree', return_value=_MR(success=True)), \
+             patch('pokepoke.worktrees.worktrees.validate_pre_merge_quality', return_value=[]), \
              patch('pokepoke.worktrees.worktrees.execute_merge_sequence', return_value=(True, '', [])), \
              patch('pokepoke.worktrees.merge_helpers.validate_post_merge', return_value=True), \
              patch('pokepoke.worktrees.worktrees.cleanup_after_merge'), \

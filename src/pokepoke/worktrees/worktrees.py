@@ -24,6 +24,7 @@ from pokepoke.worktrees.merge_helpers import (
     integrate_target_into_worktree,
     log_merge_failure,
     validate_post_merge_or_rollback,
+    validate_pre_merge_quality,
 )
 from pokepoke.worktrees.merge_result import MergeResult as MergeResult  # re-export
 from pokepoke.worktrees.worktree_cleanup import (
@@ -353,6 +354,18 @@ def merge_worktree(item_id: str, target_branch: str | None = None, cleanup: bool
             integration.unmerged_files,
         )
         return MergeResult(success=False, unmerged_files=integration.unmerged_files)
+
+    # Quality gate: check file-length limits on changed files before merging.
+    # git merge --no-ff does NOT trigger pre-commit hooks, so this is the
+    # last line of defence against quality violations landing on main.
+    quality_violations = validate_pre_merge_quality(worktree_path, target_branch)
+    if quality_violations:
+        logger.error(
+            "❌ Pre-merge quality gate rejected merge of %s — "
+            "%d violation(s). Worktree preserved for remediation.",
+            branch_name, len(quality_violations),
+        )
+        return MergeResult(success=False)
 
     # Execute merge sequence with proper error handling
     merge_success, merge_error, unmerged_files = execute_merge_sequence(branch_name, target_branch, cwd=repo_cwd)

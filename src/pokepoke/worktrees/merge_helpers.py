@@ -11,6 +11,11 @@ from pokepoke.worktrees.merge_result import MergeResult
 
 logger = logging.getLogger(__name__)
 
+# Maximum non-blank lines allowed per Python source file.
+# Must match the threshold in .githooks/check-file-length.ps1.
+MAX_PYTHON_LINES = 400
+MAX_DESKTOP_LINES = 500
+
 
 def log_merge_failure(merge_error: str | None, unmerged_files: list[str]) -> None:
     """Log details about a merge failure."""
@@ -166,3 +171,74 @@ def integrate_target_into_worktree(
             abort_merge(repo_path=worktree_path)
         logger.warning("❌ Pre-merge integration timed out in worktree")
         return MergeResult(success=False)
+
+
+def _count_non_blank_lines(file_path: Path) -> int:
+    """Count non-blank lines in a file (mirrors .githooks/check-file-length.ps1)."""
+    try:
+        text = file_path.read_text(encoding="utf-8", errors="replace")
+    except OSError:
+        return 0
+    return sum(1 for line in text.splitlines() if line.strip())
+
+
+def validate_pre_merge_quality(
+    worktree_path: Path,
+    target_branch: str,
+) -> list[str]:
+    """Run lightweight quality gates on worktree files before merging to main.
+
+    Checks the files that differ between the target branch and the worktree
+    branch HEAD against the same thresholds enforced by pre-commit hooks
+    (file-length limits).  ``git merge`` does not trigger pre-commit hooks,
+    so this is the last line of defence before bad code lands on main.
+
+    Returns a list of human-readable violation descriptions (empty = pass).
+    """
+    wt = str(worktree_path)
+    violations: list[str] = []
+
+    # Get files changed on the worktree branch vs the target
+    try:
+        result = _run_git(
+            ["git", "diff", "--name-only", target_branch, "HEAD"],
+            cwd=wt, timeout=30,
+        )
+        changed_files = [f for f in result.stdout.strip().splitlines() if f]
+    except (subprocess.CalledProcessError, subprocess.TimeoutExpired):
+        logger.warning("Pre-merge quality check: unable to diff changed files, skipping")
+        return []
+
+    for rel_path in changed_files:
+        full_path = worktree_path / rel_path
+        if not full_path.is_file():
+            continue
+
+        # Python files: 400 non-blank line limit
+        if rel_path.endswith(".py") and not rel_path.startswith("tests/"):
+            count = _count_non_blank_lines(full_path)
+            if count > MAX_PYTHON_LINES:
+                violations.append(
+                    f"{rel_path}: {count} non-blank lines (limit {MAX_PYTHON_LINES}, +{count - MAX_PYTHON_LINES})"
+                )
+
+        # Desktop JS/TS files: 500 non-blank line limit
+        if rel_path.startswith("desktop/src/") and any(
+            rel_path.endswith(ext) for ext in (".ts", ".tsx", ".js", ".jsx")
+        ):
+            count = _count_non_blank_lines(full_path)
+            if count > MAX_DESKTOP_LINES:
+                violations.append(
+                    f"{rel_path}: {count} non-blank lines (limit {MAX_DESKTOP_LINES}, +{count - MAX_DESKTOP_LINES})"
+                )
+
+    if violations:
+        logger.error(
+            "❌ Pre-merge quality gate FAILED — %d file(s) exceed line limits:\n  %s",
+            len(violations),
+            "\n  ".join(violations),
+        )
+    else:
+        logger.info("✅ Pre-merge quality gate passed")
+
+    return violations

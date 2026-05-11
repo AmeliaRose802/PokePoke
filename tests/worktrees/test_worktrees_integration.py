@@ -205,6 +205,7 @@ class TestMergeWorktreeIntegration:
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.is_worktree_merged')
     @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
+    @patch('pokepoke.worktrees.worktrees.validate_pre_merge_quality', return_value=[])
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
@@ -219,6 +220,7 @@ class TestMergeWorktreeIntegration:
         mock_is_clean,
         mock_validate,
         mock_execute,
+        mock_quality,
         mock_integrate,
         mock_is_merged,
         mock_sync
@@ -280,11 +282,12 @@ class TestMergeWorktreeIntegration:
 
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
+    @patch('pokepoke.worktrees.worktrees.validate_pre_merge_quality', return_value=[])
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees.get_default_branch')
     def test_merge_worktree_returns_conflicts_on_merge_failure(
-        self, mock_get_branch, mock_is_clean, mock_execute, mock_integrate, mock_sync
+        self, mock_get_branch, mock_is_clean, mock_execute, mock_quality, mock_integrate, mock_sync
     ):
         """Test that conflicts are returned when merge has conflicts."""
         from pokepoke.worktrees.worktrees import MergeResult as _MR
@@ -301,6 +304,7 @@ class TestMergeWorktreeIntegration:
 
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
+    @patch('pokepoke.worktrees.worktrees.validate_pre_merge_quality', return_value=[])
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     @patch('pokepoke.worktrees.merge_helpers.validate_post_merge')
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
@@ -313,6 +317,7 @@ class TestMergeWorktreeIntegration:
         mock_is_clean,
         mock_validate,
         mock_execute,
+        mock_quality,
         mock_integrate,
         mock_sync
     ):

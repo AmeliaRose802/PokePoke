@@ -452,10 +452,12 @@ class TestMergeWorktree:
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
+    @patch('pokepoke.worktrees.worktrees.validate_pre_merge_quality', return_value=[])
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     def test_merge_worktree_success(
         self,
         mock_execute,
+        mock_quality,
         mock_integrate,
         mock_sync,
         mock_is_clean,
@@ -538,10 +540,12 @@ class TestMergeWorktree:
     @patch('pokepoke.worktrees.worktrees.is_worktree_clean')
     @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo')
     @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
+    @patch('pokepoke.worktrees.worktrees.validate_pre_merge_quality', return_value=[])
     @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
     def test_merge_worktree_cleanup(
         self,
         mock_execute,
+        mock_quality,
         mock_integrate,
         mock_sync,
         mock_is_clean,
@@ -562,6 +566,31 @@ class TestMergeWorktree:
 
         assert success is True
         mock_cleanup.assert_called_once()
+
+    @patch('pokepoke.worktrees.worktrees.get_default_branch', return_value='main')
+    @patch('pokepoke.worktrees.worktrees.is_worktree_clean', return_value=True)
+    @patch('pokepoke.worktrees.worktrees._sync_and_ensure_clean_main_repo', return_value=True)
+    @patch('pokepoke.worktrees.worktrees.integrate_target_into_worktree')
+    @patch('pokepoke.worktrees.worktrees.validate_pre_merge_quality')
+    @patch('pokepoke.worktrees.worktrees.execute_merge_sequence')
+    def test_merge_worktree_rejects_quality_gate_failure(
+        self,
+        mock_execute,
+        mock_quality,
+        mock_integrate,
+        mock_sync,
+        mock_is_clean,
+        mock_default_branch,
+    ) -> None:
+        """Reject merge when pre-merge quality gate finds violations."""
+        mock_integrate.return_value = MergeResult(success=True)
+        mock_quality.return_value = ["src/big.py: 450 non-blank lines (limit 400, +50)"]
+
+        success, conflicts = merge_worktree('item-1')
+
+        assert success is False
+        # execute_merge_sequence should never be called
+        mock_execute.assert_not_called()
 
 
 class TestListWorktrees:
