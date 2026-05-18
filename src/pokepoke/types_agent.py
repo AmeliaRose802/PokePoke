@@ -31,6 +31,7 @@ class CopilotResult:
     session_id: str | None = None  # SDK session ID, reusable for retry/resume after failures
     last_output_summary: str | None = None  # Truncated output summary for retry context
     work_agent_outcome: WorkAgentOutcome | None = None  # Structured outcome from work agent
+    gate_rejected: bool = False  # Quality gate rejected despite agent reporting success
 
 @dataclass
 class GateAgentResult:

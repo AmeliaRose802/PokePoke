@@ -23,6 +23,26 @@ class TestCopilotResultDirect:
         assert result.session_id is None
         assert result.last_output_summary is None
         assert result.work_agent_outcome is None
+        assert result.gate_rejected is False
+
+    def test_gate_rejected_default_is_false(self) -> None:
+        result = CopilotResult(work_item_id="item-1", success=True)
+        assert result.gate_rejected is False
+
+    def test_gate_rejected_true_with_success_true(self) -> None:
+        result = CopilotResult(
+            work_item_id="item-1", success=True, gate_rejected=True
+        )
+        assert result.success is True
+        assert result.gate_rejected is True
+
+    def test_gate_rejected_independent_of_success(self) -> None:
+        for success, gate in [(True, True), (True, False), (False, True), (False, False)]:
+            result = CopilotResult(
+                work_item_id="x", success=success, gate_rejected=gate
+            )
+            assert result.success is success
+            assert result.gate_rejected is gate
 
     def test_all_fields(self) -> None:
         result = CopilotResult(
