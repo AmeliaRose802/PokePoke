@@ -22,6 +22,25 @@ from pokepoke.worktrees.lock_contention import get_lock_contention_stats as get_
 
 logger = logging.getLogger(__name__)
 
+# ── PID-based lock file registry ─────────────────────────────────────
+_owned_lock_paths: set[Path] = set()
+_owned_lock_paths_lock = threading.Lock()
+
+
+def get_owned_lock_paths() -> list[Path]:
+    """Return a snapshot of lock paths currently owned by this process."""
+    with _owned_lock_paths_lock:
+        return list(_owned_lock_paths)
+
+
+def _get_related_files(lock_path: Path) -> list[Path]:
+    """Return the .lock, .lock.meta, and .lock.break file paths for a lock."""
+    return [
+        lock_path,
+        lock_path.with_suffix(".lock.meta"),
+        lock_path.with_suffix(".lock.break"),
+    ]
+
 
 def _lock_dir() -> Path:
     """Return (and lazily create) the lock directory."""
@@ -172,10 +191,14 @@ def acquire_lock(
     from pokepoke.stats.performance_monitor import get_performance_monitor
     get_performance_monitor().check_lock_wait(name, wait)
     _write_lock_metadata(lock_path)
+    with _owned_lock_paths_lock:
+        _owned_lock_paths.add(lock_path)
     try:
         yield lock
     finally:
         lock.release()
+        with _owned_lock_paths_lock:
+            _owned_lock_paths.discard(lock_path)
 
 
 def try_lock(name: str) -> FileLock | None:
@@ -185,6 +208,8 @@ def try_lock(name: str) -> FileLock | None:
     try:
         lock.acquire(timeout=0)
         _write_lock_metadata(lp)
+        with _owned_lock_paths_lock:
+            _owned_lock_paths.add(lp)
         return lock
     except Timeout:
         return None

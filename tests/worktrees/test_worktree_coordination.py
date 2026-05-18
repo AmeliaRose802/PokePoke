@@ -279,3 +279,79 @@ class TestMainRepoGitLock:
         # Should be acquirable again
         with main_repo_git_lock():
             pass
+
+
+class TestOwnedLockPaths:
+    """Tests for the PID-based lock file registry."""
+
+    def test_acquire_lock_tracks_path(self, tmp_path, monkeypatch):
+        """Lock paths are added to _owned_lock_paths after acquire_lock."""
+        import pokepoke.worktrees.coordination as coord
+
+        lock_dir = tmp_path / "locks"
+        lock_dir.mkdir()
+        monkeypatch.setattr(coord, "_lock_dir", lambda: lock_dir)
+
+        with coord.acquire_lock("test-track", timeout=5):
+            owned = coord.get_owned_lock_paths()
+            expected = lock_dir / "test-track.lock"
+            assert expected in owned
+
+    def test_acquire_lock_removes_path_on_exit(self, tmp_path, monkeypatch):
+        """Lock paths are removed from _owned_lock_paths after context exit."""
+        import pokepoke.worktrees.coordination as coord
+
+        lock_dir = tmp_path / "locks"
+        lock_dir.mkdir()
+        monkeypatch.setattr(coord, "_lock_dir", lambda: lock_dir)
+
+        expected = lock_dir / "test-remove.lock"
+        with coord.acquire_lock("test-remove", timeout=5):
+            assert expected in coord.get_owned_lock_paths()
+
+        assert expected not in coord.get_owned_lock_paths()
+
+    def test_try_lock_tracks_path(self, tmp_path, monkeypatch):
+        """try_lock adds to _owned_lock_paths on success."""
+        import pokepoke.worktrees.coordination as coord
+
+        lock_dir = tmp_path / "locks"
+        lock_dir.mkdir()
+        monkeypatch.setattr(coord, "_lock_dir", lambda: lock_dir)
+
+        lock = coord.try_lock("test-try")
+        assert lock is not None
+        try:
+            expected = lock_dir / "test-try.lock"
+            assert expected in coord.get_owned_lock_paths()
+        finally:
+            lock.release()
+            with coord._owned_lock_paths_lock:
+                coord._owned_lock_paths.discard(lock_dir / "test-try.lock")
+
+    def test_get_owned_lock_paths_returns_snapshot(self, tmp_path, monkeypatch):
+        """get_owned_lock_paths returns a list copy, not a live reference."""
+        import pokepoke.worktrees.coordination as coord
+
+        lock_dir = tmp_path / "locks"
+        lock_dir.mkdir()
+        monkeypatch.setattr(coord, "_lock_dir", lambda: lock_dir)
+
+        with coord.acquire_lock("test-snap", timeout=5):
+            snapshot = coord.get_owned_lock_paths()
+            assert isinstance(snapshot, list)
+            # Mutating snapshot must not affect internal set
+            snapshot.clear()
+            assert len(coord.get_owned_lock_paths()) > 0
+
+    def test_get_related_files_returns_three_paths(self):
+        """_get_related_files returns .lock, .lock.meta, .lock.break."""
+        from pokepoke.worktrees.coordination import _get_related_files
+
+        base = Path("/tmp/locks/test.lock")
+        related = _get_related_files(base)
+
+        assert len(related) == 3
+        assert base in related
+        assert base.with_suffix(".lock.meta") in related
+        assert base.with_suffix(".lock.break") in related
