@@ -17,7 +17,7 @@ import subprocess
 from pathlib import Path
 
 from pokepoke.config import StateBranchConfig
-from pokepoke.constants import STATE_BRANCH_NAME
+from pokepoke.constants import STATE_BRANCH_NAME, SUBPROCESS_ERRORS
 from pokepoke.utils.constants import STATE_BRANCH_FILES
 from pokepoke.worktrees.coordination import main_repo_git_lock
 
@@ -173,7 +173,7 @@ def _has_state_changes(
 
         return False
 
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+    except SUBPROCESS_ERRORS as e:
         logger.warning(f"Error checking state changes, assuming changed: {e}")
         return True  # Assume changes on error to ensure state is captured
 
@@ -308,7 +308,7 @@ def commit_state_branch(
             )
             return True
 
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+        except SUBPROCESS_ERRORS as e:
             logger.error(f"Failed to commit state branch: {e}", exc_info=True)
             return False
 

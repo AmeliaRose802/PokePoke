@@ -14,6 +14,7 @@ from pathlib import Path
 from types import TracebackType
 from typing import Literal
 
+from pokepoke.constants import SUBPROCESS_OR_RUNTIME_ERRORS
 from pokepoke.git.git_helpers import run_git
 from pokepoke.git.merge_conflict import is_merge_in_progress
 from pokepoke.stats.session_journal import (
@@ -112,21 +113,21 @@ class WorkItemSession:
         if self._worktree_created:
             try:
                 self._remove_worktree()
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
+            except SUBPROCESS_OR_RUNTIME_ERRORS as exc:
                 logger.error("Rollback: failed to remove worktree for %s: %s", self.item_id, exc)
             self._worktree_created = False
 
         if self._branch_created:
             try:
                 self._delete_branch()
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
+            except SUBPROCESS_OR_RUNTIME_ERRORS as exc:
                 logger.error("Rollback: failed to delete branch for %s: %s", self.item_id, exc)
             self._branch_created = False
 
         if self._assigned:
             try:
                 self._unassign_beads_item()
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as exc:
+            except SUBPROCESS_OR_RUNTIME_ERRORS as exc:
                 logger.error("Rollback: failed to unassign item %s: %s", self.item_id, exc)
             self._assigned = False
 

@@ -18,6 +18,7 @@ import logging
 import subprocess
 from typing import TYPE_CHECKING
 
+from pokepoke.constants import SUBPROCESS_ERRORS
 from pokepoke.types import RetryConfig
 from pokepoke.utils.retry_utils import sleep_with_backoff
 
@@ -283,7 +284,7 @@ class ExplicitSync(SyncStrategy):
                 check=True,
             )
             return True
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        except SUBPROCESS_ERRORS as exc:
             logger.warning("⚠️  Best-effort git publish after br sync failed: %s", exc)
             return False
 

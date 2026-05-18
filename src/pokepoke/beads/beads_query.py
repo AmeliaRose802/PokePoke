@@ -7,6 +7,7 @@ import subprocess
 from pathlib import Path
 from typing import Any
 
+from pokepoke.constants import SUBPROCESS_ERRORS
 from pokepoke.stats.perf_timing import timed_block
 from pokepoke.types_beads import BeadsWorkItem, Dependency, IssueWithDependencies
 from pokepoke.types_stats import BeadsStats
@@ -219,7 +220,7 @@ def get_in_progress_items(*, backend: CLIBackendConfig | None = None) -> list[Be
     """Query beads for in_progress items. Returns None on error, list on success."""
     try:
         result = _run_bd_with_retry(['list', '--status', 'in_progress', '--json'], backend=backend)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+    except SUBPROCESS_ERRORS as e:
         logger.warning("⚠️  beads in_progress query failed after retries: %s", e)
         return None
     if not result.stdout:
@@ -380,7 +381,7 @@ def get_item_comments(
     """
     try:
         result = _run_bd(['comments', item_id, '--json'], backend=backend)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+    except SUBPROCESS_ERRORS as e:
         logger.warning("⚠️  Failed to fetch comments for %s: %s", item_id, e)
         return []
     if not result.stdout:
@@ -419,6 +420,6 @@ def get_beads_stats(*, backend: CLIBackendConfig | None = None) -> BeadsStats | 
             closed_issues=summary.get('closed_issues', 0),
             ready_issues=summary.get('ready_issues', 0)
         )
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+    except SUBPROCESS_ERRORS as e:
         logger.warning("⚠️  Failed to get beads stats after retries: %s", e)
         return None

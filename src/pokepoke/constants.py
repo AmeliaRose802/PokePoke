@@ -4,6 +4,26 @@ Centralises magic numbers so that every module references a single source of
 truth.  Each constant is documented with its unit and purpose.
 """
 
+import subprocess
+
+# ---------------------------------------------------------------------------
+# Subprocess exception tuples
+# ---------------------------------------------------------------------------
+
+# Common exception types raised by subprocess calls (CalledProcessError,
+# TimeoutExpired, OSError).  Used in ``except`` clauses throughout the
+# codebase to avoid repeating the same tuple.
+SUBPROCESS_ERRORS: tuple[type[Exception], ...] = (
+    subprocess.CalledProcessError,
+    subprocess.TimeoutExpired,
+    OSError,
+)
+
+# Extended variants that include RuntimeError and/or ValueError,
+# pre-composed so ``except`` clauses satisfy mypy without unpacking.
+SUBPROCESS_OR_RUNTIME_ERRORS: tuple[type[Exception], ...] = (*SUBPROCESS_ERRORS, RuntimeError)
+SUBPROCESS_RUNTIME_VALUE_ERRORS: tuple[type[Exception], ...] = (*SUBPROCESS_ERRORS, RuntimeError, ValueError)
+
 # ---------------------------------------------------------------------------
 # Preflight health-check constants
 # ---------------------------------------------------------------------------

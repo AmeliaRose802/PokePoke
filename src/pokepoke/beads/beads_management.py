@@ -9,6 +9,7 @@ import time
 from filelock import Timeout
 
 from pokepoke.agents.agent_context import get_agent_name
+from pokepoke.constants import SUBPROCESS_ERRORS
 from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.utils.constants import STATUS_IN_PROGRESS
 from pokepoke.worktrees.coordination import acquire_lock
@@ -240,7 +241,7 @@ def close_item(item_id: str, message: str = "Completed") -> bool:
         _run_bd_with_retry(['close', item_id, '--reason', message])
         logger.info("✅ Closed %s", item_id)
         return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+    except SUBPROCESS_ERRORS as e:
         logger.error("⚠️  Failed to close %s after retries: %s", item_id, e)
         return False
 
@@ -287,7 +288,7 @@ def block_item(item_id: str, reason: str) -> bool:
     try:
         _run_bd_with_retry(['update', item_id, '--status', 'blocked'])
         logger.info("🚫 Marked %s as blocked", item_id)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+    except SUBPROCESS_ERRORS as e:
         logger.error("⚠️  Failed to block %s after retries: %s", item_id, e)
         return False
     truncated = reason[:500] if reason else "Blocked by orchestrator"
@@ -318,7 +319,7 @@ def defer_item(item_id: str, reason: str) -> bool:
             '--add-label', NEEDS_DECOMPOSITION_LABEL,
         ])
         logger.info("📦 Deferred %s to backlog with %s label", item_id, NEEDS_DECOMPOSITION_LABEL)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+    except SUBPROCESS_ERRORS as e:
         logger.error("⚠️  Failed to defer %s after retries: %s", item_id, e)
         return False
     truncated = reason[:500] if reason else "Deferred to backlog for decomposition"
@@ -340,7 +341,7 @@ def add_comment(item_id: str, comment: str) -> bool:
         _run_bd_with_retry(['comments', 'add', item_id, comment])
         logger.info("💬 Added comment to %s", item_id)
         return True
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as e:
+    except SUBPROCESS_ERRORS as e:
         logger.error("⚠️  Failed to add comment to %s after retries: %s", item_id, e)
         return False
 

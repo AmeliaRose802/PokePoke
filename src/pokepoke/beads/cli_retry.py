@@ -12,6 +12,7 @@ import logging
 import subprocess
 from typing import TYPE_CHECKING
 
+from pokepoke.constants import SUBPROCESS_ERRORS
 from pokepoke.types import RetryConfig
 from pokepoke.utils.retry_utils import sleep_with_backoff
 
@@ -102,7 +103,7 @@ def _run_bd_with_retry(
                     cmd_label, attempt, max_attempts,
                 )
             return result
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+        except SUBPROCESS_ERRORS as exc:
             last_exc = exc
             if _is_transient_cli_error(exc) and attempt < max_attempts:
                 delay = sleep_with_backoff(attempt - 1, retry_config, f'beads {cmd_label}')
