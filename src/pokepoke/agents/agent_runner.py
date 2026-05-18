@@ -1,11 +1,12 @@
 """Agent runner utilities for cleanup and maintenance agents."""
 import logging
 import os
-import subprocess
 from dataclasses import dataclass
 from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
+
+from pokepoke.constants import SUBPROCESS_ERRORS, SUBPROCESS_OR_RUNTIME_ERRORS, SUBPROCESS_RUNTIME_VALUE_ERRORS
 
 logger = logging.getLogger(__name__)
 
@@ -206,7 +207,7 @@ def run_worktree_cleanup(repo_root: Path | None = None, item_logger: 'ItemLogger
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status=status, parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
         return agent_result
 
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError, ValueError) as e:
+    except SUBPROCESS_RUNTIME_VALUE_ERRORS as e:
         logger.warning(f"Worktree cleanup agent raised exception: {e}", exc_info=True)
         terminal_ui.ui.push_agent_status(agent_id, "Worktree Cleanup", iteration=1, status="failed", parent_agent_id=parent_agent_id, agent_type="worktree_cleanup")
         return None
@@ -228,7 +229,7 @@ def _reconcile_worktree_branch(
     try:
         if not worktree_branch_has_commits(config.agent_id, config.repo_root):
             return None
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError) as exc:
+    except SUBPROCESS_ERRORS as exc:
         logger.debug("Reconciliation check failed for %s: %s", config.agent_id, exc)
         return None
 
@@ -272,7 +273,7 @@ def _handle_successful_agent(
         try:
             cleanup_worktree(config.agent_id, force=True)
             return _extract_stats(result) or AgentStats(), False, True
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as cleanup_error:
+        except SUBPROCESS_OR_RUNTIME_ERRORS as cleanup_error:
             logger.warning("Explicit cleanup failed: %s", cleanup_error)
             add_uncleaned_worktree(
                 config.agent_id, str(config.worktree_path),
@@ -312,7 +313,7 @@ def _run_worktree_agent(
     try:
         worktree_path = create_worktree(config.agent_id)
         logger.info("Worktree created at: %s", worktree_path)
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as e:
+    except SUBPROCESS_OR_RUNTIME_ERRORS as e:
         msg = f"Failed to create worktree for {config.agent_name}: {e}"
         logger.error("%s", msg)
         if config.item_logger:
@@ -340,7 +341,7 @@ def _run_worktree_agent(
                     agent_prompt=agent_prompt,
                 )
                 result = invoke_copilot(config.agent_item, prompt=agent_prompt, model=config.model, cwd=worktree_cwd, item_logger=config.item_logger)
-        except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as e:
+        except SUBPROCESS_OR_RUNTIME_ERRORS as e:
             logger.error("Error invoking Copilot: %s", e)
             result = CopilotResult(
                 work_item_id=config.agent_item.id, success=False, output="", error=str(e), attempt_count=1
@@ -375,7 +376,7 @@ def _run_worktree_agent(
             _print_preserved_worktree_debug(config.agent_id, worktree_path, config.repo_root)
             return None
 
-    except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError, ValueError) as e:
+    except SUBPROCESS_RUNTIME_VALUE_ERRORS as e:
         logger.warning(
             f"Unhandled error while running {config.agent_name} in worktree {config.agent_id}: {e}",
             exc_info=True,
@@ -407,7 +408,7 @@ def _run_worktree_agent(
             try:
                 cleanup_worktree(config.agent_id, force=True)
                 remove_from_manifest(config.agent_id)
-            except (subprocess.CalledProcessError, subprocess.TimeoutExpired, OSError, RuntimeError) as cleanup_error:
+            except SUBPROCESS_OR_RUNTIME_ERRORS as cleanup_error:
                 logger.warning("Final cleanup failed: %s", cleanup_error)
                 add_uncleaned_worktree(config.agent_id, str(worktree_path), f"Failed final cleanup: {cleanup_error}")
 
