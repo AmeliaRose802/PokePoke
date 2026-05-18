@@ -127,6 +127,22 @@ def _coordinate_shutdown() -> None:
     except Exception as e:
         logger.debug(f"Failed to kill copilot process trees on shutdown: {e}")
 
+    # Clean up any lock files owned by this process.
+    try:
+        from pokepoke.worktrees.lock_cleanup import (
+            cleanup_all_lock_files_for_pid,
+            cleanup_owned_lock_files,
+        )
+
+        removed = cleanup_owned_lock_files()
+        if removed:
+            logger.debug("Shutdown: removed %d tracked lock files", removed)
+        removed_pid = cleanup_all_lock_files_for_pid()
+        if removed_pid:
+            logger.debug("Shutdown: removed %d PID-matched lock files", removed_pid)
+    except Exception as e:
+        logger.debug(f"Failed to clean up lock files on shutdown: {e}")
+
     # Calculate watchdog timeout based on active agents
     with _agent_count_lock:
         agent_count = _active_agent_count

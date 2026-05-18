@@ -487,6 +487,42 @@ class TestSetupOrchestrator:
     @patch("pokepoke.orchestration.orchestrator.load_config")
     @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
     @patch("pokepoke.orchestration.orchestrator.get_failed_unassign_count", return_value=0)
+    @patch("pokepoke.orchestration.orchestrator.atexit")
+    def test_registers_lock_cleanup_atexit(
+        self, mock_atexit, mock_unassign_count, mock_beads_stats, mock_config,
+        mock_init, mock_banner, mock_ui, mock_register,
+        mock_startup_plugins, mock_startup_cleanup,
+    ):
+        """_setup_orchestrator registers cleanup_all_lock_files_for_pid via atexit."""
+        mock_config.return_value = MagicMock(max_parallel_agents=1, preflight_health=MagicMock(enabled=False), otel=OtelConfig())
+        with (
+            patch("pokepoke.orchestration.orchestrator.backfill_from_beads_db",
+                  return_value={"backfilled": 0}),
+            patch("pokepoke.orchestration.orchestrator._get_beads_summary",
+                  return_value={"total_created": 0, "total_completed": 0}),
+        ):
+            _setup_orchestrator(
+                interactive=False, continuous=False,
+                run_beta_first=False, agent_name_override=None,
+                max_parallel_agents=1,
+            )
+        # atexit.register should have been called with the lock cleanup function
+        from pokepoke.worktrees.lock_cleanup import cleanup_all_lock_files_for_pid
+        registered_funcs = [
+            call.args[0] for call in mock_atexit.register.call_args_list
+            if call.args and call.args[0] is cleanup_all_lock_files_for_pid
+        ]
+        assert len(registered_funcs) == 1
+
+    @patch("pokepoke.orchestration.orchestrator._run_startup_cleanup")
+    @patch("pokepoke.orchestration.orchestrator._run_startup_plugins")
+    @patch("pokepoke.orchestration.orchestrator.register_shutdown_handlers")
+    @patch("pokepoke.orchestration.orchestrator.terminal_ui")
+    @patch("pokepoke.orchestration.orchestrator.set_terminal_banner")
+    @patch("pokepoke.orchestration.orchestrator.initialize_agent_name", return_value="test-agent")
+    @patch("pokepoke.orchestration.orchestrator.load_config")
+    @patch("pokepoke.orchestration.orchestrator.get_beads_stats", return_value=BeadsStats())
+    @patch("pokepoke.orchestration.orchestrator.get_failed_unassign_count", return_value=0)
     def test_parallel_forced_to_one_in_interactive(
         self, mock_unassign_count, mock_beads_stats, mock_config,
         mock_init, mock_banner, mock_ui, mock_register,

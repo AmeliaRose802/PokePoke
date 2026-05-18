@@ -55,6 +55,7 @@ from pokepoke.utils.shutdown import (
     should_stop_after_current,
 )
 from pokepoke.utils.signal_handlers import register_shutdown_handlers, unregister_shutdown_handlers
+from pokepoke.worktrees.lock_cleanup import cleanup_all_lock_files_for_pid as _lock_cleanup
 
 logger = logging.getLogger(__name__)
 
@@ -178,6 +179,7 @@ def _setup_orchestrator(interactive: bool, continuous: bool, run_beta_first: boo
     run_logger.log_orchestrator(f"PokePoke started in {mode_name} mode with agent name: {agent_name}")
     register_shutdown_handlers(run_logger)
     atexit.register(lambda: logger.info(f"📁 Logs saved to: {run_dir}"))
+    atexit.register(_lock_cleanup)
     main_repo_path = Path.cwd()
     logger.info(f"📁 Repository: {main_repo_path}")
     start_time = time.time()
@@ -274,8 +276,7 @@ def _update_failed_claim_state(
     ctx: _OrchestratorContext, selected_item: BeadsWorkItem, wi_result: WorkItemResult,
 ) -> None:
     """Track failed claims to avoid hot-looping on unclaimable items."""
-    failed_to_claim = not wi_result.success and wi_result.request_count == 0
-    if failed_to_claim:
+    if not wi_result.success and wi_result.request_count == 0:
         with ctx.failed_claim_ids_lock:
             ctx.failed_claim_ids.add(selected_item.id)
             failed_count = len(ctx.failed_claim_ids)
@@ -287,8 +288,7 @@ def _update_failed_claim_state(
     with ctx.failed_claim_ids_lock:
         ctx.failed_claim_ids.discard(selected_item.id)
     if ctx.reclaimed_items:
-        remaining = [i for i in ctx.reclaimed_items if i.id != selected_item.id]
-        ctx.reclaimed_items = remaining or None
+        ctx.reclaimed_items = [i for i in ctx.reclaimed_items if i.id != selected_item.id] or None
 
 
 def _maybe_exit_after_iteration(

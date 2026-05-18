@@ -370,3 +370,29 @@ class TestHasActiveAgents:
         register_agent()
         unregister_agent()
         assert has_active_agents() is False
+
+
+class TestLockCleanupOnShutdown:
+    """Tests for lock file cleanup in _coordinate_shutdown."""
+
+    @patch("pokepoke.utils.shutdown.threading.Thread")
+    @patch("pokepoke.worktrees.lock_cleanup.cleanup_all_lock_files_for_pid", return_value=2)
+    @patch("pokepoke.worktrees.lock_cleanup.cleanup_owned_lock_files", return_value=1)
+    def test_calls_lock_cleanup_functions(self, mock_owned, mock_pid, mock_thread_cls):
+        mock_thread_cls.return_value.start = lambda: None
+        _coordinate_shutdown()
+        mock_owned.assert_called_once()
+        mock_pid.assert_called_once()
+
+    @patch("pokepoke.utils.shutdown.threading.Thread")
+    @patch("pokepoke.worktrees.lock_cleanup.cleanup_all_lock_files_for_pid", side_effect=RuntimeError("boom"))
+    @patch("pokepoke.worktrees.lock_cleanup.cleanup_owned_lock_files", return_value=0)
+    def test_handles_lock_cleanup_exception(self, mock_owned, mock_pid, mock_thread_cls):
+        """Shutdown continues even if lock cleanup raises."""
+        mock_thread_cls.return_value.start = lambda: None
+        _coordinate_shutdown()
+        # Watchdog still starts
+        assert any(
+            call.kwargs.get("name") == "shutdown-watchdog"
+            for call in mock_thread_cls.call_args_list
+        )
