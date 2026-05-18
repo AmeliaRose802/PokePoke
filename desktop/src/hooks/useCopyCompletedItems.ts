@@ -1,6 +1,7 @@
 import { useState } from "react";
 
 import type { CompletedItem, ModelHistoryEntry } from "../types";
+import { getItemStats } from "../utils/stats";
 
 type CopyStatus = "idle" | "success" | "error";
 
@@ -56,15 +57,4 @@ export function useCopyCompletedItems() {
   };
 
   return { copyStatus, copyCompletedItems };
-}
-
-// Helper function to get item stats
-function getItemStats(itemId: string, history: ModelHistoryEntry[]) {
-  const itemEntries = history.filter((entry) => entry.item_id === itemId);
-  if (itemEntries.length === 0) return null;
-  const latest = itemEntries[itemEntries.length - 1];
-  return {
-    model: latest.model,
-    gate_passed: latest.gate_passed,
-  };
 }

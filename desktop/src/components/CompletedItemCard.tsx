@@ -1,45 +1,9 @@
 import type { CompletedItem, ModelHistoryEntry } from "../types";
-import { formatCost, formatDurationShort, formatTokens } from "../utils/stats";
+import { formatCost, formatDurationShort, formatTokens, getItemStats } from "../utils/stats";
 
 interface CompletedItemCardProps {
   item: CompletedItem;
   modelHistory: ModelHistoryEntry[];
-}
-
-interface ItemStats {
-  model: string;
-  duration_seconds: number;
-  gate_passed: boolean | null;
-  attempts: number;
-  input_tokens?: number;
-  output_tokens?: number;
-  agent_turns?: number;
-  cost?: number;
-}
-
-function getItemStats(itemId: string, history: ModelHistoryEntry[]): ItemStats | null {
-  // Find all entries for this item
-  const itemEntries = history.filter((entry) => entry.item_id === itemId);
-  if (itemEntries.length === 0) return null;
-
-  // Get the most recent entry (last in the array)
-  const latest = itemEntries[itemEntries.length - 1] as ModelHistoryEntry & {
-    input_tokens?: number;
-    output_tokens?: number;
-    agent_turns?: number;
-    cost?: number;
-  };
-
-  return {
-    model: latest.model,
-    duration_seconds: latest.duration_seconds,
-    gate_passed: latest.gate_passed,
-    attempts: itemEntries.length,
-    input_tokens: latest.input_tokens,
-    output_tokens: latest.output_tokens,
-    agent_turns: latest.agent_turns,
-    cost: latest.cost,
-  };
 }
 
 const gateStatusText = (v: boolean | null) => (v === true ? "Passed gate" : v === false ? "Failed gate" : "Pending");

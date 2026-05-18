@@ -1,5 +1,39 @@
 import type { AgentInfo, CompletedItem, CreatedItem, ModelHistoryEntry, ModelPerformanceSummary, SessionStats } from "../types";
 
+export interface ItemStats {
+  model: string;
+  duration_seconds: number;
+  gate_passed: boolean | null;
+  attempts: number;
+  input_tokens?: number;
+  output_tokens?: number;
+  agent_turns?: number;
+  cost?: number;
+}
+
+export function getItemStats(itemId: string, history: ModelHistoryEntry[]): ItemStats | null {
+  const itemEntries = history.filter((entry) => entry.item_id === itemId);
+  if (itemEntries.length === 0) return null;
+
+  const latest = itemEntries[itemEntries.length - 1] as ModelHistoryEntry & {
+    input_tokens?: number;
+    output_tokens?: number;
+    agent_turns?: number;
+    cost?: number;
+  };
+
+  return {
+    model: latest.model,
+    duration_seconds: latest.duration_seconds,
+    gate_passed: latest.gate_passed,
+    attempts: itemEntries.length,
+    input_tokens: latest.input_tokens,
+    output_tokens: latest.output_tokens,
+    agent_turns: latest.agent_turns,
+    cost: latest.cost,
+  };
+}
+
 export function formatTokens(count: number | undefined): string {
   if (!Number.isFinite(count ?? 0)) return "0";
   const value = count ?? 0;
