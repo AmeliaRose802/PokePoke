@@ -221,10 +221,10 @@ _MANIFEST_LOCK = "worktree-manifest"
 _BEADS_DB_LOCK = "beads-db"
 _MODEL_REGISTRY_LOCK = "model-registry"
 
-_MERGE_LOCK_STALE_AGE = 900.0  # 15 min; beyond any legitimate merge
+_MERGE_LOCK_STALE_AGE = 3600.0  # 60 min; beyond any legitimate merge
 
 _WORKTREE_SETUP_STALE = 300.0  # 5 min
-_MERGE_STALE = 600.0           # 10 min
+_MERGE_STALE = 2400.0           # 40 min
 _MANIFEST_STALE = 120.0        # 2 min
 _CLEANUP_STALE = 300.0         # 5 min
 _BEADS_DB_STALE = 300.0        # 5 min
@@ -250,7 +250,7 @@ def beads_db_lock(timeout: float = 180.0) -> Generator[FileLock, None, None]:
 
 
 @contextmanager
-def merge_lock(timeout: float = 600.0) -> Generator[FileLock, None, None]:
+def merge_lock(timeout: float = 1800.0) -> Generator[FileLock, None, None]:
     """Serialize worktree merges across parallel agents."""
     with acquire_lock(
         _MERGE_LOCK, timeout=timeout, stale_timeout=_MERGE_STALE,

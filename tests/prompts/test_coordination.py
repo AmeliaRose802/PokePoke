@@ -407,8 +407,8 @@ class TestStaleLockRecovery:
                 t.join(timeout=5)
 
     def test_merge_lock_stale_age_constant(self) -> None:
-        """_MERGE_LOCK_STALE_AGE should be well above 10 minutes."""
-        assert _MERGE_LOCK_STALE_AGE >= 600, "Stale age must be >= merge lock timeout"
+        """_MERGE_LOCK_STALE_AGE should be well above 30 minutes."""
+        assert _MERGE_LOCK_STALE_AGE >= 1800, "Stale age must be >= merge lock timeout"
 
 class TestPidTracking:
     """Tests for PID tracking and stale-lock detection."""
