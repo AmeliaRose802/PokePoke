@@ -103,7 +103,6 @@ export function SessionFlowchartView({ agents, stats, agentName, currentSessionI
 
   const elapsed = stats?.elapsed_time ?? 0;
   const elapsedStr = [Math.floor(elapsed / 3600), Math.floor((elapsed % 3600) / 60), Math.floor(elapsed % 60)].map((n) => n.toString().padStart(2, "0")).join(":");
-  const totalTokens = stats?.agent_stats ? ((stats.agent_stats.input_tokens + stats.agent_stats.output_tokens) / 1000).toFixed(1) + "k" : "0";
 
   return (
     <div className="sf-shell">
@@ -169,16 +168,6 @@ export function SessionFlowchartView({ agents, stats, agentName, currentSessionI
             </>}
           </svg>
         </div>
-      </div>
-      <div className="sf-footer">
-        <div><span className="sf-footer-label">Uptime</span><span className="sf-footer-value">{elapsedStr}</span></div>
-        <div><span className="sf-footer-label">Merged</span><span className="sf-footer-value">{data.merged}</span></div>
-        <div><span className="sf-footer-label">Active</span><span className="sf-footer-value">{data.activeCount}</span></div>
-        {data.deferred > 0 && <div><span className="sf-footer-label">Deferred</span><span className="sf-footer-value">{data.deferred}</span></div>}
-        {data.decomposed > 0 && <div><span className="sf-footer-label">Decomposed</span><span className="sf-footer-value">{data.decomposed}</span></div>}
-        <div><span className="sf-footer-label">Model</span><span className="sf-footer-value sf-footer-mono">{activeModel ?? "—"}</span></div>
-        <div><span className="sf-footer-label">Tokens</span><span className="sf-footer-value">{totalTokens}</span></div>
-        <div><span className="sf-footer-label">Workers</span><span className="sf-footer-value">{data.activeCount || data.completed.length}</span></div>
       </div>
     </div>
   );

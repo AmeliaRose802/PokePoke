@@ -95,7 +95,7 @@ describe("SessionFlowchartView", () => {
     expect(legend?.textContent).toContain("Maintenance");
   });
 
-  it("renders footer stats", () => {
+  it("renders info bar stats", () => {
     const { container } = render(
       <SessionFlowchartView
         agents={[]}
@@ -105,9 +105,9 @@ describe("SessionFlowchartView", () => {
         activeModel="claude"
       />,
     );
-    const footer = container.querySelector(".sf-footer");
-    expect(footer?.textContent).toContain("01:01:01");
-    expect(footer?.textContent).toContain("claude");
+    const infoBar = container.querySelector(".sf-info-bar");
+    expect(infoBar?.textContent).toContain("01:01:01");
+    expect(infoBar?.textContent).toContain("claude");
   });
 
   it("renders active slots for running agents", () => {
