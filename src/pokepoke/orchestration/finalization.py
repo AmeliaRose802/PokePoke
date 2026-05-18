@@ -66,9 +66,34 @@ def _finalize_item_result(
     ctx: ResultContext,
 ) -> tuple[WorkItemResult, bool]:
     """Handle post-loop outcome. Returns (WorkItemResult, finalized_successfully)."""
+    if ctx.result.success and ctx.result.gate_rejected:
+        return _handle_gate_rejection(ctx)
     if ctx.result.success:
         return _handle_success(ctx)
     return _handle_failure(ctx)
+
+
+def _handle_gate_rejection(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
+    """Handle gate rejection — leave item open, do not merge or reconcile."""
+    reason = "Gate rejected work after max retries"
+    logger.warning(
+        "⚠️  Gate rejected work for %s — leaving item open. %s",
+        ctx.item.id, reason,
+    )
+    if ctx.item_logger:
+        ctx.item_logger.log(
+            f"⚠️  ORCHESTRATOR: {reason} for {ctx.item.id}. "
+            "Item left open for manual review."
+        )
+    set_terminal_banner(format_work_item_banner(ctx.item.id, ctx.item.title, "Gate Rejected"))
+    terminal_ui.ui.set_current_agent(None)
+    return _fail_result(
+        request_count=ctx.request_count,
+        stats=ctx.accumulated_stats,
+        cleanup_agent_runs=ctx.cleanup_agent_runs,
+        gate_agent_runs=ctx.gate_agent_runs,
+        failure_reason=reason,
+    ), False
 
 
 def _handle_success(ctx: ResultContext) -> tuple[WorkItemResult, bool]:
