@@ -379,7 +379,7 @@ def run_workflow_loop(  # noqa: C901, PLR0912, PLR0913
             break
         if gate_loop_result.exceeded_max:
             maybe_decompose_fn(item, copilot_failure_count, gate_rejection_count, global_config)
-            result.success = False
+            result.gate_rejected = True
             result.error = f"Exceeded max gate rejections ({max_gate_rejections})"
             log_failure_fn(run_logger, item_logger, request_count)
             break
