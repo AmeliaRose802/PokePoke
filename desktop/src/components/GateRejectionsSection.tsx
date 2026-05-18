@@ -1,6 +1,9 @@
+import { useState } from "react";
+
 import type { GateRejectionStats } from "../types";
 
 export function GateRejectionsSection({ gateStats }: { gateStats: GateRejectionStats }) {
+  const [collapsed, setCollapsed] = useState(false);
   const { per_model, per_item, totals } = gateStats;
   const modelEntries = Object.entries(per_model).sort(
     (a, b) => b[1].rejection_rate - a[1].rejection_rate,
@@ -12,15 +15,30 @@ export function GateRejectionsSection({ gateStats }: { gateStats: GateRejectionS
   return (
     <section>
       <div className="stats-panel-card">
-        <div className="stats-panel-card-header">
-          <h3>Gate rejections</h3>
+        <div
+          className="stats-panel-card-header stats-panel-card-header--clickable"
+          onClick={() => setCollapsed((prev) => !prev)}
+          role="button"
+          aria-expanded={!collapsed}
+          tabIndex={0}
+          onKeyDown={(e) => {
+            if (e.key === "Enter" || e.key === " ") {
+              e.preventDefault();
+              setCollapsed((prev) => !prev);
+            }
+          }}
+        >
+          <h3>
+            <span className="collapse-indicator">{collapsed ? "▶" : "▼"}</span>{" "}
+            Gate rejections
+          </h3>
           <span className="stats-panel-subtitle">
             {totals.total_rejections} rejection{totals.total_rejections !== 1 ? "s" : ""} across{" "}
             {totals.total_checks} checks ({(totals.rejection_rate * 100).toFixed(0)}%)
           </span>
         </div>
 
-        {modelEntries.length > 0 && (
+        {!collapsed && modelEntries.length > 0 && (
           <div className="gate-rejection-subsection">
             <h4>By gate model</h4>
             <div className="gate-rejection-table" role="table">
@@ -54,7 +72,7 @@ export function GateRejectionsSection({ gateStats }: { gateStats: GateRejectionS
           </div>
         )}
 
-        {itemEntries.length > 0 && (
+        {!collapsed && itemEntries.length > 0 && (
           <div className="gate-rejection-subsection">
             <h4>Items with rejections</h4>
             <div className="gate-rejection-table" role="table">

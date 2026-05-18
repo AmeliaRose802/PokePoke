@@ -3188,6 +3188,22 @@
   margin-top: 12px;
 }
 
+.stats-panel-card-header--clickable {
+  cursor: pointer;
+  user-select: none;
+}
+
+.stats-panel-card-header--clickable:hover {
+  opacity: 0.85;
+}
+
+.collapse-indicator {
+  display: inline-block;
+  font-size: 11px;
+  width: 14px;
+  color: var(--text-muted);
+}
+
 .gate-rejection-subsection h4 {
   font-size: 12px;
   color: var(--text-muted);
