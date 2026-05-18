@@ -177,6 +177,193 @@ describe("buildFlowchartData", () => {
     const validationNode = result.nodes.find((n) => n.stage === "validation");
     expect(validationNode?.detail).toBe("Passed ✓");
   });
+
+  it("shows gate retry count when multiple gate agents exist", () => {
+    const agent = makeAgent({
+      agent_id: "a1",
+      card_id: "card-1",
+      status: "running",
+      work_item_id: "task-1",
+      recent_logs: ["Working..."],
+    });
+    const gate1 = makeAgent({
+      agent_id: "a1-gate-1",
+      card_id: "card-1-gate-1",
+      parent_card_id: "card-1",
+      status: "failed",
+      name: "gate",
+    });
+    const gate2 = makeAgent({
+      agent_id: "a1-gate-2",
+      card_id: "card-1-gate-2",
+      parent_card_id: "card-1",
+      status: "running",
+      name: "gate",
+    });
+
+    const result = buildFlowchartData(agent, [agent, gate1, gate2]);
+
+    const validationNode = result.nodes.find((n) => n.stage === "validation");
+    expect(validationNode?.detail).toBe("Attempt 2 · Running checks…");
+    expect(validationNode?.status).toBe("active");
+  });
+
+  it("uses the last gate agent for validation status", () => {
+    const agent = makeAgent({
+      agent_id: "a1",
+      card_id: "card-1",
+      status: "success",
+      work_item_id: "task-1",
+      modified_files: ["f.ts"],
+      recent_logs: ["done"],
+    });
+    const gate1 = makeAgent({
+      agent_id: "a1-gate-1",
+      card_id: "card-1-gate-1",
+      parent_card_id: "card-1",
+      status: "failed",
+      name: "gate",
+    });
+    const gate2 = makeAgent({
+      agent_id: "a1-gate-2",
+      card_id: "card-1-gate-2",
+      parent_card_id: "card-1",
+      status: "failed",
+      name: "gate",
+    });
+    const gate3 = makeAgent({
+      agent_id: "a1-gate-3",
+      card_id: "card-1-gate-3",
+      parent_card_id: "card-1",
+      status: "success",
+      name: "gate",
+    });
+
+    const result = buildFlowchartData(agent, [agent, gate1, gate2, gate3]);
+
+    const validationNode = result.nodes.find((n) => n.stage === "validation");
+    expect(validationNode?.detail).toBe("Attempt 3 · Passed ✓");
+    expect(validationNode?.status).toBe("done");
+  });
+
+  it("inserts a cleanup node between AI and validation when cleanup agent exists", () => {
+    const agent = makeAgent({
+      agent_id: "a1",
+      card_id: "card-1",
+      status: "success",
+      work_item_id: "task-1",
+      modified_files: ["f.ts"],
+      recent_logs: ["done"],
+    });
+    const cleanup = makeAgent({
+      agent_id: "a1-cleanup",
+      card_id: "card-1-cleanup",
+      parent_card_id: "card-1",
+      status: "success",
+      name: "Merge Conflict Cleanup",
+      agent_type: "code_conflict",
+    });
+
+    const result = buildFlowchartData(agent, [agent, cleanup]);
+
+    const cleanupNode = result.nodes.find((n) => n.stage === "cleanup");
+    expect(cleanupNode).toBeDefined();
+    expect(cleanupNode?.label).toBe("code_conflict");
+    expect(cleanupNode?.status).toBe("done");
+
+    // Edge chain: ai → cleanup → validation
+    const aiToCleanup = result.edges.find(
+      (e) => e.from === "a1-ai" && e.to === "a1-cleanup",
+    );
+    expect(aiToCleanup).toBeDefined();
+    const cleanupToValidation = result.edges.find(
+      (e) => e.from === "a1-cleanup" && e.to === "a1-validation",
+    );
+    expect(cleanupToValidation).toBeDefined();
+
+    // No direct ai → validation edge
+    const aiToValidation = result.edges.find(
+      (e) => e.from === "a1-ai" && e.to === "a1-validation",
+    );
+    expect(aiToValidation).toBeUndefined();
+  });
+
+  it("does not insert cleanup node when no cleanup agent exists", () => {
+    const agent = makeAgent({
+      agent_id: "a1",
+      card_id: "card-1",
+      status: "success",
+      work_item_id: "task-1",
+      modified_files: ["f.ts"],
+      recent_logs: ["done"],
+    });
+
+    const result = buildFlowchartData(agent, [agent]);
+
+    const cleanupNode = result.nodes.find((n) => n.stage === "cleanup");
+    expect(cleanupNode).toBeUndefined();
+
+    // Direct ai → validation edge
+    const aiToValidation = result.edges.find(
+      (e) => e.from === "a1-ai" && e.to === "a1-validation",
+    );
+    expect(aiToValidation).toBeDefined();
+  });
+
+  it("cleanup node status reflects running cleanup agent", () => {
+    const agent = makeAgent({
+      agent_id: "a1",
+      card_id: "card-1",
+      status: "running",
+      work_item_id: "task-1",
+      recent_logs: ["working"],
+    });
+    const cleanup = makeAgent({
+      agent_id: "a1-cleanup",
+      card_id: "card-1-cleanup",
+      parent_card_id: "card-1",
+      status: "running",
+      name: "Merge Conflict Cleanup",
+      agent_type: "code_conflict",
+    });
+
+    const result = buildFlowchartData(agent, [agent, cleanup]);
+
+    const cleanupNode = result.nodes.find((n) => n.stage === "cleanup");
+    expect(cleanupNode?.status).toBe("active");
+  });
+
+  it("shows cleanup agent count when multiple cleanup agents exist", () => {
+    const agent = makeAgent({
+      agent_id: "a1",
+      card_id: "card-1",
+      status: "success",
+      work_item_id: "task-1",
+      modified_files: ["f.ts"],
+      recent_logs: ["done"],
+    });
+    const cleanup1 = makeAgent({
+      agent_id: "a1-cleanup-1",
+      card_id: "card-1-cleanup-1",
+      parent_card_id: "card-1",
+      status: "failed",
+      name: "Cleanup Round 1",
+      agent_type: "code_conflict",
+    });
+    const cleanup2 = makeAgent({
+      agent_id: "a1-cleanup-2",
+      card_id: "card-1-cleanup-2",
+      parent_card_id: "card-1",
+      status: "success",
+      name: "Cleanup Round 2",
+      agent_type: "code_conflict",
+    });
+
+    const result = buildFlowchartData(agent, [agent, cleanup1, cleanup2]);
+
+    const cleanupNode = result.nodes.find((n) => n.stage === "cleanup");
+    expect(cleanupNode?.detail).toBe("2 cleanup agents");
+  });
 });
 
 describe("stageIcon", () => {
@@ -184,6 +371,7 @@ describe("stageIcon", () => {
     expect(stageIcon("claim")).toBe("📋");
     expect(stageIcon("worktree")).toBe("🌳");
     expect(stageIcon("ai_invocation")).toBe("🤖");
+    expect(stageIcon("cleanup")).toBe("🧹");
     expect(stageIcon("validation")).toBe("🔍");
     expect(stageIcon("completed")).toBe("✅");
     expect(stageIcon("failed")).toBe("❌");

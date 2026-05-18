@@ -14,6 +14,7 @@ export type PipelineStage =
   | "claim"
   | "worktree"
   | "ai_invocation"
+  | "cleanup"
   | "validation"
   | "completed"
   | "failed"
@@ -139,22 +140,46 @@ export function buildFlowchartData(agent: AgentInfo, allAgents: AgentInfo[]): Fl
     });
     edges.push({ from: `${prefix}-worktree`, to: `${prefix}-ai` });
 
-    // Find gate agent for this attempt
+    // Find all gate and cleanup agents for this attempt
     const agentKey = cardIdForAgent(attemptAgent);
     const children = childrenMap.get(agentKey) ?? childrenMap.get(attemptAgent.agent_id) ?? [];
-    const gateAgent = children.find(isGateAgent);
+    const gateAgents = children.filter(isGateAgent);
+    const cleanupAgents = children.filter(isCleanupAgent);
+
+    // Cleanup stage (optional — only if cleanup agents exist)
+    if (cleanupAgents.length > 0) {
+      const lastCleanup = cleanupAgents[cleanupAgents.length - 1];
+      const cleanupStatus: StageStatus =
+        lastCleanup.status === "running" ? "active" : "done";
+      const cleanupLabel = lastCleanup.agent_type ?? "Cleanup";
+      nodes.push({
+        id: `${prefix}-cleanup`,
+        stage: "cleanup",
+        label: cleanupLabel,
+        status: cleanupStatus,
+        detail:
+          cleanupAgents.length > 1
+            ? `${cleanupAgents.length} cleanup agents`
+            : lastCleanup.name ?? undefined,
+        attempt: attemptNum,
+      });
+      edges.push({ from: `${prefix}-ai`, to: `${prefix}-cleanup` });
+    }
 
     // Validation stage
-    const validationStatus = getValidationStatus(attemptAgent, gateAgent);
+    const validationStatus = getValidationStatus(attemptAgent, gateAgents);
     nodes.push({
       id: `${prefix}-validation`,
       stage: "validation",
       label: "Quality Gate",
       status: validationStatus,
-      detail: gateAgent ? gateStatusDetail(gateAgent) : undefined,
+      detail: gateAgents.length > 0 ? gateStatusDetail(gateAgents) : undefined,
       attempt: attemptNum,
     });
-    edges.push({ from: `${prefix}-ai`, to: `${prefix}-validation` });
+    edges.push({
+      from: cleanupAgents.length > 0 ? `${prefix}-cleanup` : `${prefix}-ai`,
+      to: `${prefix}-validation`,
+    });
 
     // Terminal stage for this attempt
     if (isLast) {
@@ -231,6 +256,7 @@ const STAGE_ORDER: PipelineStage[] = [
   "claim",
   "worktree",
   "ai_invocation",
+  "cleanup",
   "validation",
   "completed",
 ];
@@ -249,22 +275,30 @@ function stageReached(current: PipelineStage, target: PipelineStage): boolean {
   return currentIdx >= targetIdx;
 }
 
-function getValidationStatus(agent: AgentInfo, gateAgent: AgentInfo | undefined): StageStatus {
-  if (!gateAgent) {
+function getValidationStatus(agent: AgentInfo, gateAgents: AgentInfo[]): StageStatus {
+  if (gateAgents.length === 0) {
     // No gate agent yet
     if (agent.status === "success") return "done";
     if (agent.status === "failed") return "done";
     return "pending";
   }
-  if (gateAgent.status === "running") return "active";
+  const lastGate = gateAgents[gateAgents.length - 1];
+  if (lastGate.status === "running") return "active";
   return "done";
 }
 
-function gateStatusDetail(gate: AgentInfo): string {
-  if (gate.status === "running") return "Running checks…";
-  if (gate.status === "success") return "Passed ✓";
-  if (gate.status === "failed") return "Failed ✗";
-  return "";
+function gateStatusDetail(gateAgents: AgentInfo[]): string {
+  const lastGate = gateAgents[gateAgents.length - 1];
+  let statusText: string;
+  if (lastGate.status === "running") statusText = "Running checks…";
+  else if (lastGate.status === "success") statusText = "Passed ✓";
+  else if (lastGate.status === "failed") statusText = "Failed ✗";
+  else statusText = "";
+
+  if (gateAgents.length > 1) {
+    return `Attempt ${gateAgents.length} · ${statusText}`;
+  }
+  return statusText;
 }
 
 /** Get a human-readable label for a pipeline stage */
@@ -276,6 +310,8 @@ export function stageIcon(stage: PipelineStage): string {
       return "🌳";
     case "ai_invocation":
       return "🤖";
+    case "cleanup":
+      return "🧹";
     case "validation":
       return "🔍";
     case "completed":
