@@ -5,7 +5,7 @@ including wait durations, timeout counts, stale-lock clearances, and a
 histogram of acquisition times.
 """
 
-import json
+import copy
 import threading
 from typing import Any
 
@@ -76,7 +76,7 @@ class LockContentionTracker:
     def snapshot(self) -> dict[str, Any]:
         """Return a deep copy of all contention stats."""
         with self._mu:
-            result: dict[str, Any] = json.loads(json.dumps(self._stats))
+            result: dict[str, Any] = copy.deepcopy(self._stats)
             return result
 
 
