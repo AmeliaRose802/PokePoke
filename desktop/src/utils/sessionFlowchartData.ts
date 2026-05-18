@@ -3,7 +3,7 @@
  *
  * Transforms the flat AgentInfo[] array into a structured representation
  * of parallel work-item slots flowing through the orchestration pipeline:
- *   Orchestrator → Work Agent → Gate Agent → Merge → outcome
+ *   Scheduler → Work Agent → Gate Agent → Merge → outcome
  */
 
 import type { AgentInfo } from "../types";

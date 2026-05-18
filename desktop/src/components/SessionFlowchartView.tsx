@@ -142,7 +142,7 @@ export function SessionFlowchartView({ agents, stats, agentName, currentSessionI
           <svg className="sf-svg" width={layout.svgW} height={layout.svgH} xmlns="http://www.w3.org/2000/svg">
             <SvgDefs />
             {data.completed.length > 0 && <g opacity={0.4}>
-              <Diamond cx={layout.cx} cy={layout.orchY} label="Orchestrator" sub="schedule / drain / maintain" stroke="#58a6ff" fill="rgba(88,166,255,0.08)" />
+              <Diamond cx={layout.cx} cy={layout.orchY} label="Scheduler" sub="schedule / drain / maintain" stroke="#58a6ff" fill="rgba(88,166,255,0.08)" />
               {layout.cColXs.map((colX, i) => <path key={`cf-${i}`} d={fanOutPath(layout.cx, layout.orchY, colX, layout.cStartY)} fill="none" stroke="#2ea043" strokeWidth={1.8} markerEnd="url(#arr-g)" />)}
               {data.completed.map((slot, i) => <SlotColumn key={slot.id} slot={slot} centerX={layout.cColXs[i]} startY={layout.cStartY} onStageClick={handleStageClick} />)}
             </g>}
@@ -158,12 +158,12 @@ export function SessionFlowchartView({ agents, stats, agentName, currentSessionI
             {data.active.length > 0 && <>
               <line x1={20} y1={layout.sepY} x2={layout.svgW - 20} y2={layout.sepY} stroke="#30363d" strokeWidth={1} strokeDasharray="6 4" />
               <text x={30} y={layout.sepY + 18} fontSize={11} fill="#3fb950" fontWeight={600} letterSpacing={1.5} fontFamily={FONT}>ACTIVE</text>
-              <Diamond cx={layout.cx} cy={layout.aOrchY} label="Orchestrator" sub={`${data.activeCount} slots active`} stroke="#22c55e" fill="rgba(34,197,94,0.08)" />
+              <Diamond cx={layout.cx} cy={layout.aOrchY} label="Scheduler" sub={`${data.activeCount} slots active`} stroke="#22c55e" fill="rgba(34,197,94,0.08)" />
               {layout.aColXs.map((colX, i) => <path key={`af-${i}`} d={fanOutPath(layout.cx, layout.aOrchY, colX, layout.aStartY)} fill="none" stroke="#2ea043" strokeWidth={1.8} markerEnd="url(#arr-g)" />)}
               {data.active.map((slot, i) => <SlotColumn key={slot.id} slot={slot} centerX={layout.aColXs[i]} startY={layout.aStartY} onStageClick={handleStageClick} />)}
             </>}
             {data.completed.length === 0 && data.active.length === 0 && <>
-              <Diamond cx={layout.cx} cy={layout.orchY} label="Orchestrator" sub="waiting for work items…" stroke="#58a6ff" fill="rgba(88,166,255,0.08)" />
+              <Diamond cx={layout.cx} cy={layout.orchY} label="Scheduler" sub="waiting for work items…" stroke="#58a6ff" fill="rgba(88,166,255,0.08)" />
               <text x={layout.cx} y={200} textAnchor="middle" fontSize={13} fill="#8b949e" fontFamily={FONT}>No pipeline activity yet.</text>
             </>}
           </svg>
