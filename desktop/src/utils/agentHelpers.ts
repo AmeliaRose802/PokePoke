@@ -187,7 +187,7 @@ export function getAgentAvatar(agent: AgentInfo): string | null {
  */
 export function formatModelName(model: string | null | undefined): string {
   if (!model) {
-    return "Unknown Model";
+    return "N/A";
   }
 
   const modelStr = model.toLowerCase();

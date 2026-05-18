@@ -346,7 +346,7 @@ class MaintenanceScheduler:
 
         # Register maintenance agent in the Agents panel
         agent_id = f"maintenance-{log_key}"
-        terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="running", agent_type=log_key)
+        terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="running", model=agent_cfg.model, agent_type=log_key)
 
         set_terminal_banner(f"PokePoke - Synced {agent_name} Agent")
         terminal_ui.ui.update_header("MAINTENANCE", f"{agent_name} Agent", "Running")
@@ -388,7 +388,7 @@ class MaintenanceScheduler:
 
             # Update agent status based on result
             status = "success" if success else "failed"
-            terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status=status, agent_type=log_key)
+            terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status=status, model=agent_cfg.model, agent_type=log_key)
 
             maint_logger.log_summary(success, request_count=0)
 
@@ -402,7 +402,7 @@ class MaintenanceScheduler:
 
         except Exception as e:
             logger.warning(f"Maintenance agent {agent_name} raised exception: {e}", exc_info=True)
-            terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="failed", agent_type=log_key)
+            terminal_ui.ui.push_agent_status(agent_id, f"{agent_name} Agent", iteration=1, status="failed", model=agent_cfg.model, agent_type=log_key)
             maint_logger.log_error(f"{agent_name} Agent raised exception: {e}")
             maint_logger.log_summary(False, request_count=0)
             run_logger.log_maintenance(log_key, f"{agent_name} Agent raised exception")

@@ -125,9 +125,9 @@ describe("agentHelpers", () => {
     });
 
     it("handles null and undefined models", () => {
-      expect(formatModelName(null)).toBe("Unknown Model");
-      expect(formatModelName(undefined)).toBe("Unknown Model");
-      expect(formatModelName("")).toBe("Unknown Model");
+      expect(formatModelName(null)).toBe("N/A");
+      expect(formatModelName(undefined)).toBe("N/A");
+      expect(formatModelName("")).toBe("N/A");
     });
 
     it("capitalizes unknown model names", () => {
