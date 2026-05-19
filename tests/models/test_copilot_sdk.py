@@ -2368,7 +2368,7 @@ class TestCreateSdkClientAddParentDir:
 
         call_args = mock_client_class.call_args[0][0]
         assert call_args["cwd"] == str(task_dir)
-        assert call_args["cli_args"] == ["--allow-all-tools", "--allow-all-paths"]
+        assert call_args["cli_args"] == ["--allow-all", "--no-ask-user"]
         assert "--add-dir" not in call_args["cli_args"]
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
@@ -2393,7 +2393,7 @@ class TestCreateSdkClientAddParentDir:
 
         call_args = mock_client_class.call_args[0][0]
         assert call_args["cwd"] == str(task_dir)
-        assert call_args["cli_args"] == ["--allow-all-tools", "--allow-all-paths", "--add-dir", str(tmp_path)]
+        assert call_args["cli_args"] == ["--allow-all", "--no-ask-user", "--add-dir", str(tmp_path)]
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     @patch('pokepoke.models.copilot_sdk.shutil.which', return_value='/usr/bin/copilot')
@@ -2416,5 +2416,5 @@ class TestCreateSdkClientAddParentDir:
         _create_sdk_client(str(task_dir))
 
         call_args = mock_client_class.call_args[0][0]
-        assert call_args["cli_args"] == ["--allow-all-tools", "--allow-all-paths"]
+        assert call_args["cli_args"] == ["--allow-all", "--no-ask-user"]
         assert "--add-dir" not in call_args["cli_args"]

@@ -86,11 +86,10 @@ def _create_sdk_client(cwd: str | None, add_parent_dir: bool = False) -> Copilot
         "log_level": "info",
         "env": _build_worker_env(cwd),
     }
-    # Always grant full tool and path permissions — agents run autonomously
-    # and cannot respond to interactive permission prompts.  Without these
-    # flags the CLI returns "unexpected user permission response" errors
-    # for every file-access and shell tool call.
-    base_cli_args = ["--allow-all-tools", "--allow-all-paths"]
+    # --allow-all grants tool, path, and URL permissions so agents never
+    # hit "unexpected user permission response" errors.  --no-ask-user
+    # prevents the ask_user tool from blocking on input.
+    base_cli_args = ["--allow-all", "--no-ask-user"]
     if cwd:
         client_opts["cwd"] = cwd
         if add_parent_dir:
