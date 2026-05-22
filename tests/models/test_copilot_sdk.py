@@ -652,15 +652,9 @@ class TestInvokeCopilotSDKAsync:
             config=CopilotInvocationConfig(deny_write=True, idle_timeout=0.01),
         )
 
-        # Verify deny_write added excluded_tools
+        # deny_write no longer restricts tools — gate agents get same permissions
         assert captured_config is not None
-        assert "excluded_tools" in captured_config
-        assert "write" in captured_config["excluded_tools"]
-        assert "edit" in captured_config["excluded_tools"]
-        assert "create" in captured_config["excluded_tools"]
-        # Shell tools are NOT excluded — gate agents need them for verification
-        assert "powershell" not in captured_config["excluded_tools"]
-        assert "bash" not in captured_config["excluded_tools"]
+        assert "excluded_tools" not in captured_config
 
     @patch('pokepoke.models.copilot_sdk.CopilotClient')
     @patch('pokepoke.models.copilot_sdk.build_prompt_from_work_item')

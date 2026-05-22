@@ -211,10 +211,6 @@ def _build_session_config(
         config["on_permission_request"] = lambda req, ctx=None: _PERMISSION_RESULT_CLS(kind="approved")
     if cwd:
         config["working_directory"] = cwd
-    if deny_write:
-        # Exclude file modification tools only — gate agents still need
-        # shell access to run git diff, git log, pytest, etc. for verification
-        config["excluded_tools"] = ["write", "edit", "create"]
     if session_id:
         config["session_id"] = session_id
     return config
