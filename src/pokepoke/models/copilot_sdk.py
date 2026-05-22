@@ -13,6 +13,22 @@ from typing import TYPE_CHECKING, Any
 try:
     from copilot import CopilotClient
     _HAS_COPILOT = True
+    # Patch PingResponse.from_dict to handle ISO timestamps (SDK bug:
+    # CLI now returns ISO strings where the SDK expects epoch ints).
+    try:
+        from copilot.types import PingResponse as _PingResponse
+
+        _orig_ping_from_dict = _PingResponse.from_dict
+
+        def _patched_ping_from_dict(obj: Any) -> _PingResponse:
+            ts = obj.get("timestamp")
+            if isinstance(ts, str):
+                obj = {**obj, "timestamp": 0}
+            return _orig_ping_from_dict(obj)
+
+        _PingResponse.from_dict = staticmethod(_patched_ping_from_dict)  # type: ignore[assignment]
+    except Exception:
+        pass
 except ImportError:
     _HAS_COPILOT = False
 
