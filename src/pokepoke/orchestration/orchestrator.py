@@ -28,16 +28,12 @@ from pokepoke.desktop.terminal_ui import format_work_item_banner, set_terminal_b
 from pokepoke.git.merge_queue import get_merge_queue
 from pokepoke.git.repo_check import check_and_commit_main_repo
 from pokepoke.orchestration.session_lifecycle import (
-    _finalize_session as _finalize_session,
-)
-from pokepoke.orchestration.session_lifecycle import (
-    _record_item_result as _record_item_result,
+    _finalize_session,
+    _record_item_result,
+    _should_run_post_mortem,
 )
 from pokepoke.orchestration.session_lifecycle import (
     _run_post_mortem_if_enabled as _run_post_mortem_if_enabled,
-)
-from pokepoke.orchestration.session_lifecycle import (
-    _should_run_post_mortem as _should_run_post_mortem,
 )
 from pokepoke.orchestration.work_item_selection import select_work_item
 from pokepoke.orchestration.workflow import process_work_item
@@ -45,6 +41,7 @@ from pokepoke.protocols import BeadsClient as _BeadsClientProtocol
 from pokepoke.stats.performance_monitor import run_iteration_checks
 from pokepoke.stats.session_stats_registry import set_current_session_stats
 from pokepoke.types import AgentStats, BeadsWorkItem, RecordFn, SessionStats, WorkItemResult
+from pokepoke.utils.copilot_auth import run_copilot_auth_preflight
 from pokepoke.utils.logging_utils import RunLogger, configure_logging
 from pokepoke.utils.otel_logging import shutdown_otel_logging
 from pokepoke.utils.preflight_log_utils import handle_preflight_checks
@@ -382,6 +379,8 @@ def run_orchestrator(  # noqa: PLR0913, RUF100
             interactive, continuous, run_beta_first,
             agent_name_override, max_parallel_agents,
         )
+        if (exit_code := run_copilot_auth_preflight(ctx)) is not None:
+            return exit_code
         if ctx.effective_parallel > 1:
             exit_code = run_parallel_loop(
                 effective_parallel=ctx.effective_parallel,

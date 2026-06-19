@@ -23,6 +23,7 @@ from pokepoke.otel_config import OtelConfig
 from pokepoke.types import WorkItemResult
 from pokepoke.types_beads import BeadsWorkItem
 from pokepoke.types_stats import AgentStats, BeadsStats, ModelCompletionRecord, SessionStats
+from pokepoke.utils.copilot_auth import CopilotAuthStatus, run_copilot_auth_preflight
 
 
 def _item(id: str = "orch-1") -> BeadsWorkItem:
@@ -611,6 +612,58 @@ class TestRunPreflight:
         ctx = self._make_ctx()
         result = _run_preflight(ctx)
         assert result == 1
+
+
+# ── _run_copilot_auth_preflight ─────────────────────────────────────
+
+class TestCopilotAuthPreflight:
+
+    def _make_ctx(self, provider: str = "copilot") -> _OrchestratorContext:
+        return _OrchestratorContext(
+            agent_name="test", mode_name="Autonomous",
+            run_logger=MagicMock(), main_repo_path=MagicMock(),
+            start_time=time.time(), session_stats=SessionStats(agent_stats=AgentStats()),
+            failed_claim_ids=set(), failed_claim_ids_lock=threading.Lock(),
+            cfg=MagicMock(ai_backend=MagicMock(provider=provider)),
+            effective_parallel=1, interactive=False, continuous=False,
+        )
+
+    @patch("pokepoke.desktop.terminal_ui")
+    @patch("pokepoke.utils.copilot_auth.check_copilot_auth")
+    def test_continues_when_authenticated(self, mock_check, mock_ui):
+        mock_check.return_value = CopilotAuthStatus(checked=True, authenticated=True)
+        ctx = self._make_ctx()
+        with patch.object(ctx, "finalize") as mock_finalize:
+            result = run_copilot_auth_preflight(ctx)
+        assert result is None
+        mock_finalize.assert_not_called()
+
+    @patch("pokepoke.desktop.terminal_ui")
+    @patch("pokepoke.utils.copilot_auth.check_copilot_auth")
+    def test_stops_when_unauthenticated(self, mock_check, mock_ui):
+        mock_check.return_value = CopilotAuthStatus(
+            checked=True, authenticated=False, message="Not authenticated")
+        ctx = self._make_ctx()
+        with patch.object(ctx, "finalize") as mock_finalize:
+            result = run_copilot_auth_preflight(ctx)
+        assert result == 1
+        mock_finalize.assert_called_once()
+
+    @patch("pokepoke.desktop.terminal_ui")
+    @patch("pokepoke.utils.copilot_auth.check_copilot_auth")
+    def test_continues_when_probe_inconclusive(self, mock_check, mock_ui):
+        mock_check.return_value = CopilotAuthStatus(
+            checked=False, authenticated=False, message="cli error")
+        ctx = self._make_ctx()
+        result = run_copilot_auth_preflight(ctx)
+        assert result is None
+
+    @patch("pokepoke.utils.copilot_auth.check_copilot_auth")
+    def test_skips_for_non_copilot_backend(self, mock_check):
+        ctx = self._make_ctx(provider="claude-code")
+        result = run_copilot_auth_preflight(ctx)
+        assert result is None
+        mock_check.assert_not_called()
 
 
 # ── _run_main_loop ─────────────────────────────────────────────────

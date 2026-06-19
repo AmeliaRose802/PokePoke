@@ -366,6 +366,14 @@ def _block_real_git_repair(request, monkeypatch):
         "pokepoke.utils.preflight_health.run_preflight_checks",
         lambda *args, **kwargs: _passing,
     )
+    # Stub the Copilot CLI auth preflight so run_orchestrator() never probes the
+    # real CLI via subprocess (which the SDK launches in client.start()).
+    # Returning None means "auth ok / inconclusive - continue".
+    monkeypatch.setattr(
+        "pokepoke.orchestration.orchestrator.run_copilot_auth_preflight",
+        lambda *args, **kwargs: None,
+        raising=False,
+    )
     yield
 
 
