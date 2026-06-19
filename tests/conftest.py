@@ -291,6 +291,26 @@ def _isolate_lock_dir(tmp_path, monkeypatch):
     monkeypatch.setattr("pokepoke.worktrees.coordination._lock_dir", _isolated_lock_dir)
 
 
+@pytest.fixture(autouse=True)
+def _isolate_pokepoke_manifests(tmp_path, monkeypatch):
+    """Redirect .pokepoke JSON manifests to a per-test temp directory.
+
+    Manifest files (uncleaned_worktrees.json, failed_unassigns.json) flow
+    through manifest_utils.get_manifest_path(), which joins the filename onto
+    POKEPOKE_DIR (the relative ".pokepoke" dir resolved against the CWD).
+
+    During the test run the CWD is the repo root, so tests that exercise the
+    real add_uncleaned_worktree()/retry-unassign paths (e.g. the worktree
+    merge-handler integration tests) would otherwise write to the *operational*
+    .pokepoke/uncleaned_worktrees.json. That pollutes runtime state with fake
+    entries and slows real orchestrator startup cleanup.
+
+    Redirecting POKEPOKE_DIR to tmp_path gives complete per-test isolation.
+    """
+    isolated = tmp_path / ".pokepoke"
+    monkeypatch.setattr("pokepoke.utils.manifest_utils.POKEPOKE_DIR", isolated)
+
+
 @pytest.fixture(autouse=True, scope="session")
 def _mock_cleanup_lock_global():
     """Prevent file locks from hitting the filesystem during tests.

@@ -16,7 +16,8 @@ from pokepoke.utils.manifest_utils import (
 class TestGetManifestPath:
     def test_returns_path_under_pokepoke_dir(self) -> None:
         result = get_manifest_path("test.json")
-        assert result == Path(".pokepoke") / "test.json"
+        assert result.name == "test.json"
+        assert result.parent.name == ".pokepoke"
 
     def test_different_filenames(self) -> None:
         assert get_manifest_path("a.json") != get_manifest_path("b.json")

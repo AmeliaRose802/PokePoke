@@ -25,7 +25,8 @@ class TestManifestPath:
 
     def test_returns_path_in_pokepoke_dir(self) -> None:
         path = get_worktree_manifest_path()
-        assert path == Path(".pokepoke") / "uncleaned_worktrees.json"
+        assert path.name == "uncleaned_worktrees.json"
+        assert path.parent.name == ".pokepoke"
 
 
 class TestLoadWorktreeManifest:

@@ -20,7 +20,8 @@ from pokepoke.beads.beads_manifest_utils import (
 class TestGetFailedUnassignManifestPath:
     def test_returns_pokepoke_path(self) -> None:
         path = _get_failed_unassign_manifest_path()
-        assert path == Path(".pokepoke") / "failed_unassigns.json"
+        assert path.name == "failed_unassigns.json"
+        assert path.parent.name == ".pokepoke"
 
 
 class TestLoadFailedUnassignManifest:
