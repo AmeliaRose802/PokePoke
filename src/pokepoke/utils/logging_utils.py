@@ -8,6 +8,7 @@ from datetime import datetime
 from pathlib import Path
 from typing import TYPE_CHECKING
 
+from pokepoke.utils.log_retention import prune_old_run_dirs
 from pokepoke.utils.logging_filters import (
     EventFilter,
     JsonFormatter,
@@ -118,11 +119,16 @@ class RunLogger:
 
     DEFAULT_POLL_LOG_INTERVAL = 50
 
+    # Default number of most-recent run directories to keep under ``base_dir``.
+    # Older run directories are pruned on startup to prevent unbounded growth.
+    DEFAULT_MAX_RUNS = 200
+
     def __init__(
         self,
         base_dir: str = ".pokepoke/logs",
         poll_log_interval: int | None = None,
         repo_name: str = "",
+        max_runs: int | None = None,
     ):
         """Initialize the run logger."""
         self.repo_name = repo_name
@@ -130,6 +136,9 @@ class RunLogger:
         self.base_dir = Path(base_dir).resolve()
         self.run_dir = self.base_dir / self.run_id
         self.run_dir.mkdir(parents=True, exist_ok=True)
+
+        self._max_runs: int = max_runs if max_runs is not None else self.DEFAULT_MAX_RUNS
+        prune_old_run_dirs(self.base_dir, self._max_runs, self.run_id)
 
         # Create paths for three separate log files
         self.orchestrator_events_log_path = self.run_dir / "orchestrator-events.log"

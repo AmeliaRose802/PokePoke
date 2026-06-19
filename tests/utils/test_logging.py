@@ -242,6 +242,59 @@ def test_run_logger_creates_maintenance_dir():
         assert (logger.get_run_dir() / "maintenance").exists()
         logger.close()
 
+def test_run_logger_prunes_old_runs(tmp_path):
+    """RunLogger should prune old run dirs beyond max_runs on startup."""
+    base = tmp_path / "logs"
+    base.mkdir()
+    # Seed old run-id directories (timestamp-prefixed, sortable).
+    for i in range(5):
+        (base / f"2026010{i}_120000_abcdef0{i}").mkdir()
+
+    logger = RunLogger(base_dir=str(base), max_runs=3)
+    try:
+        remaining = sorted(p.name for p in base.iterdir() if p.is_dir())
+        # 3 kept total, including the new run dir created by this logger.
+        assert len(remaining) == 3
+        assert logger.get_run_dir().name in remaining
+        # The two oldest seeded dirs should be gone.
+        assert "20260100_120000_abcdef00" not in remaining
+        assert "20260101_120000_abcdef01" not in remaining
+    finally:
+        logger.close()
+
+def test_run_logger_prune_disabled_when_max_runs_zero(tmp_path):
+    """max_runs <= 0 should disable pruning entirely."""
+    base = tmp_path / "logs"
+    base.mkdir()
+    for i in range(4):
+        (base / f"2026010{i}_120000_abcdef0{i}").mkdir()
+
+    logger = RunLogger(base_dir=str(base), max_runs=0)
+    try:
+        dirs = [p for p in base.iterdir() if p.is_dir()]
+        # All 4 seeded dirs plus the new run dir remain.
+        assert len(dirs) == 5
+    finally:
+        logger.close()
+
+def test_run_logger_prune_ignores_non_run_dirs(tmp_path):
+    """Pruning must never delete directories that aren't run-id dirs."""
+    base = tmp_path / "logs"
+    base.mkdir()
+    (base / "not-a-run-dir").mkdir()
+    (base / "important_data").mkdir()
+    for i in range(3):
+        (base / f"2026010{i}_120000_abcdef0{i}").mkdir()
+
+    logger = RunLogger(base_dir=str(base), max_runs=1)
+    try:
+        names = {p.name for p in base.iterdir() if p.is_dir()}
+        assert "not-a-run-dir" in names
+        assert "important_data" in names
+        assert logger.get_run_dir().name in names
+    finally:
+        logger.close()
+
 def test_start_maintenance_log_creates_log_file():
     """Test that start_maintenance_log creates a log file under maintenance/."""
     with tempfile.TemporaryDirectory() as tmpdir:
